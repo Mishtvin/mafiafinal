@@ -307,6 +307,7 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           className="w-full h-full object-contain"
           autoPlay
           playsInline
+          muted={isLocal}
         />
       ) : isCameraEnabled ? (
         <video
@@ -314,6 +315,13 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           className="w-full h-full object-cover"
           autoPlay
           playsInline
+          muted={isLocal}
+          style={{
+            transform: isLocal ? 'scaleX(-1)' : 'none',
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover'
+          }}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-900 to-indigo-800">

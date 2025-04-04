@@ -1,14 +1,21 @@
 import { useMemo } from "react";
-import { useParticipants } from "@livekit/components-react";
+import { useParticipants, useLocalParticipant } from "@livekit/components-react";
 import ParticipantTile from "./ParticipantTile";
 import { Participant, Track } from "livekit-client";
 
 export default function ParticipantGrid() {
   const participants = useParticipants();
+  const { localParticipant } = useLocalParticipant();
   
+  // Принудительно убеждаемся, что локальный участник будет обработан особым образом
   const sortedParticipants = useMemo(() => {
-    // Сортируем участников: сначала с включенной камерой, потом с выключенной
-    return [...participants].sort((a, b) => {
+    if (!localParticipant) return [...participants];
+    
+    // Отделяем локального участника от остальных участников
+    const remoteParticipants = participants.filter(p => !p.isLocal);
+    
+    // Сортируем удаленных участников: сначала с включенной камерой, потом с выключенной
+    const sortedRemoteParticipants = [...remoteParticipants].sort((a, b) => {
       // Проверяем наличие видеотреков через публикации
       const aPubs = a.getTrackPublications();
       const bPubs = b.getTrackPublications();
@@ -27,7 +34,10 @@ export default function ParticipantGrid() {
       // При равенстве статуса видео сортируем по имени
       return a.identity.localeCompare(b.identity);
     });
-  }, [participants]);
+    
+    // Сначала локальный участник, затем все остальные
+    return [localParticipant, ...sortedRemoteParticipants];
+  }, [participants, localParticipant]);
 
   // Определяем макет сетки на основе количества участников
   const gridLayout = useMemo(() => {

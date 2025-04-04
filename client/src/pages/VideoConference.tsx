@@ -6,8 +6,9 @@ import ConnectionIndicator from '../components/VideoConference/ConnectionIndicat
 import SettingsModal from '../components/VideoConference/SettingsModal';
 import JoinModal from '../components/VideoConference/JoinModal';
 import ErrorModal from '../components/VideoConference/ErrorModal';
+import VideoDebug from '../components/VideoConference/VideoDebug';
 import { fetchToken } from '../lib/livekit';
-import { Room, VideoPresets, LogLevel, RoomOptions } from 'livekit-client';
+import { Room, VideoPresets, LogLevel, RoomOptions, Track } from 'livekit-client';
 import { decodePassphrase, encodePassphrase, generateRoomId } from '../lib/utils';
 
 export default function VideoConference() {
@@ -178,14 +179,35 @@ export default function VideoConference() {
         }
         
         // Включаем камеру в LiveKit с параметрами
-        const camTrack = await room.localParticipant.setCameraEnabled(initialVideo);
+        console.log('Attempting to enable camera with full options');
+        
+        // Используем упрощенные параметры, которые точно работают
+        const cameraOptions = {
+          facingMode: 'user' as 'user',  // Это соответствует ожидаемому типу
+          preferredDeviceId: undefined   // Автоматический выбор устройства
+        };
+        
+        // Пытаемся включить камеру с расширенными опциями
+        const camTrack = await room.localParticipant.setCameraEnabled(initialVideo, cameraOptions);
+        
         console.log('Camera track created:', camTrack ? 'success' : 'no track returned');
         if (camTrack) {
           console.log('Camera track details:', {
             trackSid: camTrack.trackSid,
             kind: camTrack.kind,
-            isMuted: camTrack.isMuted
+            isMuted: camTrack.isMuted,
+            dimensions: camTrack.dimensions,
+            // mediaStreamTrack существует на самом треке, не на публикации
+            hasTrack: !!camTrack.track
           });
+          
+          // Принудительно публикуем видеотрек снова, если нужно
+          if (!camTrack.isMuted) {
+            console.log('Camera is active, verifying publication...');
+            const tracks = room.localParticipant.getTrackPublications();
+            const videoTracks = tracks.filter(t => t.kind === 'video' && t.track?.source !== Track.Source.ScreenShare);
+            console.log(`Found ${videoTracks.length} published video tracks`);
+          }
         }
       } catch (error) {
         console.error('Error enabling media devices:', error);
@@ -323,6 +345,11 @@ export default function VideoConference() {
             {/* Main content area with participant videos */}
             <main className="flex-1 overflow-hidden p-4">
               <ParticipantGrid />
+              
+              {/* Отладочный компонент для проверки локального видео */}
+              <div className="fixed bottom-24 right-4 z-50">
+                <VideoDebug />
+              </div>
             </main>
 
             {/* Controls section */}
