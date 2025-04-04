@@ -99,26 +99,35 @@ export default function VideoConference() {
     setConnectionState('disconnected');
   };
 
-  // Room configuration options - улучшенная версия
+  // Room configuration options - улучшенная версия со стабилизацией качества
   const roomOptions: RoomOptions = {
     adaptiveStream: {
       pauseVideoInBackground: false, // Не останавливать видео при потере фокуса окна
+      // Установка минимального качества, чтобы избежать сильной деградации видео
+      pixelDensity: 1.0, // Поддерживать высокое качество изображения
     },
     dynacast: true,
     publishDefaults: {
-      simulcast: true,
-      videoSimulcastLayers: [
-        VideoPresets.h540,
-        VideoPresets.h360,
-        VideoPresets.h216
-      ],
+      // Фиксируем один слой для предотвращения проблем качества
+      simulcast: false, // Отключаем simulcast для большей стабильности
+      // При отключенном simulcast используем только один слой качества
+      // videoSimulcastLayers: [
+      //   VideoPresets.h540,
+      //   VideoPresets.h360,
+      //   VideoPresets.h216
+      // ],
       red: !isE2EEEnabled, // Redundant video packets, should be disabled for E2EE
       stopMicTrackOnMute: false, // Не останавливать треки при заглушивании
       dtx: true, // Улучшает потребление CPU для аудио
+      
+      // Повышаем приоритет видео и указываем кодек для стабильности
+      // Используем базовые параметры без дополнительных настроек
+      videoCodec: 'vp8' // Используем более стабильный кодек
     },
     videoCaptureDefaults: {
       facingMode: 'user',
-      resolution: VideoPresets.h720
+      resolution: VideoPresets.h540, // Снижаем начальное разрешение для стабильности
+      // maxFrameRate вызывает ошибку, используем встроенные параметры пресета
     },
     // Важные параметры для стабильности
     disconnectOnPageLeave: false // Предотвращает отключение при потере фокуса
@@ -218,10 +227,11 @@ export default function VideoConference() {
         if (initialVideo) {
           console.log('Enabling camera...');
           
-          // Параметры захвата камеры
+          // Параметры захвата камеры - используем те же параметры, что и в roomOptions
           const videoCaptureOptions = {
-            resolution: VideoPresets.h720,
+            resolution: VideoPresets.h540, // Согласуем с настройками из roomOptions
             facingMode: 'user' as 'user',
+            // Для ограничения FPS используем встроенные параметры пресета
           };
           
           // Включаем камеру с оптимальными настройками для захвата
