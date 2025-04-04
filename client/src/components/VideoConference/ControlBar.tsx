@@ -259,6 +259,15 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
   return (
     <TooltipProvider>
       <div className="flex flex-col items-center gap-2">
+        {/* Кнопка переключения диагностики */}
+        <Button 
+          variant="outline" 
+          className="text-xs px-2 py-1 h-auto mb-1" 
+          onClick={toggleDiagnostics}
+        >
+          {showDiagnostics ? 'Скрыть диагностику' : 'Показать диагностику'}
+        </Button>
+        
         {/* Диагностическая информация (если включена) */}
         {showDiagnostics && (
           <div className="bg-black/20 rounded-md p-2 mb-2 w-full max-w-md">
@@ -317,155 +326,155 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
                 className={`rounded-full w-10 h-10 ${isMicrophoneMuted ? 'bg-slate-700' : ''}`}
                 onClick={toggleMicrophone}
               >
-              {isMicrophoneMuted ? (
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  width="20" 
-                  height="20" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round"
-                >
-                  <line x1="1" y1="1" x2="23" y2="23"></line>
-                  <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
-                  <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
-                  <line x1="12" y1="19" x2="12" y2="23"></line>
-                  <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg>
-              ) : (
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  width="20" 
-                  height="20" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                  <line x1="12" y1="19" x2="12" y2="23"></line>
-                  <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg>
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{isMicrophoneMuted ? 'Включить микрофон' : 'Выключить микрофон'}</p>
-          </TooltipContent>
-        </Tooltip>
+                {isMicrophoneMuted ? (
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    width="20" 
+                    height="20" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2" 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round"
+                  >
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+                    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  </svg>
+                ) : (
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    width="20" 
+                    height="20" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2" 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  </svg>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{isMicrophoneMuted ? 'Включить микрофон' : 'Выключить микрофон'}</p>
+            </TooltipContent>
+          </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant={isCameraMuted ? "outline" : "default"}
-              size="icon"
-              className={`rounded-full w-10 h-10 ${isCameraMuted ? 'bg-slate-700' : ''}`}
-              onClick={toggleCamera}
-            >
-              {isCameraMuted ? (
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  width="20" 
-                  height="20" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round"
-                >
-                  <line x1="1" y1="1" x2="23" y2="23"></line>
-                  <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06a4 4 0 1 1-5.56-5.56"></path>
-                </svg>
-              ) : (
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  width="20" 
-                  height="20" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round"
-                >
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                  <circle cx="12" cy="13" r="4"></circle>
-                </svg>
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{isCameraMuted ? 'Включить камеру' : 'Выключить камеру'}</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant={isScreenSharing ? "default" : "outline"}
-              size="icon"
-              className={`rounded-full w-10 h-10 ${isScreenSharing ? '' : 'bg-slate-700'}`}
-              onClick={toggleScreenShare}
-            >
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="20" 
-                height="20" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant={isCameraMuted ? "outline" : "default"}
+                size="icon"
+                className={`rounded-full w-10 h-10 ${isCameraMuted ? 'bg-slate-700' : ''}`}
+                onClick={toggleCamera}
               >
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
-              </svg>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{isScreenSharing ? 'Прекратить демонстрацию' : 'Демонстрация экрана'}</p>
-          </TooltipContent>
-        </Tooltip>
+                {isCameraMuted ? (
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    width="20" 
+                    height="20" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2" 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round"
+                  >
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                    <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06a4 4 0 1 1-5.56-5.56"></path>
+                  </svg>
+                ) : (
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    width="20" 
+                    height="20" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2" 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                    <circle cx="12" cy="13" r="4"></circle>
+                  </svg>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{isCameraMuted ? 'Включить камеру' : 'Выключить камеру'}</p>
+            </TooltipContent>
+          </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant="destructive"
-              size="icon"
-              className="rounded-full w-10 h-10"
-              onClick={handleLeave}
-            >
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="20" 
-                height="20" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant={isScreenSharing ? "default" : "outline"}
+                size="icon"
+                className={`rounded-full w-10 h-10 ${isScreenSharing ? '' : 'bg-slate-700'}`}
+                onClick={toggleScreenShare}
               >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-              </svg>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Покинуть конференцию</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="20" 
+                  height="20" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{isScreenSharing ? 'Прекратить демонстрацию' : 'Демонстрация экрана'}</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="destructive"
+                size="icon"
+                className="rounded-full w-10 h-10"
+                onClick={handleLeave}
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="20" 
+                  height="20" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Покинуть конференцию</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
     </TooltipProvider>
   );
