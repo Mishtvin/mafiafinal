@@ -86,7 +86,7 @@ export default function VideoConference() {
 
   // Room configuration options
   const roomOptions: RoomOptions = {
-    adaptiveStream: { pixelDensity: 'screen' },
+    adaptiveStream: true, // Используем логическое значение вместо объекта
     dynacast: true,
     publishDefaults: {
       simulcast: true,

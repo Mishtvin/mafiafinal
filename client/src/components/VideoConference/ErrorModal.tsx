@@ -45,7 +45,20 @@ export default function ErrorModal({ isOpen, error, onDismiss, onRetry }: ErrorM
         </DialogHeader>
 
         <div className="bg-red-50 p-3 rounded-md border border-red-200 text-red-700 text-sm my-2">
-          {error?.message || 'Неизвестная ошибка'}
+          <div className="font-medium mb-1">Детали ошибки:</div>
+          <div className="font-mono text-xs p-2 bg-red-100 rounded">
+            {error?.message || 'Неизвестная ошибка'}
+          </div>
+          {error?.name === 'ServerUnreachable' && (
+            <div className="mt-2 text-xs">
+              <p className="font-semibold">Возможная причина:</p>
+              <ul className="list-disc list-inside mt-1">
+                <li>Сервер LiveKit недоступен</li>
+                <li>Неверный URL сервера</li>
+                <li>Проблемы с сетевым подключением</li>
+              </ul>
+            </div>
+          )}
         </div>
         
         <DialogFooter className="flex space-x-2 sm:space-x-0 sm:space-y-2">

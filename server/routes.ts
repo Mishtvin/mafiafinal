@@ -6,7 +6,7 @@ import { AccessToken, VideoGrant } from "livekit-server-sdk";
 // LiveKit настройки
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
-const LIVEKIT_URL = 'wss://livekit.nyavkin.site'; // URL сервера LiveKit без порта
+const LIVEKIT_URL = 'wss://livekit.nyavkin.site/'; // URL сервера LiveKit со слешем в конце
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Новый эндпоинт для создания токена LiveKit
