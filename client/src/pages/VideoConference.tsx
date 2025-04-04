@@ -19,7 +19,8 @@ export default function VideoConference() {
   const [hasJoined, setHasJoined] = useState(false);
   const [initialAudio, setInitialAudio] = useState(true);
   const [initialVideo, setInitialVideo] = useState(true);
-  const [roomId, setRoomId] = useState(generateRoomId());
+  // Всегда используем default-room, как в вашем рабочем примере
+  const [roomId, setRoomId] = useState('default-room');
   const [isE2EEEnabled, setIsE2EEEnabled] = useState(false);
   const [e2eePassphrase, setE2eePassphrase] = useState<string | null>(null);
 
@@ -103,6 +104,12 @@ export default function VideoConference() {
     roomRef.current = room;
     setConnectionState('connected');
     
+    console.log('Connected to LiveKit room:', {
+      roomId: room.name,
+      url: serverUrl,
+      participantCount: room.numParticipants + 1 // +1 for local participant
+    });
+    
     // Enable audio and video based on initial settings
     if (room.localParticipant) {
       room.localParticipant.setMicrophoneEnabled(initialAudio);
@@ -110,17 +117,21 @@ export default function VideoConference() {
     }
     
     // Set up listeners for connection state changes
-    room.on('disconnected', () => setConnectionState('disconnected'));
-    room.on('reconnecting', () => setConnectionState('reconnecting'));
-    room.on('reconnected', () => setConnectionState('connected'));
+    room.on('disconnected', () => {
+      console.log('Disconnected from LiveKit room');
+      setConnectionState('disconnected');
+    });
+    room.on('reconnecting', () => {
+      console.log('Reconnecting to LiveKit room...');
+      setConnectionState('reconnecting');
+    });
+    room.on('reconnected', () => {
+      console.log('Reconnected to LiveKit room');
+      setConnectionState('connected');
+    });
   };
   
-  // Wrapper for LiveKitRoom onConnected callback
-  const onRoomConnected = () => {
-    // LiveKitRoom делает комнату доступной через метод useRoom() внутри компонента,
-    // но мы не можем получить её здесь напрямую
-    // Комната будет доступна через useParticipant и другие хуки
-  };
+
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-white">
@@ -154,7 +165,10 @@ export default function VideoConference() {
           connect={true}
           onError={handleError}
           options={roomOptions}
-          onConnected={onRoomConnected}
+          data-lk-theme="default"
+          onConnected={() => {
+            console.log('Connected to LiveKit room component');
+          }}
         >
           <div className="flex flex-col h-screen">
             {/* Header section */}

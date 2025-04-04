@@ -13,7 +13,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/token', async (req, res) => {
     try {
       const identity = req.query.identity as string;
-      const roomName = req.query.room as string || 'default-room';
+      // Всегда используем default-room, как в вашем рабочем примере
+      const roomName = 'default-room';
       
       if (!identity) {
         return res.status(400).json({ error: 'Missing identity parameter' });
@@ -22,6 +23,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
         return res.status(500).json({ error: 'LiveKit API credentials are not configured' });
       }
+      
+      console.log("Using LiveKit credentials - API Key:", LIVEKIT_API_KEY);
       
       // Создание токена доступа
       const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {

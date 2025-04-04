@@ -33,6 +33,8 @@ export async function fetchToken(identity: string, roomName?: string): Promise<s
       throw new Error('No token returned from server');
     }
     
+    console.log('Got token from server:', { token: data.token.substring(0, 20) + '...' });
+    
     return data.token;
   } catch (error) {
     console.error('Error fetching LiveKit token:', error);

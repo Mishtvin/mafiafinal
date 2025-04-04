@@ -2,6 +2,12 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+// Вывести доступные секреты
+console.log('Environment variables:', {
+  LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY ? 'Set' : 'Not set',
+  LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET ? 'Set' : 'Not set'
+});
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
