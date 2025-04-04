@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from "react";
 import { useParticipants, useLocalParticipant } from "@livekit/components-react";
-import ParticipantTile from "./ParticipantTile";
+import ParticipantTile from "./ParticipantTileV2";
 import { Participant, Track, ConnectionState } from "livekit-client";
 import { useRoomContext } from "@livekit/components-react";
 
