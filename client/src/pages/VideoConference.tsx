@@ -348,8 +348,15 @@ export default function VideoConference() {
           connect={true}
           onError={handleError}
           options={roomOptions}
-          // @ts-ignore - LiveKit типы некорректно определяют параметры для onConnected
-          onConnected={handleRoomConnection}
+          // Это не ошибка типов, а нормальный способ передачи callback функции
+          // Новая версия LiveKit требует функцию (room: Room) => void
+          onConnected={(room) => {
+            if (!room) {
+              console.error('Room object is undefined in onConnected');
+              return;
+            }
+            handleRoomConnection(room);
+          }}
         >
           <div className="flex flex-col h-screen">
             {/* Header section */}
