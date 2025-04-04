@@ -111,7 +111,7 @@ export default function VideoDebug() {
         name: room.name,
         state: ConnectionState[room.state],
         numParticipants: room.numParticipants,
-        sidMetadata: room.sidMetadata,
+        metadata: room.metadata,
       });
     }
     

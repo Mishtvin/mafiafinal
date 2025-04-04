@@ -308,39 +308,43 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
     };
   }, [participant, isLocal, isSpeaking]); // Зависимости от participant, isLocal и isSpeaking
   
-  // Отображение участника
+  // Улучшенное отображение участника с приоритетной визуализацией видео
   return (
     <div className={`relative w-full h-full bg-slate-800 rounded-md overflow-hidden flex items-center justify-center group ${isSpeaking ? 'ring-2 ring-blue-500' : ''}`}>
-      {isScreenSharing ? (
+      {/* Плейсхолдер с аватаром (всегда отображается, если нет видео) */}
+      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-r from-blue-900 to-indigo-800">
+        <div className="h-20 w-20 rounded-full bg-slate-700 flex items-center justify-center text-white text-2xl font-bold">
+          {participant.identity.charAt(0).toUpperCase()}
+        </div>
+      </div>
+      
+      {/* Видеоэлементы (отображаются поверх плейсхолдера когда доступны) */}
+      {isScreenSharing && (
         <video
           ref={screenRef}
-          className="w-full h-full object-contain"
+          className="absolute inset-0 w-full h-full object-contain z-10"
           autoPlay
           playsInline
           muted={isLocal}
         />
-      ) : isCameraEnabled ? (
+      )}
+      
+      {isCameraEnabled && !isScreenSharing && (
         <video
           ref={videoRef}
-          className="w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover z-10"
           autoPlay
           playsInline
           muted={isLocal}
           style={{ transform: isLocal ? 'scaleX(-1)' : 'none' }}
         />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-900 to-indigo-800">
-          <div className="h-20 w-20 rounded-full bg-slate-700 flex items-center justify-center text-white text-2xl font-bold">
-            {participant.identity.charAt(0).toUpperCase()}
-          </div>
-        </div>
       )}
       
       {/* Аудио трек */}
       <audio ref={audioRef} autoPlay />
       
-      {/* Информационная панель */}
-      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex justify-between items-center text-white text-sm">
+      {/* Информационная панель всегда отображается поверх всего */}
+      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex justify-between items-center text-white text-sm z-20">
         <div className="flex items-center">
           <span className="font-medium truncate">
             {participant.identity}{isLocal ? ' (Вы)' : ''}
@@ -349,7 +353,7 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
         
         <div className="flex space-x-1">
           {isMuted && (
-            <div className="text-red-400">
+            <div className="text-red-400 bg-black/30 rounded-full p-0.5">
               <svg 
                 xmlns="http://www.w3.org/2000/svg" 
                 width="16" 
@@ -371,7 +375,7 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           )}
           
           {!isCameraEnabled && (
-            <div className="text-red-400">
+            <div className="text-red-400 bg-black/30 rounded-full p-0.5">
               <svg 
                 xmlns="http://www.w3.org/2000/svg" 
                 width="16" 
@@ -390,7 +394,7 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           )}
           
           {isScreenSharing && (
-            <div className="text-green-400">
+            <div className="text-green-400 bg-black/30 rounded-full p-0.5">
               <svg 
                 xmlns="http://www.w3.org/2000/svg" 
                 width="16" 
@@ -410,6 +414,17 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           )}
         </div>
       </div>
+      
+      {/* Индикатор соединения для отображения состояния, когда трек загружается или отключается */}
+      {((isCameraEnabled && !videoRef.current?.srcObject) || 
+        (isScreenSharing && !screenRef.current?.srcObject)) && (
+        <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/20 backdrop-blur-sm">
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500 mb-1"></div>
+            <div className="text-xs text-white font-medium">Подключение видео...</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
