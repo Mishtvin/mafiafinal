@@ -98,15 +98,67 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
             videoElement.playsInline = true;
             
             // Активно пытаемся запустить воспроизведение (это требуется из-за политик браузеров)
-            const playPromise = videoElement.play();
-            if (playPromise) {
-              playPromise.catch(e => {
-                console.warn(`Error playing video for ${participant.identity}:`, e);
-                // Повторная попытка воспроизведения через небольшую задержку
-                setTimeout(() => {
-                  videoElement.play().catch(console.error);
-                }, 500);
-              });
+            try {
+              const playPromise = videoElement.play();
+              if (playPromise) {
+                playPromise.catch(e => {
+                  console.warn(`Error playing video for ${participant.identity}:`, e);
+                  
+                  // Расширенная стратегия повторных попыток
+                  const retryPlay = (attempt = 1, maxAttempts = 5) => {
+                    if (attempt > maxAttempts) {
+                      console.error(`Failed to play video after ${maxAttempts} attempts for ${participant.identity}`);
+                      return;
+                    }
+                    
+                    console.log(`Retry attempt ${attempt}/${maxAttempts} to play video for ${participant.identity}`);
+                    
+                    // Используем пользовательское взаимодействие для воспроизведения
+                    const clickHandler = () => {
+                      videoElement.play()
+                        .then(() => {
+                          console.log(`Video playback started on user interaction for ${participant.identity}`);
+                          document.removeEventListener('click', clickHandler);
+                        })
+                        .catch(err => {
+                          console.warn(`Still failed to play on user interaction: ${err}`);
+                          
+                          // Последняя попытка - пересоздать медиаэлемент
+                          if (attempt === maxAttempts && videoTrack && videoTrack.track && videoTrack.track.mediaStreamTrack) {
+                            console.log(`Last resort: recreating media element for ${participant.identity}`);
+                            videoElement.srcObject = null;
+                            setTimeout(() => {
+                              if (videoElement) {
+                                const newStream = new MediaStream([videoTrack.track!.mediaStreamTrack!]);
+                                videoElement.srcObject = newStream;
+                                videoElement.play().catch(() => {
+                                  console.error(`Failed all attempts to play video for ${participant.identity}`);
+                                });
+                              }
+                            }, 500);
+                          }
+                        });
+                    };
+                    
+                    // Автоматически пробуем еще раз через задержку
+                    setTimeout(() => {
+                      videoElement.play()
+                        .then(() => console.log(`Auto-retry ${attempt} succeeded for ${participant.identity}`))
+                        .catch(() => {
+                          // Если автоматически не получилось, пробуем через клик
+                          document.addEventListener('click', clickHandler, { once: true });
+                          // И запускаем следующую попытку с задержкой
+                          retryPlay(attempt + 1, maxAttempts);
+                        });
+                    }, 800 * attempt); // Увеличиваем задержку с каждой попыткой
+                  };
+                  
+                  // Запускаем цикл повторных попыток
+                  retryPlay();
+                });
+              }
+            } catch (e) {
+              console.error(`Exception during video play for ${participant.identity}:`, e);
             }
             
             attachedRef.current = true;

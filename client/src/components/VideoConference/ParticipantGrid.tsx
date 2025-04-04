@@ -76,7 +76,7 @@ export default function ParticipantGrid() {
     };
   }, [room]);
   
-  // Принудительно убеждаемся, что локальный участник будет обработан особым образом
+  // Принудительно убеждаемся, что локальный участник всегда есть в списке
   // и добавляем дополнительные проверки стабильности
   const sortedParticipants = useMemo(() => {
     console.log("Participant grid rendering with participants:", participants.length);
@@ -90,12 +90,18 @@ export default function ParticipantGrid() {
     const isLocalParticipantInList = participants.some(p => p.sid === localParticipant.sid);
     console.log("Local participant in participants list:", isLocalParticipantInList);
     
+    // Если локального участника нет в списке, добавляем его
+    let workingParticipants = [...participants];
+    if (!isLocalParticipantInList) {
+      workingParticipants = [localParticipant, ...participants];
+    }
+    
     // Отделяем локального участника от остальных участников
-    const remoteParticipants = participants.filter(p => !p.isLocal);
+    const remoteParticipants = workingParticipants.filter(p => !p.isLocal);
     console.log("Remote participants count:", remoteParticipants.length);
     
-    // Диагностика треков для отладки
-    for (const p of participants) {
+    // Диагностика треков для отладки - проверяем все треки включая нашего локального участника
+    for (const p of workingParticipants) {
       const videoPubs = p.getTrackPublications()
         .filter(pub => pub.kind === 'video');
       
