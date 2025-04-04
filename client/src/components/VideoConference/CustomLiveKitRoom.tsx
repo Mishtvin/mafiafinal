@@ -66,15 +66,59 @@ export default function CustomLiveKitRoom({
   
   // Эта функция проверяет все треки и их состояния
   const verifyTracks = (room: Room) => {
-    if (!room) return;
+    if (!room) {
+      console.log('TRACK VERIFICATION ERROR: No room available');
+      return;
+    }
     
     console.log('Verifying tracks in room...', room.name);
     
     // Проверяем локального участника
     if (room.localParticipant) {
-      const localTracks = room.localParticipant.getTrackPublications();
+      const localParticipant = room.localParticipant;
+      const localTracks = localParticipant.getTrackPublications();
       console.log('Local participant tracks:', localTracks.length);
       
+      // Проверка общего состояния устройств
+      if ((video && !localParticipant.isCameraEnabled) || 
+          (audio && !localParticipant.isMicrophoneEnabled)) {
+        console.log('DEVICE STATE MISMATCH:', {
+          shouldEnableVideo: video,
+          shouldEnableAudio: audio,
+          actualVideoEnabled: localParticipant.isCameraEnabled,
+          actualAudioEnabled: localParticipant.isMicrophoneEnabled,
+          identity: localParticipant.identity,
+          participantSid: localParticipant.sid,
+          participantIdentity: localParticipant.identity
+        });
+      }
+      
+      // Подсчет активных треков для диагностики
+      const videoTracks = localTracks.filter(pub => 
+        pub.kind === 'video' && pub.track?.source === Track.Source.Camera);
+      const audioTracks = localTracks.filter(pub => 
+        pub.kind === 'audio' && pub.track?.source === Track.Source.Microphone);
+      
+      // Проверка треков по типам
+      if (video && videoTracks.length === 0) {
+        console.log('CAMERA TRACK MISSING! Attempting to enable camera...');
+        // Камера должна быть включена, но треков нет
+        localParticipant.setCameraEnabled(true)
+          .then(pub => {
+            if (pub) {
+              console.log('CAMERA RECOVERY SUCCESSFUL:', {
+                sid: pub.trackSid,
+                hasTrack: !!pub.track,
+                muted: pub.isMuted
+              });
+            } else {
+              console.log('CAMERA RECOVERY FAILED: No publication returned');
+            }
+          })
+          .catch(err => console.error('FAILED TO ENABLE CAMERA:', err));
+      }
+      
+      // Проверка каждого трека
       localTracks.forEach(pub => {
         console.log('Local track:', {
           sid: pub.trackSid,
@@ -84,26 +128,73 @@ export default function CustomLiveKitRoom({
           hasTrack: !!pub.track
         });
         
-        // Если видеотрек заглушен и должен быть включен, пробуем включить
-        if (pub.kind === 'video' && 
-            pub.track?.source === Track.Source.Camera && 
-            pub.isMuted && 
-            video) {
-          console.log('Re-enabling muted camera');
-          room.localParticipant.setCameraEnabled(true)
-            .catch(err => console.warn('Failed to enable camera:', err));
+        if (!pub.track) {
+          console.log('TRACK DATA MISSING for publication:', {
+            sid: pub.trackSid,
+            kind: pub.kind,
+            isEnabled: pub.isEnabled,
+            isMuted: pub.isMuted,
+            isSubscribed: pub.isSubscribed
+          });
+          
+          // Для видео треков, которые должны быть активны, пробуем восстановить
+          if (pub.kind === 'video' && video) {
+            console.log('VIDEO TRACK DATA MISSING - attempting recovery');
+            localParticipant.setCameraEnabled(true)
+              .catch(err => console.error('TRACK RECOVERY FAILED:', err));
+          }
+          
+          return; // Пропускаем дальнейшую проверку для этого трека
         }
         
-        // Если аудиотрек заглушен и должен быть включен, пробуем включить
+        // Проверка видеотрека
+        if (pub.kind === 'video' && 
+            pub.track.source === Track.Source.Camera) {
+            
+          // Проверка состояния видеотрека
+          if (pub.track.mediaStreamTrack) {
+            const trackState = {
+              readyState: pub.track.mediaStreamTrack.readyState,
+              enabled: pub.track.mediaStreamTrack.enabled,
+              muted: pub.track.mediaStreamTrack.muted
+            };
+            
+            if (trackState.readyState !== 'live' || !trackState.enabled) {
+              console.log('VIDEO TRACK IN BAD STATE:', trackState);
+              
+              if (video) {
+                console.log('Attempting to recover video track...');
+                localParticipant.setCameraEnabled(true)
+                  .catch(err => console.error('VIDEO RECOVERY FAILED:', err));
+              }
+            }
+          }
+          
+          // Если видеотрек заглушен и должен быть включен, пробуем включить
+          if (pub.isMuted && video) {
+            console.log('Re-enabling muted camera');
+            localParticipant.setCameraEnabled(true)
+              .catch(err => console.warn('Failed to enable camera:', err));
+          }
+        }
+        
+        // Проверка аудиотрека
         if (pub.kind === 'audio' && 
-            pub.track?.source === Track.Source.Microphone && 
+            pub.track.source === Track.Source.Microphone && 
             pub.isMuted && 
             audio) {
           console.log('Re-enabling muted microphone');
-          room.localParticipant.setMicrophoneEnabled(true)
+          localParticipant.setMicrophoneEnabled(true)
             .catch(err => console.warn('Failed to enable microphone:', err));
         }
       });
+      
+      // Дополнительная информация о локальном участнике
+      console.log('Local participant devices status:', 
+        `camera=${localParticipant.isCameraEnabled}`,
+        `microphone=${localParticipant.isMicrophoneEnabled}`);
+    } else {
+      console.log('ERROR: No local participant available for track verification');
     }
     
     // Проверяем удаленных участников - в новых версиях LiveKit нет прямого доступа к списку участников

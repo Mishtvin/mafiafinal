@@ -159,11 +159,63 @@ export default function VideoDebug() {
   // Улучшенная функция для подключения локального видео с расширенной диагностикой
   const attachLocalVideo = async () => {
     if (!localParticipant || !videoRef.current) {
-      console.log('Debug: Missing localParticipant or videoRef');
+      console.log('ATTACH VIDEO DEBUG: Missing localParticipant or videoRef', {
+        hasParticipant: !!localParticipant,
+        hasVideoRef: !!videoRef.current,
+        roomConnected: room ? room.state === ConnectionState.Connected : false
+      });
       return;
     }
     
+    console.log('ATTACH VIDEO DEBUG: Starting attachment process', {
+      participantId: localParticipant.identity,
+      cameraEnabled: localParticipant.isCameraEnabled,
+      microphoneEnabled: localParticipant.isMicrophoneEnabled,
+      state: 'active', // Локальный участник не имеет свойства connectionState
+      allPublicationsCount: localParticipant.getTrackPublications().length
+    });
+    
     try {
+      // Проверяем состояние разрешений для устройств
+      console.log('MEDIA PERMISSIONS CHECK: Starting diagnostic...');
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        console.log('AVAILABLE DEVICES:', {
+          allDevices: devices.length,
+          videoDevices: videoDevices.length,
+          videoDeviceLabels: videoDevices.map(d => d.label || 'unlabeled device'),
+          deviceIdsAvailable: videoDevices.map(d => !!d.deviceId)
+        });
+        
+        // Проверяем, можем ли мы получить доступ к видеоустройствам напрямую
+        const mediaResult = await navigator.mediaDevices.getUserMedia({ 
+          video: true,
+          audio: false
+        });
+        
+        console.log('DIRECT MEDIA ACCESS:', {
+          success: true,
+          tracks: mediaResult.getTracks().map(t => ({
+            id: t.id,
+            kind: t.kind,
+            label: t.label,
+            enabled: t.enabled,
+            muted: t.muted,
+            readyState: t.readyState
+          }))
+        });
+        
+        // Останавливаем треки после проверки
+        mediaResult.getTracks().forEach(t => {
+          t.stop();
+          console.log('Stopped test track:', t.id, t.kind);
+        });
+      } catch (err) {
+        console.error('MEDIA PERMISSIONS ERROR:', err);
+      }
+      
       // Обновляем диагностическую информацию
       updateDebugInfo();
       
@@ -172,49 +224,136 @@ export default function VideoDebug() {
         .filter(pub => pub.kind === 'video' && 
                 pub.track?.source === Track.Source.Camera);
       
+      console.log('VIDEO PUBLICATIONS CHECK:', {
+        count: videoPublications.length,
+        publications: videoPublications.map(pub => ({
+          sid: pub.trackSid,
+          muted: pub.isMuted,
+          hasTrack: !!pub.track,
+          source: pub.track?.source || 'unknown'
+        }))
+      });
+      
       if (videoPublications.length === 0) {
-        console.log('Debug: No local video tracks found');
+        console.log('CRITICAL: No local video tracks found!');
+        
+        // Если камера должна быть включена, но треков нет, пробуем принудительно включить её
+        if (localParticipant.isCameraEnabled) {
+          console.log('CAMERA RECOVERY: Camera should be enabled but no tracks found, attempting to recover...');
+          
+          try {
+            // Принудительное включение камеры
+            const publication = await localParticipant.setCameraEnabled(true);
+            if (publication) {
+              console.log('CAMERA RECOVERY SUCCESS:', {
+                sid: publication.trackSid,
+                hasTrack: !!publication.track,
+                source: publication.track?.source || 'unknown'
+              });
+              
+              // Повторим попытку подключить видео через полсекунды
+              setTimeout(() => {
+                attachLocalVideo();
+              }, 500);
+            } else {
+              console.log('CAMERA RECOVERY FAILED: No publication returned');
+            }
+          } catch (e) {
+            console.error('CAMERA RECOVERY ERROR:', e);
+          }
+        }
+        
         return;
       }
       
       // Находим активный (не заглушенный) видеотрек или берем первый доступный
       const activeVideoPublication = videoPublications.find(pub => !pub.isMuted) || videoPublications[0];
       
+      console.log('ACTIVE PUBLICATION CHECK:', {
+        sid: activeVideoPublication.trackSid,
+        muted: activeVideoPublication.isMuted,
+        isSubscribed: activeVideoPublication.isSubscribed,
+        hasTrack: !!activeVideoPublication.track,
+        source: activeVideoPublication.track?.source || 'unknown'
+      });
+      
       if (!activeVideoPublication.track) {
-        console.log('Debug: Video publication found but track is null, publication state:', {
+        console.log('CRITICAL: Video publication found but track is null!', {
           trackSid: activeVideoPublication.trackSid,
           isMuted: activeVideoPublication.isMuted,
           isSubscribed: activeVideoPublication.isSubscribed,
+          isEnabled: activeVideoPublication.isEnabled
         });
+        
+        // Если публикация есть, но трека нет, возможно трек был отключен
+        // Пробуем переподписаться на публикацию
+        if (activeVideoPublication.isEnabled === false) {
+          console.log('ATTEMPTING to re-enable track...');
+          
+          try {
+            // В новых версиях LiveKit нет прямого метода setEnabled
+            // Включаем камеру через метод локального участника
+            await localParticipant.setCameraEnabled(true);
+            console.log('Track re-enabled, waiting for it to be available...');
+            
+            // Пробуем повторить подключение через секунду
+            setTimeout(() => {
+              attachLocalVideo();
+            }, 1000);
+          } catch (e) {
+            console.error('TRACK ENABLE ERROR:', e);
+          }
+        }
+        
         return;
       }
       
       const videoTrack = activeVideoPublication.track;
-      console.log('Debug: Found local video track', videoTrack.sid, 'muted:', activeVideoPublication.isMuted);
-      
-      // Прикрепляем видеотрек к элементу видео
-      console.log('Debug: Attaching local video track to debug view');
-      
-      // Подробная диагностика трека
-      console.log('Debug video track details:', {
+      console.log('TRACK FOUND - Ready to attach:', {
         sid: videoTrack.sid,
         kind: videoTrack.kind,
         muted: videoTrack.isMuted,
         source: videoTrack.source,
-        mediaStreamTrack: !!videoTrack.mediaStreamTrack,
-        mediaStream: !!videoTrack.mediaStream,
-        attachedElements: videoTrack.attachedElements?.length || 0
+        streamId: videoTrack.mediaStreamTrack?.id || 'none',
+        streamState: videoTrack.mediaStreamTrack?.readyState || 'unknown',
+        streamEnabled: videoTrack.mediaStreamTrack?.enabled || false
+      });
+      
+      // Прикрепляем видеотрек к элементу видео
+      console.log('ATTACHING: Begin track attachment to video element');
+      
+      // Подробная диагностика трека
+      console.log('DETAILED TRACK ANALYSIS:', {
+        sid: videoTrack.sid,
+        kind: videoTrack.kind,
+        muted: videoTrack.isMuted,
+        source: videoTrack.source,
+        mediaStreamTrack: videoTrack.mediaStreamTrack ? {
+          id: videoTrack.mediaStreamTrack.id,
+          kind: videoTrack.mediaStreamTrack.kind,
+          enabled: videoTrack.mediaStreamTrack.enabled,
+          muted: videoTrack.mediaStreamTrack.muted,
+          readyState: videoTrack.mediaStreamTrack.readyState,
+          settings: videoTrack.mediaStreamTrack.getSettings ? 
+            JSON.stringify(videoTrack.mediaStreamTrack.getSettings()) : 'not available'
+        } : 'not available',
+        mediaStream: videoTrack.mediaStream ? 'available' : 'not available',
+        attachedElements: videoTrack.attachedElements?.length || 0,
+        // В LiveKit v2 треки не имеют свойств processor и dimensions
+        trackDimensions: videoTrack.mediaStreamTrack?.getSettings?.() ? 
+          `${videoTrack.mediaStreamTrack.getSettings().width || '?'}x${videoTrack.mediaStreamTrack.getSettings().height || '?'}` : 'unknown'
       });
       
       const trackElement = videoRef.current;
       
       // Очищаем предыдущие треки
       if (trackElement.srcObject) {
+        console.log('CLEANUP: Removing existing media tracks from video element');
         const stream = trackElement.srcObject as MediaStream;
         if (stream.getTracks) {
           stream.getTracks().forEach(t => {
             t.stop();
-            console.log('Debug: Stopped existing track', t.id, t.kind);
+            console.log('CLEANUP: Stopped existing track', t.id, t.kind);
           });
         }
         trackElement.srcObject = null;
@@ -231,12 +370,13 @@ export default function VideoDebug() {
       if (videoTrack.mediaStreamTrack) {
         // 1. Напрямую используем mediaStreamTrack
         try {
+          console.log('ATTACH METHOD 1: Using direct MediaStreamTrack');
           const stream = new MediaStream([videoTrack.mediaStreamTrack]);
           trackElement.srcObject = stream;
           attachMethod = 'mediaStreamTrack';
-          console.log('Debug: Using mediaStreamTrack method', videoTrack.mediaStreamTrack.id);
+          console.log('ATTACH SUCCESS: Using mediaStreamTrack method', videoTrack.mediaStreamTrack.id);
         } catch (err) {
-          console.log('Debug: mediaStreamTrack method failed', err);
+          console.error('ATTACH ERROR: mediaStreamTrack method failed', err);
         }
       }
       
@@ -244,11 +384,12 @@ export default function VideoDebug() {
       if (!trackElement.srcObject && videoTrack.mediaStream) {
         // 2. Используем mediaStream напрямую
         try {
+          console.log('ATTACH METHOD 2: Using track\'s MediaStream');
           trackElement.srcObject = videoTrack.mediaStream;
           attachMethod = 'mediaStream';
-          console.log('Debug: Using mediaStream method');
+          console.log('ATTACH SUCCESS: Using mediaStream method');
         } catch (err) {
-          console.log('Debug: mediaStream method failed', err);
+          console.error('ATTACH ERROR: mediaStream method failed', err);
         }
       }
       
@@ -256,11 +397,12 @@ export default function VideoDebug() {
       if (!trackElement.srcObject) {
         // 3. Используем встроенный метод LiveKit
         try {
+          console.log('ATTACH METHOD 3: Using LiveKit\'s attach method');
           videoTrack.attach(trackElement);
           attachMethod = 'livekit-attach';
-          console.log('Debug: Using LiveKit attach method');
+          console.log('ATTACH SUCCESS: Using LiveKit attach method');
         } catch (err) {
-          console.log('Debug: LiveKit attach method failed', err);
+          console.error('ATTACH ERROR: LiveKit attach method failed', err);
         }
       }
       
@@ -273,31 +415,66 @@ export default function VideoDebug() {
       
       // Проверяем, успешно ли подключили трек
       if (!trackElement.srcObject && attachMethod === 'livekit-attach') {
-        console.log('Debug: Checking mediaStreamTrack after LiveKit attach');
+        console.log('POST-ATTACH CHECK: Verifying srcObject after LiveKit attach');
         // В некоторых случаях LiveKit не устанавливает srcObject напрямую
         if (trackElement.srcObject) {
-          console.log('Debug: srcObject is now available after attach');
+          console.log('POST-ATTACH: srcObject is now available after attach');
         } else {
-          console.log('Debug: No srcObject after attach');
+          console.log('POST-ATTACH WARNING: No srcObject after attach, this might fail');
         }
       }
       
       // Активно пытаемся запустить воспроизведение видео
       try {
+        console.log('PLAYBACK: Attempting to start video playback');
         await trackElement.play();
-        console.log('Debug: Video playback started successfully');
+        console.log('PLAYBACK SUCCESS: Video started successfully');
       } catch (error) {
-        console.log('Debug: Error playing video', error);
+        console.error('PLAYBACK ERROR: Failed to start video', error);
         
         // Вторая попытка через 500мс
         setTimeout(async () => {
           try {
+            console.log('PLAYBACK RETRY: Second attempt to start video');
             await trackElement.play();
-            console.log('Debug: Second play attempt succeeded');
+            console.log('PLAYBACK RETRY SUCCESS: Second play attempt succeeded');
           } catch (e) {
-            console.log('Debug: Second play attempt failed', e);
+            console.error('PLAYBACK RETRY ERROR: Second play attempt failed', e);
           }
         }, 500);
+      }
+      
+      // Регистрируем обработчики событий для мониторинга состояния видео
+      trackElement.onpause = () => {
+        console.log('VIDEO EVENT: Playback paused');
+      };
+      
+      trackElement.onplay = () => {
+        console.log('VIDEO EVENT: Playback started');
+      };
+      
+      trackElement.onresize = () => {
+        console.log('VIDEO EVENT: Size changed to', 
+          trackElement.videoWidth, 'x', trackElement.videoHeight);
+      };
+      
+      trackElement.onerror = (e) => {
+        console.error('VIDEO EVENT: Error during playback', e);
+      };
+      
+      // Мониторим состояние видеотрека
+      if (videoTrack.mediaStreamTrack) {
+        videoTrack.mediaStreamTrack.onended = () => {
+          console.log('MEDIA TRACK EVENT: Track ended', videoTrack.mediaStreamTrack?.id);
+        };
+        
+        videoTrack.mediaStreamTrack.onmute = () => {
+          console.log('MEDIA TRACK EVENT: Track muted', videoTrack.mediaStreamTrack?.id);
+        };
+        
+        videoTrack.mediaStreamTrack.onunmute = () => {
+          console.log('MEDIA TRACK EVENT: Track unmuted', videoTrack.mediaStreamTrack?.id);
+        };
       }
       
       // Периодически обновляем состояние видео, максимум 20 секунд
@@ -306,17 +483,31 @@ export default function VideoDebug() {
       
       const checkInterval = setInterval(() => {
         checkCount++;
+        
+        if (videoTrack.mediaStreamTrack) {
+          console.log(`TRACK MONITORING #${checkCount}:`, {
+            ready: videoTrack.mediaStreamTrack.readyState,
+            enabled: videoTrack.mediaStreamTrack.enabled,
+            muted: videoTrack.mediaStreamTrack.muted,
+            videoPaused: trackElement.paused
+          });
+        }
+        
         updateDebugInfo();
         
         // Если видео остановлено, пробуем запустить его снова
         if (trackElement.paused) {
-          trackElement.play().catch(e => {
-            console.log(`Debug: Periodic play attempt ${checkCount} failed`, e);
+          console.log(`PLAYBACK RECOVERY #${checkCount}: Video paused, trying to restart`);
+          trackElement.play().then(() => {
+            console.log(`PLAYBACK RECOVERY #${checkCount}: Success`);
+          }).catch(e => {
+            console.error(`PLAYBACK RECOVERY #${checkCount}: Failed`, e);
           });
         }
         
         // Останавливаем проверки после maxChecks попыток
         if (checkCount >= maxChecks) {
+          console.log('TRACK MONITORING: Ending periodic checks after', maxChecks, 'iterations');
           clearInterval(checkInterval);
         }
       }, 1000);
@@ -325,7 +516,7 @@ export default function VideoDebug() {
       updateDebugInfo();
       
     } catch (error) {
-      console.error('Debug: Error attaching local video', error);
+      console.error('CRITICAL ERROR: Uncaught exception in attachLocalVideo', error);
     }
   };
   
@@ -369,7 +560,7 @@ export default function VideoDebug() {
     };
   }, [localParticipant, room]);
   
-  // Сведения о видеотреке для отображения
+  // Сведения о видеотреке для отображения с расширенной диагностикой
   const getDebugInfo = () => {
     if (!localParticipant) return 'Нет участника';
     
@@ -378,15 +569,70 @@ export default function VideoDebug() {
               pub.track?.source === Track.Source.Camera);
     
     if (videoPublications.length === 0) {
+      // Расширенная диагностика, когда нет видеотреков
+      console.log('CAMERA CHECK - No video tracks found for participant', {
+        identity: localParticipant.identity,
+        isVideoEnabled: localParticipant.isCameraEnabled,
+        trackCount: localParticipant.getTrackPublications().length,
+        allTracks: localParticipant.getTrackPublications().map(pub => ({
+          kind: pub.kind,
+          sid: pub.trackSid,
+          source: pub.track?.source || 'unknown',
+          muted: pub.isMuted
+        }))
+      });
+      
+      // Проверяем, что происходит, если попытаться включить камеру
+      if (room && !localParticipant.isCameraEnabled) {
+        console.log('TRYING TO ENABLE CAMERA from VideoDebug component...');
+        localParticipant.setCameraEnabled(true)
+          .then(pub => {
+            console.log('CAMERA ENABLED RESULT:', pub ? {
+              sid: pub.trackSid,
+              kind: pub.kind,
+              hasTrack: !!pub.track
+            } : 'failed');
+          })
+          .catch(e => console.error('CAMERA ENABLE ERROR:', e));
+      }
+      
       return 'Нет видеотреков';
     }
     
     const videoPublication = videoPublications[0];
     if (!videoPublication.track) {
+      // Расширенная диагностика, когда есть публикация, но нет трека
+      console.log('TRACK DIAGNOSTIC - Publication exists but track is null', {
+        publicationSid: videoPublication.trackSid,
+        isMuted: videoPublication.isMuted,
+        isSubscribed: videoPublication.isSubscribed,
+        isEnabled: videoPublication.isEnabled
+      });
+      
       return 'Трек не активен';
     }
     
-    return `Трек SID: ${videoPublication.trackSid.slice(0, 6)}... ${videoPublication.isMuted ? '(заглушен)' : '(активен)'}`;
+    // Расширенная диагностика о состоянии активного трека
+    console.log('ACTIVE TRACK DIAGNOSTIC:', {
+      sid: videoPublication.trackSid,
+      kind: videoPublication.kind,
+      muted: videoPublication.isMuted,
+      source: videoPublication.track.source,
+      streamId: videoPublication.track.mediaStreamTrack?.id,
+      streamActive: videoPublication.track.mediaStreamTrack?.enabled,
+      streamState: videoPublication.track.mediaStreamTrack?.readyState,
+      dimensions: {
+        width: videoPublication.track.mediaStreamTrack?.getSettings?.()?.width || 'unknown',
+        height: videoPublication.track.mediaStreamTrack?.getSettings?.()?.height || 'unknown'
+      }
+    });
+    
+    // Добавляем расширенную информацию для отображения
+    const trackSettings = videoPublication.track.mediaStreamTrack?.getSettings?.();
+    const dimensions = trackSettings ? 
+      `${trackSettings.width || '?'}x${trackSettings.height || '?'}` : 'unknown';
+        
+    return `Трек: ${videoPublication.trackSid.slice(0, 6)}... ${videoPublication.isMuted ? '(заглушен)' : '(активен)'} ${dimensions}`;
   };
   
   // Состояние комнаты для отображения
