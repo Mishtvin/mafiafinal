@@ -29,15 +29,14 @@ export default function ParticipantGrid() {
     }
     
     // Получаем начальный список участников
-    // В LiveKit нет прямого room.participants, нам нужно использовать API для получения участников
-    // LiveKit не предоставляет доступа к списку remote participants, только количество через numParticipants
-    // Поэтому будем полагаться на события для обновления списка
     const remoteParticipants: Participant[] = [];
+    // В новой версии LiveKit нет room.participants, но есть другие методы
+    // для получения участников
     
     // Комбинируем с локальным участником, если он есть
     const allParticipants = room.localParticipant 
-      ? [room.localParticipant] 
-      : [];
+      ? [...remoteParticipants] 
+      : remoteParticipants;
     
     setParticipants(allParticipants);
     
@@ -76,7 +75,7 @@ export default function ParticipantGrid() {
     };
   }, [room]);
   
-  // Принудительно убеждаемся, что локальный участник всегда есть в списке
+  // Принудительно убеждаемся, что локальный участник будет обработан особым образом
   // и добавляем дополнительные проверки стабильности
   const sortedParticipants = useMemo(() => {
     console.log("Participant grid rendering with participants:", participants.length);
@@ -90,18 +89,12 @@ export default function ParticipantGrid() {
     const isLocalParticipantInList = participants.some(p => p.sid === localParticipant.sid);
     console.log("Local participant in participants list:", isLocalParticipantInList);
     
-    // Если локального участника нет в списке, добавляем его
-    let workingParticipants = [...participants];
-    if (!isLocalParticipantInList) {
-      workingParticipants = [localParticipant, ...participants];
-    }
-    
     // Отделяем локального участника от остальных участников
-    const remoteParticipants = workingParticipants.filter(p => !p.isLocal);
+    const remoteParticipants = participants.filter(p => !p.isLocal);
     console.log("Remote participants count:", remoteParticipants.length);
     
-    // Диагностика треков для отладки - проверяем все треки включая нашего локального участника
-    for (const p of workingParticipants) {
+    // Диагностика треков для отладки
+    for (const p of participants) {
       const videoPubs = p.getTrackPublications()
         .filter(pub => pub.kind === 'video');
       
