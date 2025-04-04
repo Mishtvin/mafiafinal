@@ -1,4 +1,11 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 interface ErrorModalProps {
@@ -9,38 +16,53 @@ interface ErrorModalProps {
 }
 
 export default function ErrorModal({ isOpen, error, onDismiss, onRetry }: ErrorModalProps) {
-  if (!error) return null;
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onDismiss()}>
-      <DialogContent className="bg-slate-800 text-white border-slate-700 sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-red-500">Connection Error</DialogTitle>
+          <DialogTitle className="text-red-500 flex items-center">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="18" 
+              height="18" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2" 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              className="mr-2"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            Ошибка подключения
+          </DialogTitle>
+          <DialogDescription className="text-sm mt-2">
+            Не удалось подключиться к конференции. Пожалуйста, проверьте ваше интернет-соединение и попробуйте снова.
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <p>{error.message}</p>
-          
-          <div className="bg-black/30 rounded p-3 text-sm font-mono overflow-auto max-h-32">
-            <code>{error.stack || 'No detailed error information available'}</code>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <Button 
-              variant="outline" 
-              onClick={onDismiss}
-              className="bg-slate-700 hover:bg-slate-600 border-slate-600"
-            >
-              Dismiss
-            </Button>
-            <Button 
-              onClick={onRetry}
-              className="bg-blue-500 hover:bg-blue-600"
-            >
-              Retry
-            </Button>
-          </div>
+        <div className="bg-red-50 p-3 rounded-md border border-red-200 text-red-700 text-sm my-2">
+          {error?.message || 'Неизвестная ошибка'}
         </div>
+        
+        <DialogFooter className="flex space-x-2 sm:space-x-0 sm:space-y-2">
+          <Button 
+            variant="outline" 
+            onClick={onDismiss}
+            className="sm:w-full"
+          >
+            Закрыть
+          </Button>
+          <Button 
+            onClick={onRetry}
+            className="sm:w-full"
+          >
+            Повторить попытку
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

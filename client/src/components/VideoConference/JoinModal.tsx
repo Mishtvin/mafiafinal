@@ -1,9 +1,16 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle 
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
+import { randomString } from "@/lib/utils";
 
 interface JoinModalProps {
   isOpen: boolean;
@@ -11,80 +18,64 @@ interface JoinModalProps {
 }
 
 export default function JoinModal({ isOpen, onJoin }: JoinModalProps) {
-  const [username, setUsername] = useState('');
-  const [enableVideo, setEnableVideo] = useState(true);
-  const [enableAudio, setEnableAudio] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [username, setUsername] = useState(() => `Участник-${randomString(4)}`);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [videoEnabled, setVideoEnabled] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!username.trim()) {
-      return;
-    }
-    
-    setIsSubmitting(true);
-    onJoin(username, enableAudio, enableVideo);
+    onJoin(username, audioEnabled, videoEnabled);
   };
 
   return (
-    <Dialog open={isOpen} modal>
-      <DialogContent className="bg-slate-800 text-white border-slate-700 sm:max-w-md">
+    <Dialog open={isOpen}>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold">Join MafiaLive</DialogTitle>
+          <DialogTitle>Присоединиться к конференции</DialogTitle>
         </DialogHeader>
-
+        
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="username">Your Name</Label>
-            <Input
+            <Label htmlFor="username">Ваше имя</Label>
+            <Input 
               id="username"
-              type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your name"
+              placeholder="Введите ваше имя"
               required
-              className="bg-slate-700 border-slate-600 focus:border-blue-500 focus:ring-blue-500"
             />
           </div>
-
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="video" 
-                checked={enableVideo} 
-                onCheckedChange={(checked) => setEnableVideo(checked as boolean)}
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="audio-toggle">Включить микрофон</Label>
+              <Switch 
+                id="audio-toggle" 
+                checked={audioEnabled} 
+                onCheckedChange={setAudioEnabled}
               />
-              <Label htmlFor="video" className="cursor-pointer">Enable video</Label>
             </div>
             
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="audio" 
-                checked={enableAudio} 
-                onCheckedChange={(checked) => setEnableAudio(checked as boolean)}
+            <div className="flex items-center justify-between">
+              <Label htmlFor="video-toggle">Включить камеру</Label>
+              <Switch 
+                id="video-toggle" 
+                checked={videoEnabled} 
+                onCheckedChange={setVideoEnabled}
               />
-              <Label htmlFor="audio" className="cursor-pointer">Enable audio</Label>
             </div>
           </div>
-
-          <div className="flex justify-end pt-2">
-            <Button 
-              type="submit" 
-              disabled={!username.trim() || isSubmitting}
-              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 font-medium"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent border-white rounded-full"></div>
-                  Joining...
-                </>
-              ) : (
-                "Join Now"
-              )}
+          
+          <DialogFooter>
+            <Button type="submit" className="w-full">
+              Присоединиться
             </Button>
-          </div>
+          </DialogFooter>
         </form>
+        
+        <div className="text-xs text-center mt-4 text-gray-500">
+          Присоединяясь, вы соглашаетесь с тем, что другие участники конференции будут видеть и слышать вас.
+        </div>
       </DialogContent>
     </Dialog>
   );
