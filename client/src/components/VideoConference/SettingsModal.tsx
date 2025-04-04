@@ -20,13 +20,8 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const [microphones, setMicrophones] = useState<MediaDevice[]>([]);
   const [cameras, setCameras] = useState<MediaDevice[]>([]);
-  const [speakers, setSpeakers] = useState<MediaDevice[]>([]);
-  
-  const [audioInput, setAudioInput] = useState<string>("");
   const [videoInput, setVideoInput] = useState<string>("");
-  const [audioOutput, setAudioOutput] = useState<string>("");
   
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [hasRequestedPermissions, setHasRequestedPermissions] = useState(false);
@@ -42,7 +37,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setPermissionError(null);
       
       // Запрашиваем разрешения на доступ к медиа-устройствам
-      navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+      navigator.mediaDevices.getUserMedia({ video: true })
         .then(stream => {
           // Успешно получили разрешения, теперь можем перечислить устройства
           loadDevices();
@@ -60,7 +55,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         })
         .catch(error => {
           console.error('Error requesting media permissions:', error);
-          setPermissionError('Не удалось получить доступ к камере или микрофону. Пожалуйста, проверьте настройки разрешений браузера.');
+          setPermissionError('Не удалось получить доступ к камере. Пожалуйста, проверьте настройки разрешений браузера.');
           
           // Все равно пытаемся загрузить устройства, хотя их названия могут быть скрыты
           loadDevices();
@@ -86,40 +81,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       .then(devices => {
         console.log('Available media devices:', devices);
         
-        const mics: MediaDevice[] = [];
         const cams: MediaDevice[] = [];
-        const spks: MediaDevice[] = [];
         
         devices.forEach(device => {
-          if (device.kind === 'audioinput') {
-            mics.push({
-              deviceId: device.deviceId,
-              label: device.label || `Микрофон ${mics.length + 1}`,
-              kind: device.kind
-            });
-          } else if (device.kind === 'videoinput') {
+          if (device.kind === 'videoinput') {
             cams.push({
               deviceId: device.deviceId,
               label: device.label || `Камера ${cams.length + 1}`,
               kind: device.kind
             });
-          } else if (device.kind === 'audiooutput') {
-            spks.push({
-              deviceId: device.deviceId,
-              label: device.label || `Динамик ${spks.length + 1}`,
-              kind: device.kind
-            });
           }
         });
         
-        setMicrophones(mics);
         setCameras(cams);
-        setSpeakers(spks);
         
-        // Устанавливаем первые устройства по умолчанию, только если они еще не выбраны
-        if (mics.length > 0 && !audioInput) setAudioInput(mics[0].deviceId);
+        // Устанавливаем первую камеру по умолчанию, только если еще не выбрана
         if (cams.length > 0 && !videoInput) setVideoInput(cams[0].deviceId);
-        if (spks.length > 0 && !audioOutput) setAudioOutput(spks[0].deviceId);
       })
       .catch(error => {
         console.error('Error enumerating media devices:', error);
@@ -154,16 +131,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   };
 
-  // Обработчики изменения других устройств
-  const handleAudioInputChange = (value: string) => {
-    setAudioInput(value);
-    // В реальной реализации мы бы переключали активный микрофон здесь
-  };
-
-  const handleAudioOutputChange = (value: string) => {
-    setAudioOutput(value);
-    // В реальной реализации мы бы переключали устройство вывода здесь
-  };
+  // Обработчики удалены, поскольку аудио не используется
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -172,47 +140,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <DialogTitle>Настройки</DialogTitle>
         </DialogHeader>
         
-        <Tabs defaultValue="audio" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="audio">Аудио</TabsTrigger>
-            <TabsTrigger value="video">Видео</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="audio" className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label htmlFor="audioInput">Микрофон</Label>
-              <Select value={audioInput} onValueChange={handleAudioInputChange}>
-                <SelectTrigger id="audioInput">
-                  <SelectValue placeholder="Выберите микрофон" />
-                </SelectTrigger>
-                <SelectContent>
-                  {microphones.map(device => (
-                    <SelectItem key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Микрофон ${device.deviceId.substring(0, 5)}...`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="audioOutput">Динамики</Label>
-              <Select value={audioOutput} onValueChange={handleAudioOutputChange}>
-                <SelectTrigger id="audioOutput">
-                  <SelectValue placeholder="Выберите динамики" />
-                </SelectTrigger>
-                <SelectContent>
-                  {speakers.map(device => (
-                    <SelectItem key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Динамики ${device.deviceId.substring(0, 5)}...`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="video" className="space-y-4 pt-4">
+        <div className="w-full space-y-4 pt-4">
             <div className="space-y-2">
               <Label htmlFor="videoInput">Камера</Label>
               <Select value={videoInput} onValueChange={handleVideoInputChange}>
@@ -246,8 +174,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
               </div>
             )}
-          </TabsContent>
-        </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );
