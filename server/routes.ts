@@ -40,13 +40,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       at.addGrant(videoGrant);
       
-      // Создаем JWT токен
-      const token = at.toJwt();
-      
-      console.log("Generated token for:", identity, "room:", roomName);
-      
-      // Возвращаем ответ напрямую как токен (такой формат ожидает клиент)
-      return res.json(token);
+      // Создаем JWT токен - обрабатываем Promise если нужно
+      try {
+        const jwt = await Promise.resolve(at.toJwt());
+        const tokenString = String(jwt);
+        
+        console.log("Generated token for:", identity, "room:", roomName);
+        
+        // Возвращаем токен в формате, который ожидает клиент
+        return res.json({ token: tokenString, identity, room: roomName });
+      } catch (tokenError) {
+        console.error('Error generating token:', tokenError);
+        return res.status(500).json({ error: 'Failed to generate token' });
+      }
     } catch (error) {
       console.error('Error generating LiveKit token:', error);
       return res.status(500).json({ error: 'Failed to generate token' });

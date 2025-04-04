@@ -28,12 +28,12 @@ export async function fetchToken(identity: string, roomName?: string): Promise<s
     // Parse response
     const data = await response.json();
     
-    // The server returns { identity, accessToken }
-    if (!data.accessToken) {
+    // The server returns { token, identity, room }
+    if (!data.token) {
       throw new Error('No token returned from server');
     }
     
-    return data.accessToken;
+    return data.token;
   } catch (error) {
     console.error('Error fetching LiveKit token:', error);
     throw error;
