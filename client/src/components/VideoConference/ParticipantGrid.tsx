@@ -2,7 +2,8 @@ import { useMemo, useEffect, useState } from "react";
 import { useParticipants, useLocalParticipant } from "@livekit/components-react";
 import ParticipantTile from "./ParticipantTileV2";
 import { Participant, Track, ConnectionState } from "livekit-client";
-import { useRoomContext } from "@livekit/components-react";
+// Импортируем хук контекста из нашей реализации
+import { useRoomContext } from "./CustomLiveKitRoom";
 
 /**
  * Улучшенный компонент ParticipantGrid с дополнительной логикой стабилизации видео
@@ -18,11 +19,11 @@ export default function ParticipantGrid() {
   useEffect(() => {
     if (!room) return;
     
-    console.log("Room connection state:", ConnectionState[room.state]);
+    console.log("Room connection state:", room.state);
     setIsConnected(room.state === ConnectionState.Connected);
     
     const handleConnectionStateChanged = (state: ConnectionState) => {
-      console.log("Room connection state changed:", ConnectionState[state]);
+      console.log("Room connection state changed:", state);
       setIsConnected(state === ConnectionState.Connected);
     };
     
