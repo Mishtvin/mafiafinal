@@ -159,13 +159,78 @@ export default function CustomLiveKitRoom({
               muted: pub.track.mediaStreamTrack.muted
             };
             
+            // Проверка и восстановление трека, который не в состоянии 'live'
             if (trackState.readyState !== 'live' || !trackState.enabled) {
               console.log('VIDEO TRACK IN BAD STATE:', trackState);
               
               if (video) {
-                console.log('Attempting to recover video track...');
-                localParticipant.setCameraEnabled(true)
-                  .catch(err => console.error('VIDEO RECOVERY FAILED:', err));
+                console.log('CRITICAL RECOVERY: Attempting to recover ended/non-live video track');
+                
+                // Запускаем процесс восстановления, но с последовательными обычными промисами
+                // вместо await синтаксиса
+                console.log('RECOVERY STEP 1: Disabling camera');
+                
+                // Шаг 1: Выключаем камеру
+                localParticipant.setCameraEnabled(false)
+                  .then(() => {
+                    console.log('Camera successfully disabled, waiting before re-enabling...');
+                    
+                    // Шаг 2: Ждем 1 секунду перед включением камеры
+                    setTimeout(() => {
+                      console.log('RECOVERY STEP 2: Re-enabling camera with fresh settings');
+                      
+                      // Шаг 3: Включаем камеру снова
+                      localParticipant.setCameraEnabled(true)
+                        .then(pub => {
+                          if (pub) {
+                            console.log('CAMERA RECOVERY COMPLETE:', {
+                              newTrackSid: pub.trackSid,
+                              hasTrack: !!pub.track,
+                              newTrackState: pub.track?.mediaStreamTrack?.readyState || 'unknown'
+                            });
+                          } else {
+                            console.error('CAMERA RECOVERY FAILED: No publication returned');
+                            
+                            // Запасной вариант восстановления через прямой доступ
+                            recoverWithDirectMediaAccess();
+                          }
+                        })
+                        .catch(err => {
+                          console.error('CAMERA RE-ENABLE FAILED:', err);
+                          
+                          // Последний шанс - прямой доступ к медиа API
+                          recoverWithDirectMediaAccess();
+                        });
+                    }, 1000);
+                  })
+                  .catch(err => {
+                    console.error('CAMERA DISABLE FAILED:', err);
+                    
+                    // Пробуем напрямую работать с медиа API
+                    recoverWithDirectMediaAccess();
+                  });
+                
+                // Вспомогательная функция для крайнего случая восстановления
+                function recoverWithDirectMediaAccess() {
+                  console.log('LAST RESORT RECOVERY: Attempting direct media access');
+                  navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                      console.log('DIRECT MEDIA ACCESS SUCCESS:', stream.getVideoTracks().length, 'video tracks');
+                      
+                      // Останавливаем треки, которые мы получили напрямую
+                      stream.getTracks().forEach(t => t.stop());
+                      
+                      // Подключаем камеру через LiveKit
+                      console.log('LAST RESORT STEP 2: Re-enabling camera after direct access');
+                      return localParticipant.setCameraEnabled(true);
+                    })
+                    .then(() => {
+                      console.log('LAST RESORT RECOVERY COMPLETE');
+                    })
+                    .catch(mediaErr => {
+                      console.error('LAST RESORT MEDIA ACCESS FAILED:', mediaErr);
+                    });
+                }
               }
             }
           }
