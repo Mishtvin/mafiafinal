@@ -8,10 +8,11 @@ import JoinModal from '../components/VideoConference/JoinModal';
 import ErrorModal from '../components/VideoConference/ErrorModal';
 import VideoDebug from '../components/VideoConference/VideoDebug';
 import { fetchToken } from '../lib/livekit';
-import { Room, VideoPresets, LogLevel, RoomOptions, Track } from 'livekit-client';
+import { Room, VideoPresets, LogLevel, RoomOptions, Track, ConnectionState } from 'livekit-client';
 import { decodePassphrase, encodePassphrase, generateRoomId } from '../lib/utils';
 
 export default function VideoConference() {
+  // Состояния для управления отображением
   const [token, setToken] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [connectionState, setConnectionState] = useState('disconnected');
@@ -20,13 +21,20 @@ export default function VideoConference() {
   const [hasJoined, setHasJoined] = useState(false);
   const [initialAudio, setInitialAudio] = useState(true);
   const [initialVideo, setInitialVideo] = useState(true);
-  // Всегда используем default-room, как в вашем рабочем примере
-  const [roomId, setRoomId] = useState('default-room');
+  // Всегда используем default-room
+  const [roomId] = useState('default-room'); // Убрали setRoomId, так как мы не меняем roomId
   const [isE2EEEnabled, setIsE2EEEnabled] = useState(false);
   const [e2eePassphrase, setE2eePassphrase] = useState<string | null>(null);
+  
+  // Важно: Для предотвращения множественных подключений сохраняем флаги состояния
+  const [hasConnectedBefore, setHasConnectedBefore] = useState(false);
+  const pendingConnectionRef = useRef(false);
 
-  // Reuse Room instance
+  // Reuse Room instance - стабилизируем хранение объекта комнаты
   const roomRef = useRef<Room | null>(null);
+  
+  // Дополнительные счетчики для отладки
+  const connectionAttemptsRef = useRef(0);
 
   // LiveKit server URL
   const serverUrl = 'wss://livekit.nyavkin.site';
@@ -117,19 +125,33 @@ export default function VideoConference() {
     disconnectOnPageLeave: false // Предотвращает отключение при потере фокуса
   };
 
-  // Улучшенная обработка событий комнаты
+  // Улучшенная обработка событий комнаты с предотвращением множественных вызовов
   const handleRoomConnection = async (room: Room) => {
+    connectionAttemptsRef.current += 1;
+    console.log(`Room connection attempt #${connectionAttemptsRef.current}`);
+    
     if (!room) {
       console.error('Room object is undefined in handleRoomConnection');
       return;
     }
     
+    // Проверка, чтобы избежать дублирования обработчиков и повторных подключений
+    if (pendingConnectionRef.current) {
+      console.log('Connection already in progress, skipping this call');
+      return;
+    }
+    
+    // Отмечаем, что начали процесс подключения
+    pendingConnectionRef.current = true;
+    
+    // Сохраняем объект комнаты
     roomRef.current = room;
     setConnectionState('connected');
     
     console.log('Connected to LiveKit room:', {
       roomId: room.name || 'unknown',
       url: serverUrl,
+      connectionAttempt: connectionAttemptsRef.current,
       participantCount: (room.numParticipants || 0) + 1, // +1 for local participant
       connectionState: room.state
     });
