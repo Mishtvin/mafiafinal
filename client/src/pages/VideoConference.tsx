@@ -348,7 +348,6 @@ export default function VideoConference() {
           connect={true}
           onError={handleError}
           options={roomOptions}
-          data-lk-theme="default"
           // @ts-ignore - LiveKit типы некорректно определяют параметры для onConnected
           onConnected={handleRoomConnection}
         >
