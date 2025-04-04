@@ -4,17 +4,36 @@ import ParticipantGrid from '../components/VideoConference/ParticipantGrid';
 import ControlBar from '../components/VideoConference/ControlBar';
 import ConnectionIndicator from '../components/VideoConference/ConnectionIndicator';
 import { Room, VideoPresets } from 'livekit-client';
+import { fetchToken } from '../lib/livekit';
+import { randomString } from '../lib/utils';
 
 export default function DirectConnection() {
   const [connectionState, setConnectionState] = useState('disconnected');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-
-  // Непосредственно используем токен из вашей ссылки
-  const token = "eyJhbGciOiJIUzI1NiJ9.eyJ2aWRlbyI6eyJyb29tIjoiZGVmYXVsdC1yb29tIiwicm9vbUpvaW4iOnRydWUsImNhblB1Ymxpc2giOnRydWUsImNhblN1YnNjcmliZSI6dHJ1ZX0sImlzcyI6IkFQSUU2V1dFc3BLaHRzdCIsImV4cCI6MTc0MzgwMTAwMywibmJmIjowLCJzdWIiOiJ1c2VyMTc0Mzc3OTQwMzk4NCJ9.o_aEGyGhfYl_FFsJcXP6Sa0oEwOyt6zw41TnqyTP-Kk";
+  const [token, setToken] = useState<string | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
   
   // LiveKit server URL
   const serverUrl = 'wss://livekit.nyavkin.site';
+  
+  // Генерируем случайное имя пользователя
+  const username = `User-${randomString(4)}`;
+  
+  // Получаем токен при загрузке компонента
+  useEffect(() => {
+    setIsLoading(true);
+    fetchToken(username)
+      .then(newToken => {
+        setToken(newToken);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Ошибка получения токена:", err);
+        setError(new Error(`Ошибка получения токена: ${err.message}`));
+        setIsLoading(false);
+      });
+  }, [username]);
 
   // Room configuration options
   const roomOptions = {
@@ -33,17 +52,28 @@ export default function DirectConnection() {
   const initialAudio = true;
   const initialVideo = true;
 
-  const handleError = (err: Error) => {
+  const handleError = (err: Error | any) => {
     console.error('LiveKit error:', err);
-    setError(err);
+    
+    // Создаем копию ошибки или создаем новую, если объект ошибки некорректный
+    const error = err instanceof Error 
+      ? err 
+      : new Error(err && err.message ? err.message : 'Неизвестная ошибка подключения');
+      
+    setError(error);
     setConnectionState('disconnected');
   };
 
   const handleRoomConnection = (room: Room) => {
+    if (!room) {
+      console.error('Room object is undefined in handleRoomConnection');
+      return;
+    }
+    
     console.log('Connected to LiveKit room direct connection:', {
-      roomId: room.name,
+      roomId: room.name || 'unknown',
       url: serverUrl,
-      participantCount: room.numParticipants + 1
+      participantCount: (room.numParticipants || 0) + 1
     });
     
     setConnectionState('connected');
@@ -89,7 +119,21 @@ export default function DirectConnection() {
               </button>
               <button
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded transition-colors"
-                onClick={() => setError(null)}
+                onClick={() => {
+                  setError(null);
+                  // Повторно запрашиваем токен
+                  setIsLoading(true);
+                  fetchToken(username)
+                    .then(newToken => {
+                      setToken(newToken);
+                      setIsLoading(false);
+                    })
+                    .catch(err => {
+                      console.error("Ошибка получения токена:", err);
+                      setError(new Error(`Ошибка получения токена: ${err.message}`));
+                      setIsLoading(false);
+                    });
+                }}
               >
                 Повторить
               </button>
@@ -98,43 +142,57 @@ export default function DirectConnection() {
         </div>
       )}
 
-      <LiveKitRoom
-        serverUrl={serverUrl}
-        token={token}
-        connect={true}
-        onError={handleError}
-        options={roomOptions}
-        data-lk-theme="default"
-        // @ts-ignore - LiveKit типы некорректно определяют параметры для onConnected
-        onConnected={handleRoomConnection}
-      >
-        <div className="flex flex-col h-screen">
-          {/* Header section */}
-          <header className="bg-slate-800 px-4 py-3 flex justify-between items-center border-b border-gray-800">
-            <div className="flex items-center space-x-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-              </svg>
-              <h1 className="text-xl font-semibold">MafiaLive - Прямое подключение</h1>
-            </div>
-            
-            <ConnectionIndicator connectionState={connectionState} />
-          </header>
-
-          {/* Main content area with participant videos */}
-          <main className="flex-1 overflow-hidden p-4">
-            <ParticipantGrid />
-          </main>
-
-          {/* Controls section */}
-          <footer className="bg-slate-800 px-4 py-3 border-t border-gray-800">
-            <ControlBar onLeave={handleLeave} />
-          </footer>
+      {isLoading && (
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-xl">Загрузка...</p>
+          </div>
         </div>
-      </LiveKitRoom>
+      )}
+
+      {!isLoading && token && (
+        <LiveKitRoom
+          serverUrl={serverUrl}
+          token={token}
+          connect={true}
+          onError={handleError}
+          options={roomOptions}
+          data-lk-theme="default"
+          // @ts-ignore - LiveKit типы некорректно определяют параметры для onConnected
+          onConnected={handleRoomConnection}
+        >
+          <div className="flex flex-col h-screen">
+            {/* Header section */}
+            <header className="bg-slate-800 px-4 py-3 flex justify-between items-center border-b border-gray-800">
+              <div className="flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <h1 className="text-xl font-semibold">MafiaLive - Прямое подключение</h1>
+                <span className="ml-2 px-2 py-1 bg-blue-900 rounded text-xs">
+                  {username}
+                </span>
+              </div>
+              
+              <ConnectionIndicator connectionState={connectionState} />
+            </header>
+
+            {/* Main content area with participant videos */}
+            <main className="flex-1 overflow-hidden p-4">
+              <ParticipantGrid />
+            </main>
+
+            {/* Controls section */}
+            <footer className="bg-slate-800 px-4 py-3 border-t border-gray-800">
+              <ControlBar onLeave={handleLeave} />
+            </footer>
+          </div>
+        </LiveKitRoom>
+      )}
     </div>
   );
 }

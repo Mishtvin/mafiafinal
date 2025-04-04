@@ -69,9 +69,15 @@ export default function VideoConference() {
     setHasJoined(true);
   };
 
-  const handleError = (err: Error) => {
+  const handleError = (err: Error | any) => {
     console.error('LiveKit error:', err);
-    setError(err);
+    
+    // Создаем копию ошибки или создаем новую, если объект ошибки некорректный
+    const error = err instanceof Error 
+      ? err 
+      : new Error(err && err.message ? err.message : 'Неизвестная ошибка подключения');
+      
+    setError(error);
     setConnectionState('disconnected');
   };
 
@@ -102,13 +108,18 @@ export default function VideoConference() {
 
   // Handle room events
   const handleRoomConnection = (room: Room) => {
+    if (!room) {
+      console.error('Room object is undefined in handleRoomConnection');
+      return;
+    }
+    
     roomRef.current = room;
     setConnectionState('connected');
     
     console.log('Connected to LiveKit room:', {
-      roomId: room.name,
+      roomId: room.name || 'unknown',
       url: serverUrl,
-      participantCount: room.numParticipants + 1, // +1 for local participant
+      participantCount: (room.numParticipants || 0) + 1, // +1 for local participant
       connectionState: room.state
     });
     
@@ -164,27 +175,31 @@ export default function VideoConference() {
     }
     
     // Отслеживаем изменения состояния участника
-    room.localParticipant.on('trackPublished', (pub) => {
-      console.log('Local track published:', {
-        trackSid: pub.trackSid,
-        source: pub.track?.source,
-        kind: pub.kind
+    if (room.localParticipant) {
+      room.localParticipant.on('trackPublished', (pub) => {
+        console.log('Local track published:', {
+          trackSid: pub.trackSid,
+          source: pub.track?.source,
+          kind: pub.kind
+        });
       });
-    });
-    
-    room.localParticipant.on('trackMuted', (pub) => {
-      console.log('Local track muted:', {
-        trackSid: pub.trackSid,
-        source: pub.track?.source
+      
+      room.localParticipant.on('trackMuted', (pub) => {
+        console.log('Local track muted:', {
+          trackSid: pub.trackSid,
+          source: pub.track?.source
+        });
       });
-    });
-    
-    room.localParticipant.on('trackUnmuted', (pub) => {
-      console.log('Local track unmuted:', {
-        trackSid: pub.trackSid,
-        source: pub.track?.source
+      
+      room.localParticipant.on('trackUnmuted', (pub) => {
+        console.log('Local track unmuted:', {
+          trackSid: pub.trackSid,
+          source: pub.track?.source
+        });
       });
-    });
+    } else {
+      console.warn('Cannot set up track event handlers: localParticipant is not available');
+    }
     
     // Set up listeners for connection state changes
     room.on('disconnected', () => {
