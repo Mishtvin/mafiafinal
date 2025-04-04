@@ -20,7 +20,6 @@ export default function VideoConference() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [hasJoined, setHasJoined] = useState(false);
-  const [initialAudio, setInitialAudio] = useState(true);
   const [initialVideo, setInitialVideo] = useState(true);
   // Всегда используем default-room
   const [roomId] = useState('default-room'); // Убрали setRoomId, так как мы не меняем roomId
@@ -71,10 +70,9 @@ export default function VideoConference() {
     }
   }, [hasJoined, username, roomId]);
 
-  const handleJoin = (name: string, audioEnabled: boolean, videoEnabled: boolean) => {
-    console.log('Joining conference with settings:', { name, audioEnabled, videoEnabled });
+  const handleJoin = (name: string, _audioEnabled: boolean, videoEnabled: boolean) => {
+    console.log('Joining conference with settings:', { name, videoEnabled });
     setUsername(name);
-    setInitialAudio(audioEnabled);
     setInitialVideo(videoEnabled);
     setHasJoined(true);
   };
@@ -204,10 +202,9 @@ export default function VideoConference() {
         // Сначала получаем доступ к устройствам напрямую для проверки разрешений
         console.log('Checking media device access permissions...');
         try {
-          const constraints = { audio: initialAudio, video: initialVideo };
+          const constraints = { video: initialVideo };
           const stream = await navigator.mediaDevices.getUserMedia(constraints);
           console.log('Successfully got media permissions:', {
-            audioTracks: stream.getAudioTracks().length,
             videoTracks: stream.getVideoTracks().length
           });
           
@@ -215,13 +212,6 @@ export default function VideoConference() {
           stream.getTracks().forEach(track => track.stop());
         } catch (err) {
           console.warn('Error checking media permissions:', err);
-        }
-        
-        // Включаем микрофон если он нужен
-        if (initialAudio) {
-          console.log('Enabling microphone...');
-          const micTrack = await room.localParticipant.setMicrophoneEnabled(true);
-          console.log('Microphone enable result:', micTrack);
         }
         
         // Включаем камеру если она нужна
@@ -307,20 +297,13 @@ export default function VideoConference() {
       console.log('Reconnected to LiveKit room');
       setConnectionState('connected');
       
-      // После повторного подключения проверяем, нужно ли повторно включить медиа
+      // После повторного подключения проверяем, нужно ли повторно включить камеру
       const needReenabeCamera = initialVideo && !room.localParticipant.isCameraEnabled;
-      const needReenableMic = initialAudio && !room.localParticipant.isMicrophoneEnabled;
       
       if (needReenabeCamera) {
         console.log('Re-enabling camera after reconnect');
         room.localParticipant.setCameraEnabled(true)
           .catch(e => console.error('Failed to re-enable camera after reconnect:', e));
-      }
-      
-      if (needReenableMic) {
-        console.log('Re-enabling microphone after reconnect');
-        room.localParticipant.setMicrophoneEnabled(true)
-          .catch(e => console.error('Failed to re-enable microphone after reconnect:', e));
       }
     });
     
@@ -371,7 +354,7 @@ export default function VideoConference() {
           onError={handleError}
           options={roomOptions}
           video={initialVideo}
-          audio={initialAudio}
+          audio={false}
           onConnected={handleRoomConnection}
         >
           <div className="flex flex-col h-screen">

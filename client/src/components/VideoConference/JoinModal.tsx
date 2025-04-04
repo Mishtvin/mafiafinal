@@ -19,12 +19,11 @@ interface JoinModalProps {
 
 export default function JoinModal({ isOpen, onJoin }: JoinModalProps) {
   const [username, setUsername] = useState(() => `Участник-${randomString(4)}`);
-  const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onJoin(username, audioEnabled, videoEnabled);
+    onJoin(username, false, videoEnabled);
   };
 
   return (
@@ -48,15 +47,6 @@ export default function JoinModal({ isOpen, onJoin }: JoinModalProps) {
           
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label htmlFor="audio-toggle">Включить микрофон</Label>
-              <Switch 
-                id="audio-toggle" 
-                checked={audioEnabled} 
-                onCheckedChange={setAudioEnabled}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
               <Label htmlFor="video-toggle">Включить камеру</Label>
               <Switch 
                 id="video-toggle" 
@@ -74,7 +64,7 @@ export default function JoinModal({ isOpen, onJoin }: JoinModalProps) {
         </form>
         
         <div className="text-xs text-center mt-4 text-gray-500">
-          Присоединяясь, вы соглашаетесь с тем, что другие участники конференции будут видеть и слышать вас.
+          Присоединяясь, вы соглашаетесь с тем, что другие участники конференции будут видеть вас.
         </div>
       </DialogContent>
     </Dialog>
