@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Room, LocalParticipant, Participant, Track, ConnectionState } from 'livekit-client';
 import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
 
@@ -11,6 +11,37 @@ export default function VideoDebug() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
+  
+  // Состояние для отслеживания дополнительной отладочной информации
+  const [debugState, setDebugState] = useState<{
+    videoPlaying: boolean;
+    videoDimensions: string;
+    mediaStream: boolean;
+    lastAttachTime: string;
+    trackType: string;
+  }>({
+    videoPlaying: false,
+    videoDimensions: 'Нет данных',
+    mediaStream: false,
+    lastAttachTime: 'Никогда',
+    trackType: 'Неизвестно'
+  });
+  
+  // Функция для получения и отображения информации о видеоэлементе
+  const updateVideoElementInfo = () => {
+    if (!videoRef.current) return;
+    
+    const video = videoRef.current;
+    const now = new Date().toLocaleTimeString();
+    
+    setDebugState(prev => ({
+      ...prev,
+      videoPlaying: !video.paused,
+      videoDimensions: `${video.videoWidth}x${video.videoHeight}`,
+      mediaStream: !!video.srcObject,
+      lastAttachTime: now
+    }));
+  };
   
   useEffect(() => {
     const attachLocalVideo = async () => {
@@ -43,26 +74,72 @@ export default function VideoDebug() {
         // Для отладки проверяем свойства видеотрека
         const trackElement = videoRef.current;
         if (trackElement) {
+          // Очищаем предыдущие треки
+          if (trackElement.srcObject) {
+            const stream = trackElement.srcObject as MediaStream;
+            if (stream.getTracks) {
+              stream.getTracks().forEach(t => t.stop());
+            }
+            trackElement.srcObject = null;
+          }
+          
           trackElement.muted = true;
           trackElement.autoplay = true;
+          trackElement.playsInline = true;
+          
+          let attachMethod = 'none';
           
           // В зависимости от конкретной реализации LiveKit может потребоваться 
           // разный способ прикрепления медиапотока к видеоэлементу
-          if (videoTrack.mediaStream) {
-            // Если у трека есть mediaStream, используем его напрямую
-            trackElement.srcObject = videoTrack.mediaStream;
-          } else if (videoTrack.mediaStreamTrack) {
-            // Если есть только mediaStreamTrack, создаем новый MediaStream
+          if (videoTrack.mediaStreamTrack) {
+            // Предпочитаем напрямую использовать медиастрим трек
             const stream = new MediaStream([videoTrack.mediaStreamTrack]);
             trackElement.srcObject = stream;
+            attachMethod = 'mediaStreamTrack';
+          } else if (videoTrack.mediaStream) {
+            // Если у трека есть mediaStream, используем его напрямую
+            trackElement.srcObject = videoTrack.mediaStream;
+            attachMethod = 'mediaStream';
           } else {
-            console.log('Debug: No mediaStreamTrack available on video track');
+            // Последний вариант - использовать LiveKit API
+            videoTrack.attach(trackElement);
+            attachMethod = 'livekit-attach';
           }
+          
+          // Обновляем состояние для отладки
+          setDebugState(prev => ({
+            ...prev,
+            trackType: attachMethod,
+            lastAttachTime: new Date().toLocaleTimeString()
+          }));
           
           // Активно пытаемся воспроизвести видео
           trackElement.play().catch(error => {
             console.log('Debug: Error playing video', error);
+            
+            // Вторая попытка через 500мс
+            setTimeout(() => {
+              trackElement.play().catch(e => console.log('Debug: Second play attempt failed', e));
+            }, 500);
           });
+          
+          // Периодически обновляем состояние видео
+          const checkInterval = setInterval(() => {
+            updateVideoElementInfo();
+            
+            // Если видео остановлено, попробуем запустить его снова
+            if (trackElement.paused) {
+              trackElement.play().catch(e => {
+                console.log('Debug: Periodic play attempt failed', e);
+              });
+            }
+          }, 1000);
+          
+          // Очистка через 20 секунд
+          setTimeout(() => clearInterval(checkInterval), 20000);
+          
+          // Обновляем сразу после попытки воспроизведения
+          updateVideoElementInfo();
         }
       } catch (error) {
         console.error('Debug: Error attaching local video', error);
@@ -85,6 +162,10 @@ export default function VideoDebug() {
       
       // Очистка видеоэлемента при размонтировании
       if (videoRef.current) {
+        if (videoRef.current.srcObject) {
+          const stream = videoRef.current.srcObject as MediaStream;
+          stream.getTracks().forEach(track => track.stop());
+        }
         videoRef.current.srcObject = null;
       }
     };
@@ -134,6 +215,13 @@ export default function VideoDebug() {
     return `Комната: ${room.name} (${stateStr})`;
   };
   
+  // Подробная информация для воспроизведения локального видео
+  const getVideoPlaybackInfo = () => {
+    if (!videoRef.current) return 'Нет элемента видео';
+    
+    return `${debugState.videoPlaying ? '▶️' : '⏸️'} ${debugState.videoDimensions}, ${debugState.trackType}`;
+  };
+  
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 w-64 shadow-lg">
       <h3 className="text-sm font-semibold mb-2 text-slate-200">Отладка видео</h3>
@@ -160,6 +248,8 @@ export default function VideoDebug() {
       <div className="text-xs space-y-1 text-slate-300">
         <div>{getRoomInfo()}</div>
         <div>{getDebugInfo()}</div>
+        <div>Видео: {getVideoPlaybackInfo()}</div>
+        <div>Последнее обновление: {debugState.lastAttachTime}</div>
       </div>
     </div>
   );
