@@ -8,6 +8,7 @@ import SettingsModal from '../components/VideoConference/SettingsModal';
 import JoinModal from '../components/VideoConference/JoinModal';
 import ErrorModal from '../components/VideoConference/ErrorModal';
 import VideoDebug from '../components/VideoConference/VideoDebug';
+import VideoRecoveryNotification from '../components/VideoConference/VideoRecoveryNotification';
 import { fetchToken } from '../lib/livekit';
 import { Room, VideoPresets, LogLevel, RoomOptions, Track, ConnectionState } from 'livekit-client';
 import { decodePassphrase, encodePassphrase, generateRoomId } from '../lib/utils';
@@ -421,6 +422,9 @@ export default function VideoConference() {
               <div className="fixed bottom-24 right-4 z-50">
                 <VideoDebug />
               </div>
+              
+              {/* Компонент для восстановления видео */}
+              <VideoRecoveryNotification />
             </main>
 
             {/* Controls section */}

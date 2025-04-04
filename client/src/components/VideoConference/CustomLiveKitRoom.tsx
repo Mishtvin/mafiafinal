@@ -163,74 +163,10 @@ export default function CustomLiveKitRoom({
             if (trackState.readyState !== 'live' || !trackState.enabled) {
               console.log('VIDEO TRACK IN BAD STATE:', trackState);
               
+              // Вместо немедленной попытки восстановления, просто логируем проблему
+              // и полагаемся на VideoRecoveryNotification для пользовательских действий
               if (video) {
-                console.log('CRITICAL RECOVERY: Attempting to recover ended/non-live video track');
-                
-                // Запускаем процесс восстановления, но с последовательными обычными промисами
-                // вместо await синтаксиса
-                console.log('RECOVERY STEP 1: Disabling camera');
-                
-                // Шаг 1: Выключаем камеру
-                localParticipant.setCameraEnabled(false)
-                  .then(() => {
-                    console.log('Camera successfully disabled, waiting before re-enabling...');
-                    
-                    // Шаг 2: Ждем 1 секунду перед включением камеры
-                    setTimeout(() => {
-                      console.log('RECOVERY STEP 2: Re-enabling camera with fresh settings');
-                      
-                      // Шаг 3: Включаем камеру снова
-                      localParticipant.setCameraEnabled(true)
-                        .then(pub => {
-                          if (pub) {
-                            console.log('CAMERA RECOVERY COMPLETE:', {
-                              newTrackSid: pub.trackSid,
-                              hasTrack: !!pub.track,
-                              newTrackState: pub.track?.mediaStreamTrack?.readyState || 'unknown'
-                            });
-                          } else {
-                            console.error('CAMERA RECOVERY FAILED: No publication returned');
-                            
-                            // Запасной вариант восстановления через прямой доступ
-                            recoverWithDirectMediaAccess();
-                          }
-                        })
-                        .catch(err => {
-                          console.error('CAMERA RE-ENABLE FAILED:', err);
-                          
-                          // Последний шанс - прямой доступ к медиа API
-                          recoverWithDirectMediaAccess();
-                        });
-                    }, 1000);
-                  })
-                  .catch(err => {
-                    console.error('CAMERA DISABLE FAILED:', err);
-                    
-                    // Пробуем напрямую работать с медиа API
-                    recoverWithDirectMediaAccess();
-                  });
-                
-                // Вспомогательная функция для прямого доступа к медиа устройствам
-                const recoverWithDirectMediaAccess = () => {
-                  console.log('LAST RESORT RECOVERY: Attempting direct media access');
-                  navigator.mediaDevices.getUserMedia({ video: true })
-                    .then(stream => {
-                      console.log('DIRECT MEDIA ACCESS SUCCESS:', stream.getVideoTracks().length, 'video tracks');
-                      
-                      // Останавливаем треки, которые мы получили напрямую
-                      stream.getTracks().forEach(t => t.stop());
-                      
-                      // Подключаем камеру через LiveKit
-                      console.log('LAST RESORT STEP 2: Re-enabling camera after direct access');
-                      return localParticipant.setCameraEnabled(true);
-                    })
-                    .then(() => {
-                      console.log('LAST RESORT RECOVERY COMPLETE');
-                    })
-                    .catch(mediaErr => {
-                      console.error('LAST RESORT MEDIA ACCESS FAILED:', mediaErr);
-                    });
-                }
+                console.log('VIDEO RECOVERY NOTIFICATION: Video track issue detected, user can manually recover via UI');
               }
             }
           }
@@ -401,11 +337,33 @@ export default function CustomLiveKitRoom({
                 `microphone=${room.localParticipant.isMicrophoneEnabled}`
               );
               
-              // Проверяем треки через 1 секунду
+              // Создаем систему умного мониторинга видеотреков
+              // Вместо постоянных проверок и автоматических восстановлений,
+              // мы будем проверять состояние треков периодически, но реже
+              
+              // Начальная проверка через 1 секунду
               setTimeout(() => verifyTracks(room), 1000);
               
-              // И еще раз через 3 секунды для большей надежности
-              setTimeout(() => verifyTracks(room), 3000);
+              // Затем еще раз через 5 секунд
+              setTimeout(() => verifyTracks(room), 5000);
+              
+              // Создаем интервал с низкой частотой мониторинга (15 секунд)
+              // для снижения нагрузки на систему
+              const trackHealthMonitor = setInterval(() => {
+                // Проверяем только если комната все еще активна
+                if (room && room.state === ConnectionState.Connected) {
+                  console.log('Scheduled track health check...');
+                  verifyTracks(room);
+                } else {
+                  // Если комната отключена, останавливаем мониторинг
+                  clearInterval(trackHealthMonitor);
+                }
+              }, 15000); // 15 секунд между проверками
+              
+              // Очищаем интервал при размонтировании компонента
+              return () => {
+                clearInterval(trackHealthMonitor);
+              };
             } catch (err) {
               console.error('Error enabling devices:', err);
             }
@@ -415,19 +373,8 @@ export default function CustomLiveKitRoom({
         // Уведомляем родительский компонент о подключении
         if (onConnected) onConnected(room);
         
-        // Настраиваем интервал для периодической проверки треков
-        const checkInterval = setInterval(() => {
-          if (room.state === ConnectionState.Connected) {
-            verifyTracks(room);
-          } else {
-            clearInterval(checkInterval);
-          }
-        }, 10000); // Проверяем каждые 10 секунд
-        
-        // Очистка интервала при размонтировании
-        return () => {
-          clearInterval(checkInterval);
-        };
+        // Убираем дополнительный интервал проверки, так как мы уже
+        // добавили интервал внутри предыдущего блока кода
       } catch (error) {
         console.error('Error connecting to LiveKit room:', error);
         if (onError && error instanceof Error) {
