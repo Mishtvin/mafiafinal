@@ -14,7 +14,7 @@ export default function DirectConnection() {
   const token = "eyJhbGciOiJIUzI1NiJ9.eyJ2aWRlbyI6eyJyb29tIjoiZGVmYXVsdC1yb29tIiwicm9vbUpvaW4iOnRydWUsImNhblB1Ymxpc2giOnRydWUsImNhblN1YnNjcmliZSI6dHJ1ZX0sImlzcyI6IkFQSUU2V1dFc3BLaHRzdCIsImV4cCI6MTc0MzgwMTAwMywibmJmIjowLCJzdWIiOiJ1c2VyMTc0Mzc3OTQwMzk4NCJ9.o_aEGyGhfYl_FFsJcXP6Sa0oEwOyt6zw41TnqyTP-Kk";
   
   // LiveKit server URL
-  const serverUrl = 'wss://livekit.nyavkin.site/';
+  const serverUrl = 'wss://livekit.nyavkin.site';
 
   // Room configuration options
   const roomOptions = {
@@ -105,10 +105,8 @@ export default function DirectConnection() {
         onError={handleError}
         options={roomOptions}
         data-lk-theme="default"
-        onConnected={() => {
-          // Note: LiveKitRoom makes the room available through useRoom() hook inside
-          console.log('Connected to LiveKit room component');
-        }}
+        // @ts-ignore - LiveKit типы некорректно определяют параметры для onConnected
+        onConnected={handleRoomConnection}
       >
         <div className="flex flex-col h-screen">
           {/* Header section */}

@@ -16,7 +16,18 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
   
   // Отслеживаем состояние медиатреков
   useEffect(() => {
-    if (!localParticipant) return;
+    if (!localParticipant) {
+      console.log('No local participant available yet');
+      return;
+    }
+    
+    console.log('Local participant tracks:', 
+      localParticipant.getTrackPublications().map(track => ({
+        source: track.track?.source,
+        kind: track.track?.kind,
+        isMuted: track.isMuted
+      }))
+    );
     
     // Обновляем состояние при монтировании
     const micTrack = localParticipant.getTrackPublications().find(
@@ -28,6 +39,12 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
     const screenTrack = localParticipant.getTrackPublications().find(
       track => track.track?.source === Track.Source.ScreenShare
     );
+    
+    console.log('Media tracks state:', {
+      mic: micTrack ? { isMuted: micTrack.isMuted, track: !!micTrack.track } : 'none',
+      camera: camTrack ? { isMuted: camTrack.isMuted, track: !!camTrack.track } : 'none',
+      screen: screenTrack ? { isMuted: screenTrack.isMuted, track: !!screenTrack.track } : 'none'
+    });
     
     setIsMicrophoneMuted(micTrack ? micTrack.isMuted : true);
     setIsCameraMuted(camTrack ? camTrack.isMuted : true);
@@ -65,22 +82,42 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
   
   // Обработчики для управления аудио/видео
   const toggleMicrophone = async () => {
-    if (!localParticipant) return;
+    if (!localParticipant) {
+      console.error('No local participant available for microphone toggle');
+      return;
+    }
+    
+    console.log('Toggling microphone from', isMicrophoneMuted ? 'muted' : 'unmuted', 'to', !isMicrophoneMuted ? 'muted' : 'unmuted');
     
     try {
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneMuted);
+      const result = await localParticipant.setMicrophoneEnabled(!isMicrophoneMuted);
+      console.log('Toggle microphone result:', result);
     } catch (error) {
       console.error('Error toggling microphone:', error);
+      // Обработка ошибок разрешения доступа к микрофону
+      if (error instanceof Error && error.message.includes('Permission')) {
+        alert('Доступ к микрофону запрещен. Пожалуйста, разрешите доступ в настройках браузера.');
+      }
     }
   };
 
   const toggleCamera = async () => {
-    if (!localParticipant) return;
+    if (!localParticipant) {
+      console.error('No local participant available for camera toggle');
+      return;
+    }
+    
+    console.log('Toggling camera from', isCameraMuted ? 'muted' : 'unmuted', 'to', !isCameraMuted ? 'muted' : 'unmuted');
     
     try {
-      await localParticipant.setCameraEnabled(!isCameraMuted);
+      const result = await localParticipant.setCameraEnabled(!isCameraMuted);
+      console.log('Toggle camera result:', result);
     } catch (error) {
       console.error('Error toggling camera:', error);
+      // Обработка ошибок разрешения доступа к камере
+      if (error instanceof Error && error.message.includes('Permission')) {
+        alert('Доступ к камере запрещен. Пожалуйста, разрешите доступ в настройках браузера.');
+      }
     }
   };
 

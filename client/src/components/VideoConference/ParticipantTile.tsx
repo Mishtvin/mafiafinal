@@ -22,6 +22,16 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
     const updateStates = () => {
       const trackPubs = participant.getTrackPublications();
       
+      console.log(`Tracks for participant ${participant.identity}:`, 
+        trackPubs.map(pub => ({
+          sid: pub.trackSid,
+          source: pub.track?.source,
+          kind: pub.kind,
+          isMuted: pub.isMuted,
+          isSubscribed: pub.isSubscribed
+        }))
+      );
+      
       const micPub = trackPubs.find(pub => 
         pub.track?.source === Track.Source.Microphone
       );
@@ -31,6 +41,12 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       const screenPub = trackPubs.find(pub => 
         pub.track?.source === Track.Source.ScreenShare
       );
+      
+      console.log(`Media state for ${participant.identity}:`, {
+        microphone: micPub ? { isMuted: micPub.isMuted, isSubscribed: micPub.isSubscribed } : 'none',
+        camera: cameraPub ? { isMuted: cameraPub.isMuted, isSubscribed: cameraPub.isSubscribed } : 'none',
+        screen: screenPub ? { isMuted: screenPub.isMuted, isSubscribed: screenPub.isSubscribed } : 'none'
+      });
       
       setIsMuted(!micPub || micPub.isMuted);
       setIsCameraEnabled(!!cameraPub && !cameraPub.isMuted);

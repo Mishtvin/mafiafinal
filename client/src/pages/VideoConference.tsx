@@ -28,7 +28,7 @@ export default function VideoConference() {
   const roomRef = useRef<Room | null>(null);
 
   // LiveKit server URL
-  const serverUrl = 'wss://livekit.nyavkin.site/';
+  const serverUrl = 'wss://livekit.nyavkin.site';
 
   // Read URL hash for E2EE passphrase
   useEffect(() => {
@@ -62,6 +62,7 @@ export default function VideoConference() {
   }, [hasJoined, username, roomId]);
 
   const handleJoin = (name: string, audioEnabled: boolean, videoEnabled: boolean) => {
+    console.log('Joining conference with settings:', { name, audioEnabled, videoEnabled });
     setUsername(name);
     setInitialAudio(audioEnabled);
     setInitialVideo(videoEnabled);
@@ -107,14 +108,83 @@ export default function VideoConference() {
     console.log('Connected to LiveKit room:', {
       roomId: room.name,
       url: serverUrl,
-      participantCount: room.numParticipants + 1 // +1 for local participant
+      participantCount: room.numParticipants + 1, // +1 for local participant
+      connectionState: room.state
     });
     
-    // Enable audio and video based on initial settings
+    // Выводим дополнительную информацию для диагностики
     if (room.localParticipant) {
-      room.localParticipant.setMicrophoneEnabled(initialAudio);
-      room.localParticipant.setCameraEnabled(initialVideo);
+      console.log('Local participant details:', {
+        identity: room.localParticipant.identity,
+        sid: room.localParticipant.sid,
+        hasAudio: room.localParticipant.isMicrophoneEnabled,
+        hasVideo: room.localParticipant.isCameraEnabled,
+        publishedTracks: room.localParticipant.getTrackPublications().map(pub => ({
+          trackSid: pub.trackSid,
+          source: pub.track?.source,
+          kind: pub.kind,
+          isMuted: pub.isMuted
+        }))
+      });
+      
+      // Активируем устройства с явной обработкой ошибок
+      try {
+        console.log(`Enabling microphone: ${initialAudio}`);
+        room.localParticipant.setMicrophoneEnabled(initialAudio)
+          .then(track => {
+            console.log('Microphone track created:', track ? 'success' : 'no track returned');
+            if (track) {
+              console.log('Microphone track details:', {
+                trackSid: track.trackSid,
+                kind: track.kind,
+                isMuted: track.isMuted
+              });
+            }
+          })
+          .catch(err => console.error('Failed to enable microphone:', err));
+        
+        console.log(`Enabling camera: ${initialVideo}`);
+        room.localParticipant.setCameraEnabled(initialVideo)
+          .then(track => {
+            console.log('Camera track created:', track ? 'success' : 'no track returned');
+            if (track) {
+              console.log('Camera track details:', {
+                trackSid: track.trackSid,
+                kind: track.kind,
+                isMuted: track.isMuted
+              });
+            }
+          })
+          .catch(err => console.error('Failed to enable camera:', err));
+      } catch (error) {
+        console.error('Error enabling media devices:', error);
+      }
+    } else {
+      console.warn('No local participant available');
     }
+    
+    // Отслеживаем изменения состояния участника
+    room.localParticipant.on('trackPublished', (pub) => {
+      console.log('Local track published:', {
+        trackSid: pub.trackSid,
+        source: pub.track?.source,
+        kind: pub.kind
+      });
+    });
+    
+    room.localParticipant.on('trackMuted', (pub) => {
+      console.log('Local track muted:', {
+        trackSid: pub.trackSid,
+        source: pub.track?.source
+      });
+    });
+    
+    room.localParticipant.on('trackUnmuted', (pub) => {
+      console.log('Local track unmuted:', {
+        trackSid: pub.trackSid,
+        source: pub.track?.source
+      });
+    });
     
     // Set up listeners for connection state changes
     room.on('disconnected', () => {
@@ -128,6 +198,11 @@ export default function VideoConference() {
     room.on('reconnected', () => {
       console.log('Reconnected to LiveKit room');
       setConnectionState('connected');
+    });
+    
+    // Отслеживаем ошибки комнаты
+    room.on('mediaDevicesError', (e: Error) => {
+      console.error('Media devices error:', e);
     });
   };
   
@@ -166,9 +241,8 @@ export default function VideoConference() {
           onError={handleError}
           options={roomOptions}
           data-lk-theme="default"
-          onConnected={() => {
-            console.log('Connected to LiveKit room component');
-          }}
+          // @ts-ignore - LiveKit типы некорректно определяют параметры для onConnected
+          onConnected={handleRoomConnection}
         >
           <div className="flex flex-col h-screen">
             {/* Header section */}
