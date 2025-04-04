@@ -37,7 +37,7 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       // Найдем аудио, видео и треки для демонстрации экрана
       // Для микрофона ищем по типу и source
       const micPub = trackPubs.find(pub => 
-        pub.kind === 'audio' && pub.isSubscribed
+        pub.kind === 'audio' && (isLocal || pub.isSubscribed)
       );
       
       // Для видео ищем по типу и source. Делаем этот поиск более либеральным,
@@ -45,13 +45,13 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       const cameraPub = trackPubs.find(pub => 
         pub.kind === 'video' && 
         pub.track?.source !== Track.Source.ScreenShare && 
-        pub.isSubscribed
+        (isLocal || pub.isSubscribed)
       );
       
       // Для демонстрации экрана ищем по source
       const screenPub = trackPubs.find(pub => 
         pub.track?.source === Track.Source.ScreenShare && 
-        pub.isSubscribed
+        (isLocal || pub.isSubscribed)
       );
       
       // Логируем состояние медиа треков для отладки
@@ -88,22 +88,55 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
             element.srcObject = null;
           }
           
-          // Подключаем трек к элементу напрямую
-          console.log(`Attaching ${pub.kind} track to ${participant.identity}`);
-          
-          // Создаем новый MediaStream и добавляем трек в него
-          const newStream = new MediaStream();
-          
-          // Используем MediaStreamTrack из существующего трека, если он есть
-          if (track.mediaStreamTrack) {
-            newStream.addTrack(track.mediaStreamTrack);
-            element.srcObject = newStream;
+          // Для локального участника используем особый подход
+          if (isLocal) {
+            try {
+              console.log(`Attaching local ${pub.kind} track to ${participant.identity} (special handling)`);
+              
+              // У локального участника всегда есть mediaStreamTrack
+              if (track.mediaStreamTrack) {
+                const newStream = new MediaStream();
+                
+                // Добавляем трек напрямую
+                newStream.addTrack(track.mediaStreamTrack);
+                
+                // Устанавливаем этот стрим как источник видео
+                element.srcObject = newStream;
+                
+                // Отзеркаливаем видео для локального участника
+                element.style.transform = 'scaleX(-1)';
+                
+                console.log('Attached local video track using MediaStream API');
+              } else {
+                // Запасной вариант через LiveKit API
+                track.attach(element);
+                element.style.transform = 'scaleX(-1)';
+                console.log('Attached local video using LiveKit attach()');
+              }
+            } catch (localErr) {
+              console.error('Error attaching local video track:', localErr);
+              // Пробуем запасной вариант
+              track.attach(element);
+            }
           } else {
-            // Иначе используем стандартный метод attach от LiveKit
-            track.attach(element);
+            // Для удаленных участников
+            console.log(`Attaching remote ${pub.kind} track to ${participant.identity}`);
+            
+            // Создаем новый MediaStream и добавляем трек в него
+            const newStream = new MediaStream();
+            
+            // Используем MediaStreamTrack из существующего трека, если он есть
+            if (track.mediaStreamTrack) {
+              newStream.addTrack(track.mediaStreamTrack);
+              element.srcObject = newStream;
+            } else {
+              // Иначе используем стандартный метод attach от LiveKit
+              track.attach(element);
+            }
           }
           
-          // Включаем воспроизведение с обработкой ошибок
+          // Для всех видео: включаем воспроизведение с обработкой ошибок
+          element.muted = isLocal; // Заглушаем собственное видео, чтобы избежать эхо
           element.play().catch((err: Error) => {
             console.error(`Error playing video for ${participant.identity}:`, err);
             
