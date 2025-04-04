@@ -107,7 +107,7 @@ export default function VideoConference() {
   };
 
   // Handle room events
-  const handleRoomConnection = (room: Room) => {
+  const handleRoomConnection = async (room: Room) => {
     if (!room) {
       console.error('Room object is undefined in handleRoomConnection');
       return;
@@ -141,32 +141,52 @@ export default function VideoConference() {
       // Активируем устройства с явной обработкой ошибок
       try {
         console.log(`Enabling microphone: ${initialAudio}`);
-        room.localParticipant.setMicrophoneEnabled(initialAudio)
-          .then(track => {
-            console.log('Microphone track created:', track ? 'success' : 'no track returned');
-            if (track) {
-              console.log('Microphone track details:', {
-                trackSid: track.trackSid,
-                kind: track.kind,
-                isMuted: track.isMuted
-              });
-            }
-          })
-          .catch(err => console.error('Failed to enable microphone:', err));
+        
+        // Запрашиваем доступ к микрофону перед подключением
+        if (initialAudio) {
+          try {
+            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Останавливаем стрим, чтобы не блокировать доступ к устройству
+            audioStream.getTracks().forEach(track => track.stop());
+          } catch (err) {
+            console.warn('Failed to get microphone access before enabling:', err);
+          }
+        }
+        
+        // Включаем микрофон в LiveKit
+        const micTrack = await room.localParticipant.setMicrophoneEnabled(initialAudio);
+        console.log('Microphone track created:', micTrack ? 'success' : 'no track returned');
+        if (micTrack) {
+          console.log('Microphone track details:', {
+            trackSid: micTrack.trackSid,
+            kind: micTrack.kind,
+            isMuted: micTrack.isMuted
+          });
+        }
         
         console.log(`Enabling camera: ${initialVideo}`);
-        room.localParticipant.setCameraEnabled(initialVideo)
-          .then(track => {
-            console.log('Camera track created:', track ? 'success' : 'no track returned');
-            if (track) {
-              console.log('Camera track details:', {
-                trackSid: track.trackSid,
-                kind: track.kind,
-                isMuted: track.isMuted
-              });
-            }
-          })
-          .catch(err => console.error('Failed to enable camera:', err));
+        
+        // Запрашиваем доступ к камере перед подключением
+        if (initialVideo) {
+          try {
+            const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // Останавливаем стрим, чтобы не блокировать доступ к устройству
+            videoStream.getTracks().forEach(track => track.stop());
+          } catch (err) {
+            console.warn('Failed to get camera access before enabling:', err);
+          }
+        }
+        
+        // Включаем камеру в LiveKit с параметрами
+        const camTrack = await room.localParticipant.setCameraEnabled(initialVideo);
+        console.log('Camera track created:', camTrack ? 'success' : 'no track returned');
+        if (camTrack) {
+          console.log('Camera track details:', {
+            trackSid: camTrack.trackSid,
+            kind: camTrack.kind,
+            isMuted: camTrack.isMuted
+          });
+        }
       } catch (error) {
         console.error('Error enabling media devices:', error);
       }

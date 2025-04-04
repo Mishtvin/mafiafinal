@@ -195,34 +195,49 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
       // Запрашиваем доступ к камере
       let mediaStream;
       try {
-        // Сначала явно запрашиваем доступ к камере
-        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        console.log('Successfully got camera access');
+        // Для включения и отключения камеры используем разные подходы
+        if (isCameraMuted) {
+          // Включаем камеру - сначала проверяем доступность устройства
+          mediaStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: 'user'
+            } 
+          });
+          console.log('Successfully got camera access, available tracks:', mediaStream.getVideoTracks().length);
+          
+          // Очищаем ресурсы проверочного стрима
+          mediaStream.getTracks().forEach(track => track.stop());
+          
+          // Включаем камеру в LiveKit с базовыми настройками
+          try {
+            const result = await localParticipant.setCameraEnabled(true);
+            console.log('Camera enable result:', result);
+            
+            if (!result) {
+              // Если не удалось получить трек, повторяем попытку с другими настройками
+              console.warn('Failed to enable camera with default settings, trying explicit settings');
+              
+              // Принудительно обновляем состояние, чтобы пользователь видел результат
+              setIsCameraMuted(false);
+            }
+          } catch (livekitError) {
+            console.error('LiveKit camera enable error:', livekitError);
+            alert(`Ошибка при активации камеры: ${livekitError.message || 'Неизвестная ошибка'}`);
+          }
+        } else {
+          // Выключаем камеру - просто отключаем в LiveKit
+          await localParticipant.setCameraEnabled(false);
+          console.log('Camera disabled');
+          
+          // Обновляем состояние
+          setIsCameraMuted(true);
+        }
       } catch (mediaError) {
         console.error('Failed to get camera access:', mediaError);
         alert('Не удалось получить доступ к камере. Пожалуйста, убедитесь, что камера подключена и разрешения предоставлены в настройках браузера.');
         return;
-      }
-      
-      // Теперь пытаемся включить камеру в LiveKit
-      const result = await localParticipant.setCameraEnabled(!isCameraMuted);
-      console.log('Toggle camera result:', result);
-      
-      if (!result) {
-        console.warn('No track returned when enabling camera, but no error was thrown');
-        // Принудительно обновляем состояние на основе нашего запроса
-        setTimeout(() => {
-          const camTrack = localParticipant.getTrackPublications().find(
-            track => track.track?.source === Track.Source.Camera
-          );
-          const newState = camTrack ? !camTrack.isMuted : false;
-          setIsCameraMuted(!newState);
-        }, 500);
-      }
-      
-      // Освобождаем ресурсы локального стрима
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
       }
     } catch (error) {
       console.error('Error toggling camera:', error);
