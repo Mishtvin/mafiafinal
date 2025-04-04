@@ -16,7 +16,7 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const isLocal = participant.isLocal;
   
-  // Дополнительное логирование для локального участника
+  // Дополнительное логирование и обработка для локального участника
   useEffect(() => {
     if (isLocal) {
       console.log('Local participant information:', {
@@ -33,9 +33,87 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           videoHeight: videoEl.videoHeight,
           paused: videoEl.paused
         });
+
+        // Дополнительный код для попытки активировать локальное видео
+        // Сразу применяем важные свойства
+        videoEl.muted = true;
+        videoEl.autoplay = true;
+        videoEl.playsInline = true;
+        videoEl.style.objectFit = 'cover';
+        videoEl.style.transform = 'scaleX(-1)'; // Зеркалим изображение
+        
+        // Получаем доступ к треку напрямую через участника, если его нет на элементе
+        if (!videoEl.srcObject) {
+          // Получаем все видеотреки участника
+          const tracks = participant.getTrackPublications()
+            .filter(pub => pub.kind === 'video' && 
+              pub.track?.source === Track.Source.Camera &&
+              !pub.isMuted);
+          
+          console.log(`Found ${tracks.length} local video tracks to try directly attaching`);
+          
+          // Если есть видеотрек, пробуем его подключить
+          if (tracks.length > 0 && tracks[0].track) {
+            try {
+              const track = tracks[0].track;
+              
+              // Пробуем с новым MediaStream
+              if (track.mediaStreamTrack) {
+                const newStream = new MediaStream([track.mediaStreamTrack]);
+                videoEl.srcObject = newStream;
+                console.log('Attached local mediaStreamTrack in a secondary attempt');
+              } 
+              // Пробуем стандартный метод подключения
+              else {
+                track.attach(videoEl);
+                console.log('Used track.attach() in a secondary attempt');
+              }
+              
+              // Запускаем воспроизведение с периодическими повторами
+              const playAttemptInterval = setInterval(() => {
+                if (videoEl && videoEl.paused) {
+                  videoEl.play().catch(err => {
+                    console.warn('Play attempt in secondary effect failed:', err);
+                  });
+                } else {
+                  clearInterval(playAttemptInterval);
+                }
+              }, 500);
+              
+              // Очищаем интервал через 5 секунд в любом случае
+              setTimeout(() => clearInterval(playAttemptInterval), 5000);
+            } catch (error) {
+              console.error('Error in secondary local video attachment attempt:', error);
+            }
+          }
+        }
       }
+      
+      // Регулярно проверяем, что видео действительно воспроизводится
+      const videoCheckInterval = setInterval(() => {
+        if (videoEl && isCameraEnabled) {
+          console.log('Периодическая проверка состояния локального видео:', {
+            hasVideoElement: !!videoEl,
+            hasSrcObject: !!(videoEl.srcObject),
+            isPlaying: !videoEl.paused,
+            tracks: videoEl.srcObject ? (videoEl.srcObject as MediaStream).getTracks().length : 0,
+            videoTrackEnabled: videoEl.srcObject ? 
+              (videoEl.srcObject as MediaStream).getVideoTracks().some(t => t.enabled) : false
+          });
+          
+          // Если видео остановлено, но должно воспроизводиться (трек активен)
+          if (videoEl.paused && videoEl.srcObject) {
+            console.log('Обнаружена остановка локального видео, пробуем перезапустить');
+            videoEl.play().catch(err => console.warn('Не удалось перезапустить видео:', err));
+          }
+        }
+      }, 3000);
+      
+      return () => {
+        clearInterval(videoCheckInterval);
+      };
     }
-  }, [isLocal, participant, videoEl]);
+  }, [isLocal, participant, videoEl, isCameraEnabled]);
   
   // Отслеживаем состояние медиатреков участника
   useEffect(() => {
@@ -130,7 +208,22 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           if (isLocal) {
             // Первая стратегия - прямое подключение через MediaStreamTrack
             try {
-              console.log(`Attaching local track to ${participant.identity} (direct method)`);
+              console.log(`Attaching local track to ${participant.identity} (direct method)`, {
+                trackDetails: {
+                  mediaStreamTrack: !!track.mediaStreamTrack,
+                  source: track.source,
+                  sid: track.sid
+                }
+              });
+              
+              // Очищаем предыдущие стили
+              element.style.width = '100%';
+              element.style.height = '100%';
+              element.style.objectFit = 'cover';
+              element.style.transform = 'scaleX(-1)'; // Зеркальное отображение
+              element.muted = true; // Заглушаем, чтобы избежать эхо
+              element.autoplay = true;
+              element.playsInline = true;
               
               if (track.mediaStreamTrack) {
                 // Создаем новый поток для видео
@@ -139,46 +232,186 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
                 // Добавляем видеодорожку в новый поток
                 newStream.addTrack(track.mediaStreamTrack);
                 
-                // Очищаем предыдущие стили
-                element.style.width = '100%';
-                element.style.height = '100%';
-                element.style.objectFit = 'cover';
-                element.style.transform = 'scaleX(-1)'; // Зеркальное отображение
+                console.log('Created new MediaStream with local track');
                 
                 // Устанавливаем стрим напрямую
                 element.srcObject = newStream;
-                element.muted = true; // Заглушаем, чтобы избежать эхо
                 
-                // Принудительно запускаем воспроизведение
-                setTimeout(() => {
+                // Принудительно запускаем воспроизведение в цикле
+                const tryPlayInterval = setInterval(() => {
                   if (element.paused) {
+                    console.log('Local video is paused, trying to play...');
                     element.play().catch(err => {
-                      console.warn('Local video autoplay failed: ', err);
-                      element.muted = true;
-                      element.play().catch(e => console.error('Second play attempt failed: ', e));
+                      console.warn('Local video autoplay attempt failed: ', err);
+                      
+                      // Проверяем, есть ли видеодорожка в srcObject
+                      const stream = element.srcObject as MediaStream;
+                      if (stream && stream.getVideoTracks().length > 0) {
+                        console.log('MediaStream имеет видеодорожки:', stream.getVideoTracks().length);
+                        // Пробуем переподключить поток
+                        const videoTracks = stream.getVideoTracks();
+                        if (videoTracks.length > 0) {
+                          const newStream = new MediaStream([videoTracks[0]]);
+                          element.srcObject = newStream;
+                          element.muted = true;
+                          element.play().catch(e => console.error('Переподключение не помогло:', e));
+                        }
+                      } else {
+                        console.log('MediaStream не имеет видеодорожек или отсутствует');
+                      }
                     });
+                  } else {
+                    console.log('Local video is playing!');
+                    clearInterval(tryPlayInterval);
                   }
-                }, 50);
+                }, 500);
                 
-                console.log('Successfully attached local video track using direct method');
+                // Очистка интервала через 10 секунд - даем больше времени
+                setTimeout(() => clearInterval(tryPlayInterval), 10000);
+                
+                console.log('Successfully attached local video track using direct MediaStream method');
                 return true;
               }
               
-              // Вторая стратегия - использование LiveKit API
-              track.attach(element);
-              element.style.transform = 'scaleX(-1)';
-              element.muted = true;
+              // Вторая стратегия - использование встроенного медиапотока трека, если он доступен
+              if (track.mediaStream) {
+                console.log('Using track\'s mediaStream directly');
+                element.srcObject = track.mediaStream;
+                
+                // Принудительно запускаем воспроизведение
+                element.play().catch(err => {
+                  console.warn('Local video autoplay failed: ', err);
+                  
+                  // Устанавливаем muted, что часто помогает обойти ограничения автовоспроизведения
+                  element.muted = true;
+                  
+                  // Вторая попытка
+                  element.play().catch(e => {
+                    console.error('Second play attempt failed: ', e);
+                    
+                    // Третья попытка с полным переподключением потока
+                    const stream = element.srcObject as MediaStream;
+                    if (stream && stream.getVideoTracks().length > 0) {
+                      console.log('Пробуем переподключить MediaStream с видеодорожками');
+                      const videoTracks = stream.getVideoTracks();
+                      if (videoTracks.length > 0) {
+                        const newStream = new MediaStream([videoTracks[0]]);
+                        element.srcObject = newStream;
+                        element.play().catch(finalErr => console.error('Все попытки воспроизведения не удались:', finalErr));
+                      }
+                    }
+                  });
+                });
+                
+                console.log('Successfully attached local video using track\'s mediaStream');
+                return true;
+              }
               
-              console.log('Successfully attached local video track using LiveKit API');
-              return true;
+              // Третья стратегия - использование LiveKit API
+              console.log('Falling back to LiveKit track.attach() method');
+              
+              try {
+                // Предварительно настраиваем видеоэлемент для оптимальной работы
+                element.muted = true;
+                element.autoplay = true;
+                element.playsInline = true;
+                element.style.transform = 'scaleX(-1)';
+                
+                // Очищаем предыдущие подключения
+                if (element.srcObject) {
+                  const stream = element.srcObject as MediaStream;
+                  if (stream.getTracks) {
+                    stream.getTracks().forEach(t => t.stop());
+                  }
+                  element.srcObject = null;
+                }
+                
+                // Используем LiveKit API для подключения
+                track.attach(element);
+                
+                // Добавляем проверку и повторные попытки воспроизведения
+                const checkInterval = setInterval(() => {
+                  if (element.paused) {
+                    console.log('Видео от LiveKit API остановлено, пробуем запустить');
+                    element.play().catch(err => console.warn('Ошибка воспроизведения LiveKit видео:', err));
+                  } else {
+                    console.log('Видео от LiveKit API воспроизводится');
+                    clearInterval(checkInterval);
+                  }
+                }, 500);
+                
+                // Очистка интервала через 10 секунд
+                setTimeout(() => clearInterval(checkInterval), 10000);
+                
+                console.log('Successfully attached local video track using LiveKit API');
+                return true;
+              } catch (error) {
+                console.error('Ошибка при использовании LiveKit API:', error);
+                // Продолжаем к следующей стратегии
+                throw error;
+              }
             } catch (localErr) {
               console.error('❌ All local video attachment strategies failed:', localErr);
               
               // Последняя попытка - предоставим LiveKit полностью управлять этим
               try {
-                track.attach(element);
+                console.log('Выполняем последнюю аварийную попытку подключения видео');
+                
+                // Очищаем предыдущие подключения
+                if (element.srcObject) {
+                  const stream = element.srcObject as MediaStream;
+                  if (stream.getTracks) {
+                    stream.getTracks().forEach(t => t.stop());
+                  }
+                  element.srcObject = null;
+                }
+                
+                // Принудительно применяем базовые стили и настройки
                 element.muted = true;
+                element.autoplay = true;
+                element.playsInline = true;
                 element.style.transform = 'scaleX(-1)';
+                
+                // Получаем все треки участника снова и пробуем подключить первый подходящий
+                const allTracks = participant.getTrackPublications();
+                const videoTracks = allTracks.filter(pub => 
+                  pub.kind === 'video' && 
+                  pub.track?.source !== Track.Source.ScreenShare
+                );
+                
+                console.log(`Найдено ${videoTracks.length} видеотреков для аварийного подключения`);
+                
+                if (videoTracks.length > 0 && videoTracks[0].track) {
+                  const videoTrack = videoTracks[0].track;
+                  
+                  // Последняя попытка - прямое подключение трека
+                  if (videoTrack.mediaStreamTrack) {
+                    try {
+                      const emergencyStream = new MediaStream([videoTrack.mediaStreamTrack]);
+                      element.srcObject = emergencyStream;
+                      
+                      console.log('Прямое аварийное подключение MediaStreamTrack');
+                      element.play().catch(err => console.warn('Ошибка воспроизведения в аварийном режиме:', err));
+                      
+                      // Проверка через 1 секунду
+                      setTimeout(() => {
+                        if (element.paused) {
+                          console.log('Аварийное видео не воспроизводится, последняя попытка с LiveKit API');
+                          track.attach(element);
+                        }
+                      }, 1000);
+                      
+                      return true;
+                    } catch (emergencyErr) {
+                      console.error('Ошибка аварийного подключения трека:', emergencyErr);
+                    }
+                  }
+                }
+                
+                // Если ничего другого не сработало, используем LiveKit API
+                track.attach(element);
+                element.play().catch(err => console.warn('Ошибка воспроизведения через LiveKit API:', err));
+                
                 console.log('Last resort: attached local video via LiveKit');
                 return true;
               } catch (finalErr) {
