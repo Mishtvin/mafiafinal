@@ -222,9 +222,10 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
               // Принудительно обновляем состояние, чтобы пользователь видел результат
               setIsCameraMuted(false);
             }
-          } catch (livekitError) {
-            console.error('LiveKit camera enable error:', livekitError);
-            alert(`Ошибка при активации камеры: ${livekitError.message || 'Неизвестная ошибка'}`);
+          } catch (error) {
+            console.error('LiveKit camera enable error:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+            alert(`Ошибка при активации камеры: ${errorMessage}`);
           }
         } else {
           // Выключаем камеру - просто отключаем в LiveKit

@@ -35,21 +35,23 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       );
       
       // Найдем аудио, видео и треки для демонстрации экрана
-      // Используем более надежный способ определения типа трека
+      // Для микрофона ищем по типу и source
       const micPub = trackPubs.find(pub => 
-        (pub.track?.source === Track.Source.Microphone || pub.kind === 'audio') && pub.isSubscribed
+        pub.kind === 'audio' && pub.isSubscribed
       );
       
-      // Для видео важно проверить как source, так и kind
+      // Для видео ищем по типу и source. Делаем этот поиск более либеральным,
+      // чтобы захватить все видеотреки
       const cameraPub = trackPubs.find(pub => 
-        (pub.track?.source === Track.Source.Camera || 
-          (pub.kind === 'video' && pub.track?.source !== Track.Source.ScreenShare)) && 
+        pub.kind === 'video' && 
+        pub.track?.source !== Track.Source.ScreenShare && 
         pub.isSubscribed
       );
       
-      // Для демонстрации экрана только проверяем source
+      // Для демонстрации экрана ищем по source
       const screenPub = trackPubs.find(pub => 
-        pub.track?.source === Track.Source.ScreenShare && pub.isSubscribed
+        pub.track?.source === Track.Source.ScreenShare && 
+        pub.isSubscribed
       );
       
       // Логируем состояние медиа треков для отладки
@@ -61,8 +63,8 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       
       // Обновляем состояние UI на основе треков
       setIsMuted(!micPub || micPub.isMuted);
-      setIsCameraEnabled(!!cameraPub && !cameraPub.isMuted && cameraPub.isSubscribed);
-      setIsScreenSharing(!!screenPub && !screenPub.isMuted && screenPub.isSubscribed);
+      setIsCameraEnabled(!!cameraPub && !cameraPub.isMuted);
+      setIsScreenSharing(!!screenPub && !screenPub.isMuted);
       
       // Функция для безопасного подключения видеотрека
       const safeAttachVideoTrack = (pub: any, element: HTMLVideoElement) => {
@@ -71,9 +73,9 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           
           const track = pub.track;
           
-          // Проверяем, что трек не отключен и имеет правильный тип
-          if (pub.isMuted || (track.kind !== 'video')) {
-            console.log(`Skipping attachment for ${participant.identity}, track is muted or not video`);
+          // Проверяем, что трек имеет правильный тип и не отключен
+          if (track.kind !== 'video') {
+            console.log(`Skipping attachment for ${participant.identity}, track is not video`);
             return false;
           }
           
@@ -86,67 +88,71 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
             element.srcObject = null;
           }
           
-          // Подключаем трек к элементу
+          // Подключаем трек к элементу напрямую
           console.log(`Attaching ${pub.kind} track to ${participant.identity}`);
-          track.attach(element);
           
-          // Включаем воспроизведение
+          // Создаем новый MediaStream и добавляем трек в него
+          const newStream = new MediaStream();
+          
+          // Используем MediaStreamTrack из существующего трека, если он есть
+          if (track.mediaStreamTrack) {
+            newStream.addTrack(track.mediaStreamTrack);
+            element.srcObject = newStream;
+          } else {
+            // Иначе используем стандартный метод attach от LiveKit
+            track.attach(element);
+          }
+          
+          // Включаем воспроизведение с обработкой ошибок
           element.play().catch((err: Error) => {
             console.error(`Error playing video for ${participant.identity}:`, err);
+            
+            // Если есть ошибка типа "play() failed because the user didn't interact with the document first"
+            // попробуем включить видео без звука (autoplay restriction)
+            element.muted = true;
+            element.play().catch(secondErr => {
+              console.error(`Second attempt to play video failed:`, secondErr);
+            });
           });
           
           return true;
         } catch (error) {
-          console.error(`Error attaching ${pub.kind || 'unknown'} track for ${participant.identity}:`, error);
+          console.error(`Error attaching ${pub?.kind || 'unknown'} track for ${participant.identity}:`, error);
           return false;
         }
       };
       
-      // Обновление видео элементов с безопасным приведением типов
+      // Обновление видео элементов с улучшенной обработкой
       if (cameraPub?.track && videoEl) {
         try {
-          // Сначала останавливаем существующий видеопоток, если он есть
-          if (videoEl.srcObject) {
-            const stream = videoEl.srcObject as MediaStream;
-            stream.getTracks().forEach(track => track.stop());
-            videoEl.srcObject = null;
-          }
-          
-          // Затем подключаем новый
-          if (cameraPub.track && cameraPub.track.attach) {
-            console.log(`Attaching camera track to ${participant.identity}`);
-            cameraPub.track.attach(videoEl);
-            videoEl.play().catch(err => console.error('Error playing video:', err));
-          }
+          // Принудительно используем нашу безопасную функцию подключения
+          safeAttachVideoTrack(cameraPub, videoEl);
         } catch (error) {
           console.error(`Error attaching camera track:`, error);
         }
       }
       
-      // Аналогично для экрана
+      // Аналогично для экрана, но с отдельной обработкой
       if (screenPub?.track && screenEl) {
         try {
-          if (screenEl.srcObject) {
-            const stream = screenEl.srcObject as MediaStream;
-            stream.getTracks().forEach(track => track.stop());
-            screenEl.srcObject = null;
-          }
-          
-          if (screenPub.track && screenPub.track.attach) {
-            console.log(`Attaching screenshare track to ${participant.identity}`);
-            screenPub.track.attach(screenEl);
-            screenEl.play().catch(err => console.error('Error playing screenshare:', err));
-          }
+          safeAttachVideoTrack(screenPub, screenEl);
         } catch (error) {
           console.error(`Error attaching screenshare track:`, error);
         }
       }
       
       // Обновление аудио элемента
-      if (micPub?.track && audioEl && !micPub.isMuted) {
+      if (micPub?.track && audioEl) {
         try {
           const track = micPub.track;
           if (track.kind === 'audio') {
+            // Сначала отключаем предыдущий трек
+            if (audioEl.srcObject) {
+              const stream = audioEl.srcObject as MediaStream;
+              stream.getTracks().forEach(t => t.stop());
+              audioEl.srcObject = null;
+            }
+            
             console.log(`Attaching audio track to ${participant.identity}`);
             track.attach(audioEl);
           }
