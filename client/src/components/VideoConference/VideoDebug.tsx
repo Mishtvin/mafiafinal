@@ -3,173 +3,344 @@ import { Room, LocalParticipant, Participant, Track, ConnectionState } from 'liv
 import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
 
 /**
- * Компонент VideoDebug помогает отлаживать проблемы с видео
- * Он отображает дополнительный миниатюрный предпросмотр локального видео 
- * для подтверждения, что камера работает правильно
+ * Улучшенный компонент VideoDebug помогает отлаживать проблемы с видео и микрофоном
+ * Отображает диагностическую информацию и миниатюрный предпросмотр локального видео
+ * для подтверждения, что камера и микрофон работают правильно
  */
 export default function VideoDebug() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   
-  // Состояние для отслеживания дополнительной отладочной информации
+  // Расширенное состояние для отслеживания дополнительной отладочной информации
   const [debugState, setDebugState] = useState<{
     videoPlaying: boolean;
     videoDimensions: string;
     mediaStream: boolean;
     lastAttachTime: string;
     trackType: string;
+    videoTracks: number;
+    audioTracks: number;
+    roomStatus: string;
+    trackIds: string[];
+    browserSupport: {
+      webrtc: boolean;
+      h264: boolean;
+      vp8: boolean;
+      getUserMedia: boolean;
+    }
   }>({
     videoPlaying: false,
     videoDimensions: 'Нет данных',
     mediaStream: false,
     lastAttachTime: 'Никогда',
-    trackType: 'Неизвестно'
+    trackType: 'Неизвестно',
+    videoTracks: 0,
+    audioTracks: 0,
+    roomStatus: 'Неизвестно',
+    trackIds: [],
+    browserSupport: {
+      webrtc: false,
+      h264: false,
+      vp8: false,
+      getUserMedia: false
+    }
   });
   
-  // Функция для получения и отображения информации о видеоэлементе
-  const updateVideoElementInfo = () => {
-    if (!videoRef.current) return;
+  // Проверка поддержки браузером необходимых функций
+  useEffect(() => {
+    // Проверяем поддержку WebRTC
+    const hasWebRTC = !!window.RTCPeerConnection;
     
-    const video = videoRef.current;
-    const now = new Date().toLocaleTimeString();
+    // Проверяем поддержку getUserMedia
+    const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    
+    // Проверка поддержки кодеков (очень упрощенно)
+    let hasH264 = false;
+    let hasVP8 = false;
+    
+    // Более точная проверка кодеков
+    if (hasWebRTC && window.RTCRtpSender && RTCRtpSender.getCapabilities) {
+      try {
+        const capabilities = RTCRtpSender.getCapabilities('video');
+        if (capabilities && capabilities.codecs) {
+          hasH264 = capabilities.codecs.some(codec => 
+            codec.mimeType.toLowerCase().includes('h264'));
+          hasVP8 = capabilities.codecs.some(codec => 
+            codec.mimeType.toLowerCase().includes('vp8'));
+        }
+      } catch (e) {
+        console.log('Debug: Error checking codec support:', e);
+      }
+    }
     
     setDebugState(prev => ({
       ...prev,
-      videoPlaying: !video.paused,
-      videoDimensions: `${video.videoWidth}x${video.videoHeight}`,
-      mediaStream: !!video.srcObject,
-      lastAttachTime: now
+      browserSupport: {
+        webrtc: hasWebRTC,
+        h264: hasH264,
+        vp8: hasVP8,
+        getUserMedia: hasGetUserMedia
+      }
+    }));
+  }, []);
+  
+  // Функция для получения и отображения информации о видеоэлементе и треках
+  const updateDebugInfo = () => {
+    if (!localParticipant) return;
+    
+    // Обновляем информацию о видеоэлементе
+    const video = videoRef.current;
+    const now = new Date().toLocaleTimeString();
+    
+    // Получаем количество доступных треков
+    const allTracks = localParticipant.getTrackPublications();
+    const videoTracks = allTracks.filter(pub => pub.kind === 'video').length;
+    const audioTracks = allTracks.filter(pub => pub.kind === 'audio').length;
+    
+    // Получаем список ID треков
+    const trackIds = allTracks.map(pub => pub.trackSid);
+    
+    // Определяем статус комнаты
+    let roomStatus = 'Не подключено';
+    if (room) {
+      roomStatus = `${room.name} (${ConnectionState[room.state]})`;
+      
+      // Дополнительная информация о комнате для отладки
+      console.log('Debug Room Status:', {
+        name: room.name,
+        state: ConnectionState[room.state],
+        numParticipants: room.numParticipants,
+        sidMetadata: room.sidMetadata,
+      });
+    }
+    
+    // Обновляем состояние для отображения в UI
+    setDebugState(prev => ({
+      ...prev,
+      videoPlaying: video ? !video.paused : false,
+      videoDimensions: video ? `${video.videoWidth}x${video.videoHeight}` : 'Нет видео',
+      mediaStream: video ? !!video.srcObject : false,
+      lastAttachTime: now,
+      videoTracks,
+      audioTracks,
+      roomStatus,
+      trackIds
     }));
   };
   
-  useEffect(() => {
-    const attachLocalVideo = async () => {
-      if (!localParticipant || !videoRef.current) return;
+  // Улучшенная функция для подключения локального видео с расширенной диагностикой
+  const attachLocalVideo = async () => {
+    if (!localParticipant || !videoRef.current) {
+      console.log('Debug: Missing localParticipant or videoRef');
+      return;
+    }
+    
+    try {
+      // Обновляем диагностическую информацию
+      updateDebugInfo();
       
-      try {
-        // Получаем все видеотреки локального участника
-        const videoPublications = localParticipant.getTrackPublications()
-          .filter(pub => pub.kind === 'video' && 
-                  pub.track?.source === Track.Source.Camera);
-        
-        if (videoPublications.length === 0) {
-          console.log('Debug: No local video tracks found');
-          return;
-        }
-        
-        // Берем первый трек камеры
-        const videoPublication = videoPublications[0];
-        if (!videoPublication.track) {
-          console.log('Debug: Local video publication found but track is null');
-          return;
-        }
-        
-        const videoTrack = videoPublication.track;
-        console.log('Debug: Found local video track', videoTrack.sid);
-        
-        // Прикрепляем видеотрек к элементу видео
-        console.log('Debug: Attaching local video track to debug view');
-        
-        // Для отладки проверяем свойства видеотрека
-        const trackElement = videoRef.current;
-        if (trackElement) {
-          // Очищаем предыдущие треки
-          if (trackElement.srcObject) {
-            const stream = trackElement.srcObject as MediaStream;
-            if (stream.getTracks) {
-              stream.getTracks().forEach(t => t.stop());
-            }
-            trackElement.srcObject = null;
-          }
-          
-          trackElement.muted = true;
-          trackElement.autoplay = true;
-          trackElement.playsInline = true;
-          
-          let attachMethod = 'none';
-          
-          // В зависимости от конкретной реализации LiveKit может потребоваться 
-          // разный способ прикрепления медиапотока к видеоэлементу
-          if (videoTrack.mediaStreamTrack) {
-            // Предпочитаем напрямую использовать медиастрим трек
-            const stream = new MediaStream([videoTrack.mediaStreamTrack]);
-            trackElement.srcObject = stream;
-            attachMethod = 'mediaStreamTrack';
-          } else if (videoTrack.mediaStream) {
-            // Если у трека есть mediaStream, используем его напрямую
-            trackElement.srcObject = videoTrack.mediaStream;
-            attachMethod = 'mediaStream';
-          } else {
-            // Последний вариант - использовать LiveKit API
-            videoTrack.attach(trackElement);
-            attachMethod = 'livekit-attach';
-          }
-          
-          // Обновляем состояние для отладки
-          setDebugState(prev => ({
-            ...prev,
-            trackType: attachMethod,
-            lastAttachTime: new Date().toLocaleTimeString()
-          }));
-          
-          // Активно пытаемся воспроизвести видео
-          trackElement.play().catch(error => {
-            console.log('Debug: Error playing video', error);
-            
-            // Вторая попытка через 500мс
-            setTimeout(() => {
-              trackElement.play().catch(e => console.log('Debug: Second play attempt failed', e));
-            }, 500);
-          });
-          
-          // Периодически обновляем состояние видео
-          const checkInterval = setInterval(() => {
-            updateVideoElementInfo();
-            
-            // Если видео остановлено, попробуем запустить его снова
-            if (trackElement.paused) {
-              trackElement.play().catch(e => {
-                console.log('Debug: Periodic play attempt failed', e);
-              });
-            }
-          }, 1000);
-          
-          // Очистка через 20 секунд
-          setTimeout(() => clearInterval(checkInterval), 20000);
-          
-          // Обновляем сразу после попытки воспроизведения
-          updateVideoElementInfo();
-        }
-      } catch (error) {
-        console.error('Debug: Error attaching local video', error);
+      // Получаем все видеотреки локального участника
+      const videoPublications = localParticipant.getTrackPublications()
+        .filter(pub => pub.kind === 'video' && 
+                pub.track?.source === Track.Source.Camera);
+      
+      if (videoPublications.length === 0) {
+        console.log('Debug: No local video tracks found');
+        return;
       }
-    };
+      
+      // Находим активный (не заглушенный) видеотрек или берем первый доступный
+      const activeVideoPublication = videoPublications.find(pub => !pub.isMuted) || videoPublications[0];
+      
+      if (!activeVideoPublication.track) {
+        console.log('Debug: Video publication found but track is null, publication state:', {
+          trackSid: activeVideoPublication.trackSid,
+          isMuted: activeVideoPublication.isMuted,
+          isSubscribed: activeVideoPublication.isSubscribed,
+        });
+        return;
+      }
+      
+      const videoTrack = activeVideoPublication.track;
+      console.log('Debug: Found local video track', videoTrack.sid, 'muted:', activeVideoPublication.isMuted);
+      
+      // Прикрепляем видеотрек к элементу видео
+      console.log('Debug: Attaching local video track to debug view');
+      
+      // Подробная диагностика трека
+      console.log('Debug video track details:', {
+        sid: videoTrack.sid,
+        kind: videoTrack.kind,
+        muted: videoTrack.isMuted,
+        source: videoTrack.source,
+        mediaStreamTrack: !!videoTrack.mediaStreamTrack,
+        mediaStream: !!videoTrack.mediaStream,
+        attachedElements: videoTrack.attachedElements?.length || 0
+      });
+      
+      const trackElement = videoRef.current;
+      
+      // Очищаем предыдущие треки
+      if (trackElement.srcObject) {
+        const stream = trackElement.srcObject as MediaStream;
+        if (stream.getTracks) {
+          stream.getTracks().forEach(t => {
+            t.stop();
+            console.log('Debug: Stopped existing track', t.id, t.kind);
+          });
+        }
+        trackElement.srcObject = null;
+      }
+      
+      // Настраиваем видеоэлемент
+      trackElement.muted = true;
+      trackElement.autoplay = true;
+      trackElement.playsInline = true;
+      
+      let attachMethod = 'none';
+      
+      // Пробуем разные методы подключения в порядке предпочтения
+      if (videoTrack.mediaStreamTrack) {
+        // 1. Напрямую используем mediaStreamTrack
+        try {
+          const stream = new MediaStream([videoTrack.mediaStreamTrack]);
+          trackElement.srcObject = stream;
+          attachMethod = 'mediaStreamTrack';
+          console.log('Debug: Using mediaStreamTrack method', videoTrack.mediaStreamTrack.id);
+        } catch (err) {
+          console.log('Debug: mediaStreamTrack method failed', err);
+        }
+      }
+      
+      // Если первый метод не сработал, пробуем второй
+      if (!trackElement.srcObject && videoTrack.mediaStream) {
+        // 2. Используем mediaStream напрямую
+        try {
+          trackElement.srcObject = videoTrack.mediaStream;
+          attachMethod = 'mediaStream';
+          console.log('Debug: Using mediaStream method');
+        } catch (err) {
+          console.log('Debug: mediaStream method failed', err);
+        }
+      }
+      
+      // Если предыдущие методы не сработали, используем LiveKit API
+      if (!trackElement.srcObject) {
+        // 3. Используем встроенный метод LiveKit
+        try {
+          videoTrack.attach(trackElement);
+          attachMethod = 'livekit-attach';
+          console.log('Debug: Using LiveKit attach method');
+        } catch (err) {
+          console.log('Debug: LiveKit attach method failed', err);
+        }
+      }
+      
+      // Обновляем состояние для отладки
+      setDebugState(prev => ({
+        ...prev,
+        trackType: attachMethod,
+        lastAttachTime: new Date().toLocaleTimeString()
+      }));
+      
+      // Проверяем, успешно ли подключили трек
+      if (!trackElement.srcObject && attachMethod === 'livekit-attach') {
+        console.log('Debug: Checking mediaStreamTrack after LiveKit attach');
+        // В некоторых случаях LiveKit не устанавливает srcObject напрямую
+        if (trackElement.srcObject) {
+          console.log('Debug: srcObject is now available after attach');
+        } else {
+          console.log('Debug: No srcObject after attach');
+        }
+      }
+      
+      // Активно пытаемся запустить воспроизведение видео
+      try {
+        await trackElement.play();
+        console.log('Debug: Video playback started successfully');
+      } catch (error) {
+        console.log('Debug: Error playing video', error);
+        
+        // Вторая попытка через 500мс
+        setTimeout(async () => {
+          try {
+            await trackElement.play();
+            console.log('Debug: Second play attempt succeeded');
+          } catch (e) {
+            console.log('Debug: Second play attempt failed', e);
+          }
+        }, 500);
+      }
+      
+      // Периодически обновляем состояние видео, максимум 20 секунд
+      let checkCount = 0;
+      const maxChecks = 20;
+      
+      const checkInterval = setInterval(() => {
+        checkCount++;
+        updateDebugInfo();
+        
+        // Если видео остановлено, пробуем запустить его снова
+        if (trackElement.paused) {
+          trackElement.play().catch(e => {
+            console.log(`Debug: Periodic play attempt ${checkCount} failed`, e);
+          });
+        }
+        
+        // Останавливаем проверки после maxChecks попыток
+        if (checkCount >= maxChecks) {
+          clearInterval(checkInterval);
+        }
+      }, 1000);
+      
+      // Обновляем информацию сразу после попытки подключения
+      updateDebugInfo();
+      
+    } catch (error) {
+      console.error('Debug: Error attaching local video', error);
+    }
+  };
+  
+  // Основной эффект для запуска отладки и подключения локального видео
+  useEffect(() => {
+    console.log('Debug component mounting, localParticipant:', !!localParticipant);
+    
+    // Обновляем информацию сразу
+    updateDebugInfo();
     
     // Ждем 1 секунду перед первой попыткой, чтобы дать время на инициализацию
     const initialTimer = setTimeout(() => {
       attachLocalVideo();
     }, 1000);
     
-    // Настраиваем периодические проверки наличия видеотрека
-    const interval = setInterval(() => {
+    // Настраиваем периодические проверки и обновления
+    const diagnosticInterval = setInterval(() => {
+      updateDebugInfo();
+    }, 2000);
+    
+    const attachInterval = setInterval(() => {
       attachLocalVideo();
     }, 5000); // Проверяем каждые 5 секунд
     
+    // Очистка при размонтировании
     return () => {
+      console.log('Debug component unmounting');
       clearTimeout(initialTimer);
-      clearInterval(interval);
+      clearInterval(diagnosticInterval);
+      clearInterval(attachInterval);
       
-      // Очистка видеоэлемента при размонтировании
-      if (videoRef.current) {
-        if (videoRef.current.srcObject) {
-          const stream = videoRef.current.srcObject as MediaStream;
-          stream.getTracks().forEach(track => track.stop());
-        }
+      // Очистка видеоэлемента
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => {
+          track.stop();
+          console.log('Debug: Stopped track on unmount', track.id);
+        });
         videoRef.current.srcObject = null;
       }
     };
-  }, [localParticipant]);
+  }, [localParticipant, room]);
   
   // Сведения о видеотреке для отображения
   const getDebugInfo = () => {

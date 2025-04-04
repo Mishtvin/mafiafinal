@@ -92,22 +92,32 @@ export default function VideoConference() {
     setConnectionState('disconnected');
   };
 
-  // Room configuration options
+  // Room configuration options - улучшенная версия
   const roomOptions: RoomOptions = {
-    adaptiveStream: true, // Используем логическое значение вместо объекта
+    adaptiveStream: {
+      pauseVideoInBackground: false, // Не останавливать видео при потере фокуса окна
+    },
     dynacast: true,
     publishDefaults: {
       simulcast: true,
       videoSimulcastLayers: [
         VideoPresets.h540,
+        VideoPresets.h360,
         VideoPresets.h216
       ],
       red: !isE2EEEnabled, // Redundant video packets, should be disabled for E2EE
+      stopMicTrackOnMute: false, // Не останавливать треки при заглушивании
+      dtx: true, // Улучшает потребление CPU для аудио
     },
-    // E2EE settings would be configured here in a real app
+    videoCaptureDefaults: {
+      facingMode: 'user',
+      resolution: VideoPresets.h720
+    },
+    // Важные параметры для стабильности
+    disconnectOnPageLeave: false // Предотвращает отключение при потере фокуса
   };
 
-  // Handle room events
+  // Улучшенная обработка событий комнаты
   const handleRoomConnection = async (room: Room) => {
     if (!room) {
       console.error('Room object is undefined in handleRoomConnection');
@@ -122,6 +132,33 @@ export default function VideoConference() {
       url: serverUrl,
       participantCount: (room.numParticipants || 0) + 1, // +1 for local participant
       connectionState: room.state
+    });
+    
+    // Настройка обработчиков событий для всех участников
+    room.on('participantConnected', (participant) => {
+      console.log('Remote participant connected:', participant.identity);
+    });
+
+    room.on('participantDisconnected', (participant) => {
+      console.log('Remote participant disconnected:', participant.identity);
+    });
+    
+    // Обработка событий треков от удаленных участников
+    room.on('trackSubscribed', (track, publication, participant) => {
+      console.log('Subscribed to track:', {
+        participant: participant.identity,
+        kind: track.kind,
+        source: track.source,
+        trackSid: publication.trackSid
+      });
+    });
+    
+    room.on('trackUnsubscribed', (track, publication, participant) => {
+      console.log('Unsubscribed from track:', {
+        participant: participant.identity,
+        kind: track.kind,
+        trackSid: publication.trackSid
+      });
     });
     
     // Выводим дополнительную информацию для диагностики
@@ -139,90 +176,79 @@ export default function VideoConference() {
         }))
       });
       
-      // Активируем устройства с явной обработкой ошибок
+      // Активируем устройства с улучшенной обработкой ошибок
       try {
-        console.log(`Enabling microphone: ${initialAudio}`);
-        
-        // Запрашиваем доступ к микрофону перед подключением
-        if (initialAudio) {
-          try {
-            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            // Останавливаем стрим, чтобы не блокировать доступ к устройству
-            audioStream.getTracks().forEach(track => track.stop());
-          } catch (err) {
-            console.warn('Failed to get microphone access before enabling:', err);
-          }
-        }
-        
-        // Включаем микрофон в LiveKit
-        const micTrack = await room.localParticipant.setMicrophoneEnabled(initialAudio);
-        console.log('Microphone track created:', micTrack ? 'success' : 'no track returned');
-        if (micTrack) {
-          console.log('Microphone track details:', {
-            trackSid: micTrack.trackSid,
-            kind: micTrack.kind,
-            isMuted: micTrack.isMuted
-          });
-        }
-        
-        console.log(`Enabling camera: ${initialVideo}`);
-        
-        // Запрашиваем доступ к камере перед подключением
-        if (initialVideo) {
-          try {
-            const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            // Останавливаем стрим, чтобы не блокировать доступ к устройству
-            videoStream.getTracks().forEach(track => track.stop());
-          } catch (err) {
-            console.warn('Failed to get camera access before enabling:', err);
-          }
-        }
-        
-        // Включаем камеру в LiveKit с параметрами
-        console.log('Attempting to enable camera with full options');
-        
-        // Используем упрощенные параметры, которые точно работают
-        const cameraOptions = {
-          facingMode: 'user' as 'user',  // Это соответствует ожидаемому типу
-          preferredDeviceId: undefined   // Автоматический выбор устройства
-        };
-        
-        // Пытаемся включить камеру с расширенными опциями
-        const camTrack = await room.localParticipant.setCameraEnabled(initialVideo, cameraOptions);
-        
-        console.log('Camera track created:', camTrack ? 'success' : 'no track returned');
-        if (camTrack) {
-          console.log('Camera track details:', {
-            trackSid: camTrack.trackSid,
-            kind: camTrack.kind,
-            isMuted: camTrack.isMuted,
-            dimensions: camTrack.dimensions,
-            // mediaStreamTrack существует на самом треке, не на публикации
-            hasTrack: !!camTrack.track
+        // Сначала получаем доступ к устройствам напрямую для проверки разрешений
+        console.log('Checking media device access permissions...');
+        try {
+          const constraints = { audio: initialAudio, video: initialVideo };
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          console.log('Successfully got media permissions:', {
+            audioTracks: stream.getAudioTracks().length,
+            videoTracks: stream.getVideoTracks().length
           });
           
-          // Принудительно публикуем видеотрек снова, если нужно
-          if (!camTrack.isMuted) {
-            console.log('Camera is active, verifying publication...');
-            const tracks = room.localParticipant.getTrackPublications();
-            const videoTracks = tracks.filter(t => t.kind === 'video' && t.track?.source !== Track.Source.ScreenShare);
-            console.log(`Found ${videoTracks.length} published video tracks`);
+          // Останавливаем треки перед передачей управления LiveKit
+          stream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+          console.warn('Error checking media permissions:', err);
+        }
+        
+        // Включаем микрофон если он нужен
+        if (initialAudio) {
+          console.log('Enabling microphone...');
+          const micTrack = await room.localParticipant.setMicrophoneEnabled(true);
+          console.log('Microphone enable result:', micTrack);
+        }
+        
+        // Включаем камеру если она нужна
+        if (initialVideo) {
+          console.log('Enabling camera...');
+          
+          // Параметры захвата камеры
+          const videoCaptureOptions = {
+            resolution: VideoPresets.h720,
+            facingMode: 'user' as 'user',
+          };
+          
+          // Включаем камеру с оптимальными настройками для захвата
+          const videoTrack = await room.localParticipant.setCameraEnabled(true, videoCaptureOptions);
+          
+          console.log('Camera enable result:', videoTrack);
+          
+          // Проверка, что трек был успешно создан и опубликован
+          if (videoTrack && videoTrack.track) {
+            console.log('Successfully got camera access, available tracks:', 
+              room.localParticipant.getTrackPublications().filter(
+                t => t.kind === 'video' && t.track?.source === Track.Source.Camera
+              ).length
+            );
+            
+            // Если трек заглушен, попробуем включить его снова
+            if (videoTrack.isMuted) {
+              console.log('Toggling camera from', 'muted', 'to', 'unmuted');
+              await room.localParticipant.setCameraEnabled(true);
+            }
           }
         }
       } catch (error) {
         console.error('Error enabling media devices:', error);
       }
-    } else {
-      console.warn('No local participant available');
-    }
-    
-    // Отслеживаем изменения состояния участника
-    if (room.localParticipant) {
+      
+      // Отслеживаем события публикации треков локального участника
       room.localParticipant.on('trackPublished', (pub) => {
         console.log('Local track published:', {
           trackSid: pub.trackSid,
           source: pub.track?.source,
           kind: pub.kind
+        });
+      });
+      
+      room.localParticipant.on('trackSubscribed', (track, pub) => {
+        console.log('Local track subscribed:', {
+          trackSid: pub.trackSid,
+          source: track.source,
+          kind: track.kind
         });
       });
       
@@ -240,27 +266,52 @@ export default function VideoConference() {
         });
       });
     } else {
-      console.warn('Cannot set up track event handlers: localParticipant is not available');
+      console.warn('No local participant available');
     }
     
-    // Set up listeners for connection state changes
+    // Подробная обработка изменений состояния соединения
     room.on('disconnected', () => {
       console.log('Disconnected from LiveKit room');
       setConnectionState('disconnected');
     });
+    
     room.on('reconnecting', () => {
       console.log('Reconnecting to LiveKit room...');
       setConnectionState('reconnecting');
     });
+    
     room.on('reconnected', () => {
       console.log('Reconnected to LiveKit room');
       setConnectionState('connected');
+      
+      // После повторного подключения проверяем, нужно ли повторно включить медиа
+      const needReenabeCamera = initialVideo && !room.localParticipant.isCameraEnabled;
+      const needReenableMic = initialAudio && !room.localParticipant.isMicrophoneEnabled;
+      
+      if (needReenabeCamera) {
+        console.log('Re-enabling camera after reconnect');
+        room.localParticipant.setCameraEnabled(true)
+          .catch(e => console.error('Failed to re-enable camera after reconnect:', e));
+      }
+      
+      if (needReenableMic) {
+        console.log('Re-enabling microphone after reconnect');
+        room.localParticipant.setMicrophoneEnabled(true)
+          .catch(e => console.error('Failed to re-enable microphone after reconnect:', e));
+      }
     });
     
-    // Отслеживаем ошибки комнаты
+    // Расширенная обработка ошибок
     room.on('mediaDevicesError', (e: Error) => {
       console.error('Media devices error:', e);
+      
+      // Показываем ошибку пользователю
+      setError(new Error(`Ошибка доступа к медиа-устройствам: ${e.message}`));
     });
+    
+    // Дополнительная обработка ошибок через общий обработчик
+    // LiveKit в некоторых версиях не поддерживает обработчик 'signalError'
+    // Используем глобальный обработчик, который уже существует выше в компоненте LiveKitRoom - onError
   };
   
 

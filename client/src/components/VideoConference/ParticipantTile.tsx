@@ -48,57 +48,131 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
     return tracks;
   };
 
-  // Функция безопасного подключения видеотрека
+  // Улучшенная функция безопасного подключения видеотрека с поддержкой различных сценариев
   const attachTrack = (pub: TrackPublication | undefined, element: HTMLVideoElement | HTMLAudioElement | null) => {
-    if (!pub || !pub.track || !element) return;
+    if (!pub || !element) return;
     
     try {
-      // Отсоединяем предыдущие треки
+      console.log(`Attaching ${pub.kind} track for ${participant.identity}, local: ${isLocal}, track exists: ${!!pub.track}`);
+      
+      // Отсоединяем предыдущие треки для очистки ресурсов
       if (element.srcObject) {
         const stream = element.srcObject as MediaStream;
         if (stream.getTracks) {
-          stream.getTracks().forEach(t => t.stop());
+          stream.getTracks().forEach(t => {
+            console.log(`Stopping existing track in ${element.tagName}`);
+            t.stop();
+          });
         }
         element.srcObject = null;
       }
       
-      // Для локальных видеотреков используем MediaStreamTrack напрямую
-      if (isLocal && pub.kind === 'video' && pub.track.mediaStreamTrack) {
-        const stream = new MediaStream([pub.track.mediaStreamTrack]);
-        element.srcObject = stream;
-        element.muted = true;
-        
-        if (element instanceof HTMLVideoElement) {
-          element.style.transform = 'scaleX(-1)';
-        }
-      } else {
-        // Для всех остальных используем LiveKit API
-        pub.track.attach(element);
-        
-        // Для локального аудио - заглушаем, чтобы избежать эха
-        if (isLocal && pub.kind === 'audio') {
-          element.muted = true;
-        }
+      // Если у нас нет трека, нечего подключать
+      if (!pub.track) {
+        console.log(`No track available for ${pub.kind} of ${participant.identity}`);
+        return;
       }
       
-      // Запускаем воспроизведение с обработкой ошибок
-      if (element instanceof HTMLVideoElement) {
-        element.play().catch(err => {
-          console.warn(`Error playing ${pub.kind} for ${participant.identity}:`, err);
-          element.muted = true; // Пробуем заглушить (часто помогает с ограничениями автовоспроизведения)
-          element.play().catch(e => console.error('Second play attempt failed:', e));
-        });
+      // Настраиваем аудио элементы
+      if (element instanceof HTMLAudioElement) {
+        // Локальное аудио всегда должно быть заглушено чтобы избежать эха
+        if (isLocal) {
+          element.muted = true;
+        }
+        
+        // Используем LiveKit для подключения аудио
+        pub.track.attach(element);
+        return;
       }
+      
+      // Далее обрабатываем только видео элементы
+      if (!(element instanceof HTMLVideoElement)) return;
+      
+      // Настраиваем видео элемент
+      element.autoplay = true;
+      element.playsInline = true;
+      element.muted = isLocal; // Локальное видео всегда должно быть заглушено
+      
+      // Для локальной камеры применяем зеркальный эффект если это не демонстрация экрана
+      if (isLocal && pub.track.source === Track.Source.Camera) {
+        element.style.transform = 'scaleX(-1)';
+      } else {
+        element.style.transform = '';
+      }
+      
+      // Для локальных участников и видеотреков пробуем использовать MediaStreamTrack напрямую
+      // Это более стабильно работает в некоторых браузерах
+      if (isLocal && pub.track.mediaStreamTrack) {
+        console.log(`Using direct MediaStreamTrack for local video of ${participant.identity}`);
+        const stream = new MediaStream([pub.track.mediaStreamTrack]);
+        element.srcObject = stream;
+      } 
+      // Для дополнительной совместимости проверяем наличие mediaStream
+      else if (pub.track.mediaStream) {
+        console.log(`Using mediaStream for video of ${participant.identity}`);
+        element.srcObject = pub.track.mediaStream;
+      }
+      // В крайнем случае используем метод attach из LiveKit
+      else {
+        console.log(`Using LiveKit attach for video of ${participant.identity}`);
+        pub.track.attach(element);
+      }
+      
+      // Активно пытаемся запустить воспроизведение видео
+      const startPlayback = async () => {
+        if (element.paused) {
+          try {
+            await element.play();
+            console.log(`Successfully started playback for ${pub.kind} of ${participant.identity}`);
+          } catch (err) {
+            console.warn(`Error starting ${pub.kind} playback for ${participant.identity}:`, err);
+            
+            // Повторная попытка через задержку
+            setTimeout(async () => {
+              try {
+                // Устанавливаем muted=true, что позволяет автовоспроизведению работать даже с ограничениями браузера
+                element.muted = true;
+                await element.play();
+                // Если это не локальное видео, восстанавливаем звук после успешного запуска
+                if (!isLocal && pub.kind !== 'video') {
+                  setTimeout(() => { element.muted = false; }, 100);
+                }
+              } catch (e) {
+                console.error(`Failed second playback attempt for ${participant.identity}:`, e);
+              }
+            }, 500);
+          }
+        }
+      };
+      
+      // Запускаем воспроизведение
+      startPlayback();
+      
+      // Также устанавливаем обработчик события loadedmetadata для повторной попытки
+      // воспроизведения после загрузки метаданных
+      element.addEventListener('loadedmetadata', startPlayback, { once: true });
     } catch (error) {
-      console.error(`Failed to attach ${pub.kind} track for ${participant.identity}:`, error);
+      console.error(`Failed to attach ${pub?.kind} track for ${participant.identity}:`, error);
     }
   };
   
-  // Обработка треков при их изменении и при первом рендере
+  // Улучшенная обработка треков при их изменении и при первом рендере
   useEffect(() => {
-    // Вспомогательная функция обновления состояния и треков
+    console.log(`Setting up track handling for ${participant.identity}, isLocal: ${isLocal}`);
+    
+    // Вспомогательная функция обновления состояния и треков с логами
     const updateTracks = () => {
+      console.log(`Updating tracks for ${participant.identity}...`);
+      
       const { video, audio, screen } = getTracks();
+      
+      console.log(`Tracks for ${participant.identity}:`, {
+        hasVideo: !!video,
+        videoMuted: video?.isMuted,
+        hasAudio: !!audio,
+        audioMuted: audio?.isMuted,
+        hasScreen: !!screen
+      });
       
       // Обновляем состояния UI на основе наличия и состояния треков
       setIsMuted(!audio || audio.isMuted);
@@ -106,70 +180,133 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       setIsScreenSharing(!!screen && !screen.isMuted);
       
       // Подключаем видео трек к элементу, если он есть
-      if (video?.track && videoRef.current) {
+      if (video) {
+        console.log(`Attaching video track for ${participant.identity}, active: ${!video.isMuted}`);
         attachTrack(video, videoRef.current);
+      } else if (videoRef.current && videoRef.current.srcObject) {
+        // Если нет видеотрека, но ранее был прикреплен источник, очищаем его
+        console.log(`Clearing video element for ${participant.identity} - no video track`);
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
       }
       
       // Подключаем аудио трек
-      if (audio?.track && audioRef.current) {
+      if (audio) {
+        console.log(`Attaching audio track for ${participant.identity}, active: ${!audio.isMuted}`);
         attachTrack(audio, audioRef.current);
       }
       
-      // Подключаем демонстрацию экрана
-      if (screen?.track && screenRef.current) {
+      // Подключаем демонстрацию экрана, если она есть
+      if (screen) {
+        console.log(`Attaching screen sharing track for ${participant.identity}`);
         attachTrack(screen, screenRef.current);
+      } else if (screenRef.current && screenRef.current.srcObject) {
+        // Очищаем, если демонстрация экрана завершена
+        console.log(`Clearing screen element for ${participant.identity} - no screen track`);
+        const stream = screenRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(t => t.stop());
+        screenRef.current.srcObject = null;
       }
     };
     
-    // Обновляем треки при первом рендере
-    updateTracks();
+    // Обновляем треки при первом рендере с небольшой задержкой
+    // чтобы дать время на инициализацию всех компонентов
+    const initialUpdateTimeout = setTimeout(() => {
+      updateTracks();
+    }, 100);
     
-    // Подписываемся на события изменения треков
-    const handleTrackEvent = () => updateTracks();
+    // Специальные обработчики событий для каждого типа событий
+    // для более точного логирования и отладки
+    const handleTrackPublished = (pub: TrackPublication) => {
+      console.log(`Track published for ${participant.identity}:`, {
+        kind: pub.kind,
+        trackSid: pub.trackSid,
+        source: pub.track?.source
+      });
+      updateTracks();
+    };
     
-    participant.on('trackPublished', handleTrackEvent);
-    participant.on('trackUnpublished', handleTrackEvent);
-    participant.on('trackSubscribed', handleTrackEvent);
-    participant.on('trackUnsubscribed', handleTrackEvent);
-    participant.on('trackMuted', handleTrackEvent);
-    participant.on('trackUnmuted', handleTrackEvent);
+    const handleTrackSubscribed = (track: any, pub: TrackPublication) => {
+      console.log(`Track subscribed for ${participant.identity}:`, {
+        kind: pub.kind,
+        trackSid: pub.trackSid,
+        source: track.source
+      });
+      updateTracks();
+    };
+    
+    const handleTrackUnsubscribed = () => {
+      console.log(`Track unsubscribed for ${participant.identity}`);
+      updateTracks();
+    };
+    
+    const handleTrackMuted = (pub: TrackPublication) => {
+      console.log(`Track muted for ${participant.identity}:`, {
+        kind: pub.kind,
+        source: pub.track?.source
+      });
+      updateTracks();
+    };
+    
+    const handleTrackUnmuted = (pub: TrackPublication) => {
+      console.log(`Track unmuted for ${participant.identity}:`, {
+        kind: pub.kind,
+        source: pub.track?.source
+      });
+      updateTracks();
+    };
+    
+    // Подписываемся на все события с индивидуальными обработчиками
+    participant.on('trackPublished', handleTrackPublished);
+    participant.on('trackUnpublished', handleTrackUnsubscribed);
+    participant.on('trackSubscribed', handleTrackSubscribed);
+    participant.on('trackUnsubscribed', handleTrackUnsubscribed);
+    participant.on('trackMuted', handleTrackMuted);
+    participant.on('trackUnmuted', handleTrackUnmuted);
     
     // Для отслеживания состояния "говорящего"
     const speakingInterval = setInterval(() => {
-      setIsSpeaking(participant.isSpeaking);
+      const wasSpeaking = isSpeaking;
+      const nowSpeaking = participant.isSpeaking;
+      
+      if (wasSpeaking !== nowSpeaking) {
+        console.log(`Speaking state changed for ${participant.identity}: ${nowSpeaking}`);
+        setIsSpeaking(nowSpeaking);
+      }
     }, 500);
     
-    // Функция для локального участника - повторное воспроизведение видео, если оно остановилось
-    let localVideoInterval: NodeJS.Timeout | null = null;
-    
-    if (isLocal) {
-      localVideoInterval = setInterval(() => {
-        const videoElement = videoRef.current;
-        // Проверяем, есть ли видеоэлемент и остановлено ли видео
-        if (videoElement && isCameraEnabled && videoElement.paused) {
-          videoElement.play().catch(err => {
-            console.warn('Retry playing local video:', err);
-          });
-        }
-      }, 2000);
-    }
+    // Более агрессивное периодическое обновление для обеспечения работы видеоэлементов
+    const periodicUpdateInterval = setInterval(() => {
+      // Периодически проверяем состояние треков для большей надежности
+      updateTracks();
+    }, 5000);
     
     // Очистка при размонтировании
     return () => {
-      participant.off('trackPublished', handleTrackEvent);
-      participant.off('trackUnpublished', handleTrackEvent);
-      participant.off('trackSubscribed', handleTrackEvent);
-      participant.off('trackUnsubscribed', handleTrackEvent);
-      participant.off('trackMuted', handleTrackEvent);
-      participant.off('trackUnmuted', handleTrackEvent);
-      
+      clearTimeout(initialUpdateTimeout);
       clearInterval(speakingInterval);
+      clearInterval(periodicUpdateInterval);
       
-      if (localVideoInterval) {
-        clearInterval(localVideoInterval);
-      }
+      participant.off('trackPublished', handleTrackPublished);
+      participant.off('trackUnpublished', handleTrackUnsubscribed);
+      participant.off('trackSubscribed', handleTrackSubscribed);
+      participant.off('trackUnsubscribed', handleTrackUnsubscribed);
+      participant.off('trackMuted', handleTrackMuted);
+      participant.off('trackUnmuted', handleTrackUnmuted);
+      
+      // Очистка видеоэлементов при размонтировании
+      [videoRef.current, screenRef.current, audioRef.current].forEach(element => {
+        if (element && element.srcObject) {
+          const stream = element.srcObject as MediaStream;
+          stream.getTracks().forEach(track => track.stop());
+          element.srcObject = null;
+        }
+      });
+      
+      console.log(`Cleaned up track handling for ${participant.identity}`);
     };
-  }, [participant, isLocal]); // Зависимости только от participant и isLocal
+  }, [participant, isLocal, isSpeaking]); // Зависимости от participant, isLocal и isSpeaking
   
   // Отображение участника
   return (
