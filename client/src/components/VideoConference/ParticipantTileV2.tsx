@@ -1,6 +1,6 @@
 import { VideoTrack } from '@livekit/components-react';
-import { Participant, Track, TrackPublication } from "livekit-client";
-import { useEffect, useRef, useState } from "react";
+import { Participant, RemoteTrack, Track, TrackPublication } from "livekit-client";
+import { useEffect, useRef, useState, useMemo } from "react";
 
 interface ParticipantTileProps {
   participant: Participant;
@@ -13,8 +13,14 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   
+  // Состояния для хранения треков (чтобы треки "закрепились" и не обновлялись слишком часто)
+  const [cameraTrackPublication, setCameraTrackPublication] = useState<TrackPublication | null>(null);
+  const [screenTrackPublication, setScreenTrackPublication] = useState<TrackPublication | null>(null);
+  
   // Аудио элемент для звука
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Ссылка на видео элемент для прямого доступа
+  const videoRef = useRef<HTMLVideoElement>(null);
   
   // Флаг локального участника
   const isLocal = participant.isLocal;
@@ -44,13 +50,91 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       !pub.isMuted
     );
   };
+  
+  // Функция для ручного подключения видео трека к элементу
+  // Этот метод увеличивает стабильность воспроизведения видео
+  const attachVideoTrackManually = (publication: TrackPublication, videoElement: HTMLVideoElement | null) => {
+    if (!publication?.track || !videoElement) return false;
+    
+    try {
+      // Сначала очищаем предыдущий видеопоток
+      if (videoElement.srcObject) {
+        const stream = videoElement.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoElement.srcObject = null;
+      }
+      
+      // Устанавливаем основные параметры видео
+      videoElement.autoplay = true;
+      videoElement.playsInline = true;
+      videoElement.muted = isLocal;
+      
+      // Применяем стили для отображения
+      if (isLocal && publication.track.source === Track.Source.Camera) {
+        videoElement.style.transform = 'scaleX(-1)';
+      } else {
+        videoElement.style.transform = '';
+      }
+      
+      // Для локальных видео используем прямой метод с MediaStreamTrack
+      if (isLocal && publication.track.mediaStreamTrack) {
+        const stream = new MediaStream([publication.track.mediaStreamTrack]);
+        videoElement.srcObject = stream;
+      } 
+      // Для надёжности проверяем наличие mediaStream
+      else if (publication.track.mediaStream) {
+        videoElement.srcObject = publication.track.mediaStream;
+      }
+      // В крайнем случае используем attach из LiveKit
+      else {
+        publication.track.attach(videoElement);
+      }
+      
+      // Активно пытаемся запустить воспроизведение
+      const startPlayback = async () => {
+        try {
+          await videoElement.play();
+          console.log(`Successfully started video playback for ${participant.identity}`);
+          return true;
+        } catch (err) {
+          console.warn(`Error starting video playback:`, err);
+          
+          // Вторая попытка с принудительным muted=true
+          setTimeout(async () => {
+            try {
+              videoElement.muted = true;
+              await videoElement.play();
+              if (!isLocal) {
+                setTimeout(() => { videoElement.muted = false; }, 100);
+              }
+            } catch (e) {
+              console.error(`Failed second playback attempt:`, e);
+            }
+          }, 200);
+          return false;
+        }
+      };
+      
+      startPlayback();
+      
+      // Установка обработчика на случай, если метаданные загрузятся позже
+      videoElement.addEventListener('loadedmetadata', () => {
+        startPlayback();
+      }, { once: true });
+      
+      return true;
+    } catch (error) {
+      console.error(`Failed to manually attach video track:`, error);
+      return false;
+    }
+  };
 
-  // Обновление состояний UI и подключение аудио
+  // Обновление состояний UI и подключение треков
   useEffect(() => {
     console.log(`Setting up track handling for ${participant.identity}, isLocal: ${isLocal}`);
 
-    // Функция обновления состояния
-    const updateTrackState = () => {
+    // Функция обновления состояния и треков
+    const updateTracksAndState = () => {
       const videoTrack = getCameraTrack();
       const screenTrack = getScreenTrack();
       const audioTrack = getAudioTrack();
@@ -66,7 +150,16 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       setIsScreenSharing(!!screenTrack);
       setIsMuted(!audioTrack);
       
-      // Подключаем аудио трек
+      // Сохраняем ссылки на публикации треков для стабильности
+      if (videoTrack) {
+        setCameraTrackPublication(videoTrack);
+      }
+      
+      if (screenTrack) {
+        setScreenTrackPublication(screenTrack);
+      }
+      
+      // Подключаем аудио трек если есть
       if (audioTrack && audioTrack.track && audioRef.current) {
         // Отключаем предыдущий аудио
         if (audioRef.current.srcObject) {
@@ -84,13 +177,19 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           console.error(`Failed to attach audio for ${participant.identity}:`, error);
         }
       }
+      
+      // Если мы видим напрямую videoRef, то пробуем подключить видео вручную
+      // Это дополнительная стабилизация, которая сработает если VideoTrack компонент не работает
+      if (videoRef.current && videoTrack) {
+        attachVideoTrackManually(videoTrack, videoRef.current);
+      }
     };
     
-    // Обновляем состояние сразу
-    updateTrackState();
+    // Обновляем треки сразу при монтировании
+    updateTracksAndState();
     
     // Подписываемся на все события, влияющие на наличие или состояние треков
-    const handleTrackEvent = () => updateTrackState();
+    const handleTrackEvent = () => updateTracksAndState();
     
     participant.on('trackPublished', handleTrackEvent);
     participant.on('trackUnpublished', handleTrackEvent);
@@ -105,8 +204,9 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       setIsSpeaking(nowSpeaking);
     }, 300);
     
-    // Периодическое обновление для стабильности
-    const updateInterval = setInterval(updateTrackState, 3000);
+    // Периодическое обновление для стабильности с немного увеличенным интервалом
+    // для уменьшения переподключений
+    const updateInterval = setInterval(updateTracksAndState, 5000);
     
     // Очистка при размонтировании
     return () => {
@@ -127,12 +227,19 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
         audioRef.current.srcObject = null;
       }
       
+      // Очистка видео элемента
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
+      }
+      
       console.log(`Cleaned up track handling for ${participant.identity}`);
     };
   }, [participant, isLocal]);
   
   // Создание трек-референса для VideoTrack компонента из LiveKit
-  const createTrackReference = (publication?: TrackPublication) => {
+  const createTrackReference = (publication?: TrackPublication | null) => {
     if (!publication || !publication.track) return null;
     
     return {
@@ -143,9 +250,16 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
     };
   };
   
-  // Получаем треки для рендеринга
-  const cameraTrack = getCameraTrack();
-  const screenTrack = getScreenTrack();
+  // Активный камера-трек для отображения
+  // Используем сохраненный трек для большей стабильности или получаем новый
+  const activeCameraTrack = useMemo(() => {
+    return cameraTrackPublication || getCameraTrack() || null;
+  }, [cameraTrackPublication, participant]);
+  
+  // Активный скрин-трек для отображения
+  const activeScreenTrack = useMemo(() => {
+    return screenTrackPublication || getScreenTrack() || null;
+  }, [screenTrackPublication, participant]);
   
   return (
     <div 
@@ -161,25 +275,43 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
       </div>
       
       {/* Видео с камеры пользователя */}
-      {isCameraEnabled && !isScreenSharing && cameraTrack && (
+      {/* Видео с камеры пользователя - используем сохраненный или активный трек */}
+      {isCameraEnabled && !isScreenSharing && (
         <div className="absolute inset-0 w-full h-full z-10">
-          <VideoTrack
-            trackRef={createTrackReference(cameraTrack)}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              transform: isLocal ? 'scaleX(-1)' : 'none'
+          {/* Основной VideoTrack с компонентом из LiveKit */}
+          {activeCameraTrack && (
+            <VideoTrack
+              trackRef={createTrackReference(activeCameraTrack)}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                transform: isLocal ? 'scaleX(-1)' : 'none'
+              }}
+            />
+          )}
+          
+          {/* Запасной прямой видеоэлемент на случай проблем с VideoTrack */}
+          <video 
+            ref={videoRef}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ 
+              transform: isLocal ? 'scaleX(-1)' : 'none',
+              // Показываем только если нетVideoTrack
+              display: activeCameraTrack ? 'none' : 'block' 
             }}
+            autoPlay 
+            playsInline 
+            muted={isLocal}
           />
         </div>
       )}
       
       {/* Демонстрация экрана */}
-      {isScreenSharing && screenTrack && (
+      {isScreenSharing && activeScreenTrack && (
         <div className="absolute inset-0 w-full h-full z-20">
           <VideoTrack
-            trackRef={createTrackReference(screenTrack)}
+            trackRef={createTrackReference(activeScreenTrack)}
             style={{
               width: '100%',
               height: '100%',
