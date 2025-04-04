@@ -210,8 +210,8 @@ export default function CustomLiveKitRoom({
                     recoverWithDirectMediaAccess();
                   });
                 
-                // Вспомогательная функция для крайнего случая восстановления
-                function recoverWithDirectMediaAccess() {
+                // Вспомогательная функция для прямого доступа к медиа устройствам
+                const recoverWithDirectMediaAccess = () => {
                   console.log('LAST RESORT RECOVERY: Attempting direct media access');
                   navigator.mediaDevices.getUserMedia({ video: true })
                     .then(stream => {
