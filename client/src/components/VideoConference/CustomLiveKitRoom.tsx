@@ -163,10 +163,30 @@ export default function CustomLiveKitRoom({
             if (trackState.readyState !== 'live' || !trackState.enabled) {
               console.log('VIDEO TRACK IN BAD STATE:', trackState);
               
-              // Вместо немедленной попытки восстановления, просто логируем проблему
-              // и полагаемся на VideoRecoveryNotification для пользовательских действий
+              // Автоматическое восстановление через перезапуск камеры
               if (video) {
-                console.log('VIDEO RECOVERY NOTIFICATION: Video track issue detected, user can manually recover via UI');
+                console.log('CRITICAL RECOVERY: Attempting to recover ended video track');
+                
+                // Последовательное восстановление: отключение -> ожидание -> включение
+                localParticipant.setCameraEnabled(false)
+                  .then(() => {
+                    console.log('Camera successfully disabled, waiting before re-enabling...');
+                    
+                    // Ждем 1.5 секунды перед повторным включением
+                    setTimeout(() => {
+                      console.log('RECOVERY STEP 2: Re-enabling camera');
+                      localParticipant.setCameraEnabled(true)
+                        .then(() => {
+                          console.log('Camera successfully re-enabled');
+                        })
+                        .catch(error => {
+                          console.error('Failed to re-enable camera:', error);
+                        });
+                    }, 1500);
+                  })
+                  .catch(error => {
+                    console.error('Failed to disable camera:', error);
+                  });
               }
             }
           }
