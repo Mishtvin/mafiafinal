@@ -3,6 +3,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useState, useEffect } from "react";
 import { Room, LocalParticipant, Track } from "livekit-client";
 import { useLocalParticipant } from "@livekit/components-react";
+import { Badge } from "@/components/ui/badge";
+import { AlertCircle, CheckCircle } from "lucide-react";
 
 interface ControlBarProps {
   onLeave: () => void;
@@ -13,6 +15,52 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
   const [isMicrophoneMuted, setIsMicrophoneMuted] = useState(false);
   const [isCameraMuted, setIsCameraMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  
+  // Дополнительное состояние для отладки
+  const [deviceStatus, setDeviceStatus] = useState<{
+    microphone: 'available' | 'unavailable' | 'error' | 'none';
+    camera: 'available' | 'unavailable' | 'error' | 'none';
+    screen: 'available' | 'unavailable' | 'error' | 'none';
+  }>({
+    microphone: 'none',
+    camera: 'none',
+    screen: 'none'
+  });
+  
+  // Состояние для отображения дополнительной диагностики
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  
+  // Проверка доступности устройств
+  useEffect(() => {
+    const checkDeviceAvailability = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        console.log('Available devices:', devices);
+        
+        // Проверка наличия микрофона
+        const hasMicrophone = devices.some(device => device.kind === 'audioinput');
+        // Проверка наличия камеры
+        const hasCamera = devices.some(device => device.kind === 'videoinput');
+        
+        setDeviceStatus(prev => ({
+          ...prev,
+          microphone: hasMicrophone ? 'available' : 'unavailable',
+          camera: hasCamera ? 'available' : 'unavailable',
+          screen: 'available' // Screen sharing всегда доступен
+        }));
+        
+      } catch (error) {
+        console.error('Error checking device availability:', error);
+        setDeviceStatus({
+          microphone: 'error',
+          camera: 'error',
+          screen: 'available' // Screen sharing обычно доступен всегда
+        });
+      }
+    };
+    
+    checkDeviceAvailability();
+  }, []);
   
   // Отслеживаем состояние медиатреков
   useEffect(() => {
@@ -90,13 +138,47 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
     console.log('Toggling microphone from', isMicrophoneMuted ? 'muted' : 'unmuted', 'to', !isMicrophoneMuted ? 'muted' : 'unmuted');
     
     try {
+      // Запрашиваем доступ к микрофону
+      let mediaStream;
+      try {
+        // Сначала явно запрашиваем доступ к микрофону
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('Successfully got microphone access');
+      } catch (mediaError) {
+        console.error('Failed to get microphone access:', mediaError);
+        alert('Не удалось получить доступ к микрофону. Пожалуйста, убедитесь, что микрофон подключен и разрешения предоставлены в настройках браузера.');
+        return;
+      }
+      
+      // Теперь пытаемся включить микрофон в LiveKit
       const result = await localParticipant.setMicrophoneEnabled(!isMicrophoneMuted);
       console.log('Toggle microphone result:', result);
+      
+      if (!result) {
+        console.warn('No track returned when enabling microphone, but no error was thrown');
+        // Принудительно обновляем состояние на основе нашего запроса
+        setTimeout(() => {
+          const micTrack = localParticipant.getTrackPublications().find(
+            track => track.track?.source === Track.Source.Microphone
+          );
+          const newState = micTrack ? !micTrack.isMuted : false;
+          setIsMicrophoneMuted(!newState);
+        }, 500);
+      }
+      
+      // Освобождаем ресурсы локального стрима
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
     } catch (error) {
       console.error('Error toggling microphone:', error);
       // Обработка ошибок разрешения доступа к микрофону
-      if (error instanceof Error && error.message.includes('Permission')) {
-        alert('Доступ к микрофону запрещен. Пожалуйста, разрешите доступ в настройках браузера.');
+      if (error instanceof Error) {
+        if (error.message.includes('Permission')) {
+          alert('Доступ к микрофону запрещен. Пожалуйста, разрешите доступ в настройках браузера.');
+        } else {
+          alert(`Ошибка включения микрофона: ${error.message}`);
+        }
       }
     }
   };
@@ -110,13 +192,47 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
     console.log('Toggling camera from', isCameraMuted ? 'muted' : 'unmuted', 'to', !isCameraMuted ? 'muted' : 'unmuted');
     
     try {
+      // Запрашиваем доступ к камере
+      let mediaStream;
+      try {
+        // Сначала явно запрашиваем доступ к камере
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        console.log('Successfully got camera access');
+      } catch (mediaError) {
+        console.error('Failed to get camera access:', mediaError);
+        alert('Не удалось получить доступ к камере. Пожалуйста, убедитесь, что камера подключена и разрешения предоставлены в настройках браузера.');
+        return;
+      }
+      
+      // Теперь пытаемся включить камеру в LiveKit
       const result = await localParticipant.setCameraEnabled(!isCameraMuted);
       console.log('Toggle camera result:', result);
+      
+      if (!result) {
+        console.warn('No track returned when enabling camera, but no error was thrown');
+        // Принудительно обновляем состояние на основе нашего запроса
+        setTimeout(() => {
+          const camTrack = localParticipant.getTrackPublications().find(
+            track => track.track?.source === Track.Source.Camera
+          );
+          const newState = camTrack ? !camTrack.isMuted : false;
+          setIsCameraMuted(!newState);
+        }, 500);
+      }
+      
+      // Освобождаем ресурсы локального стрима
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
     } catch (error) {
       console.error('Error toggling camera:', error);
       // Обработка ошибок разрешения доступа к камере
-      if (error instanceof Error && error.message.includes('Permission')) {
-        alert('Доступ к камере запрещен. Пожалуйста, разрешите доступ в настройках браузера.');
+      if (error instanceof Error) {
+        if (error.message.includes('Permission')) {
+          alert('Доступ к камере запрещен. Пожалуйста, разрешите доступ в настройках браузера.');
+        } else {
+          alert(`Ошибка включения камеры: ${error.message}`);
+        }
       }
     }
   };
@@ -135,17 +251,72 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
     onLeave();
   };
 
+  // Переключение отображения диагностики
+  const toggleDiagnostics = () => {
+    setShowDiagnostics(!showDiagnostics);
+  };
+
   return (
     <TooltipProvider>
-      <div className="flex justify-center space-x-2 sm:space-x-4 items-center">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant={isMicrophoneMuted ? "outline" : "default"}
-              size="icon"
-              className={`rounded-full w-10 h-10 ${isMicrophoneMuted ? 'bg-slate-700' : ''}`}
-              onClick={toggleMicrophone}
-            >
+      <div className="flex flex-col items-center gap-2">
+        {/* Диагностическая информация (если включена) */}
+        {showDiagnostics && (
+          <div className="bg-black/20 rounded-md p-2 mb-2 w-full max-w-md">
+            <div className="text-sm font-medium mb-1 text-center">Диагностика устройств</div>
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              <div className="flex flex-col items-center">
+                <span className="text-xs mb-1">Микрофон</span>
+                {deviceStatus.microphone === 'available' ? (
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                    <CheckCircle className="w-3 h-3 mr-1" /> Доступен
+                  </Badge>
+                ) : deviceStatus.microphone === 'unavailable' ? (
+                  <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+                    <AlertCircle className="w-3 h-3 mr-1" /> Недоступен
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                    <AlertCircle className="w-3 h-3 mr-1" /> Ошибка
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="flex flex-col items-center">
+                <span className="text-xs mb-1">Камера</span>
+                {deviceStatus.camera === 'available' ? (
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                    <CheckCircle className="w-3 h-3 mr-1" /> Доступна
+                  </Badge>
+                ) : deviceStatus.camera === 'unavailable' ? (
+                  <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+                    <AlertCircle className="w-3 h-3 mr-1" /> Недоступна
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                    <AlertCircle className="w-3 h-3 mr-1" /> Ошибка
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="flex flex-col items-center">
+                <span className="text-xs mb-1">Демонстрация</span>
+                <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                  <CheckCircle className="w-3 h-3 mr-1" /> Доступна
+                </Badge>
+              </div>
+            </div>
+          </div>
+        )}
+      
+        <div className="flex justify-center space-x-2 sm:space-x-4 items-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant={isMicrophoneMuted ? "outline" : "default"}
+                size="icon"
+                className={`rounded-full w-10 h-10 ${isMicrophoneMuted ? 'bg-slate-700' : ''}`}
+                onClick={toggleMicrophone}
+              >
               {isMicrophoneMuted ? (
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
@@ -294,6 +465,7 @@ export default function ControlBar({ onLeave }: ControlBarProps) {
             <p>Покинуть конференцию</p>
           </TooltipContent>
         </Tooltip>
+      </div>
       </div>
     </TooltipProvider>
   );

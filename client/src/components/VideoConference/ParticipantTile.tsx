@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Participant, Track, RemoteTrackPublication, LocalTrackPublication } from "livekit-client";
+import { Participant, Track, TrackPublication } from "livekit-client";
 
 interface ParticipantTileProps {
   participant: Participant;
@@ -20,8 +20,10 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
   useEffect(() => {
     // Функция обновления состояний
     const updateStates = () => {
+      // Получаем все публикации треков участника
       const trackPubs = participant.getTrackPublications();
       
+      // Детальное логирование треков для отладки
       console.log(`Tracks for participant ${participant.identity}:`, 
         trackPubs.map(pub => ({
           sid: pub.trackSid,
@@ -32,68 +34,124 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
         }))
       );
       
+      // Найдем аудио, видео и треки для демонстрации экрана
+      // Используем более надежный способ определения типа трека
       const micPub = trackPubs.find(pub => 
-        pub.track?.source === Track.Source.Microphone
-      );
-      const cameraPub = trackPubs.find(pub => 
-        pub.track?.source === Track.Source.Camera
-      );
-      const screenPub = trackPubs.find(pub => 
-        pub.track?.source === Track.Source.ScreenShare
+        (pub.track?.source === Track.Source.Microphone || pub.kind === 'audio') && pub.isSubscribed
       );
       
+      // Для видео важно проверить как source, так и kind
+      const cameraPub = trackPubs.find(pub => 
+        (pub.track?.source === Track.Source.Camera || 
+          (pub.kind === 'video' && pub.track?.source !== Track.Source.ScreenShare)) && 
+        pub.isSubscribed
+      );
+      
+      // Для демонстрации экрана только проверяем source
+      const screenPub = trackPubs.find(pub => 
+        pub.track?.source === Track.Source.ScreenShare && pub.isSubscribed
+      );
+      
+      // Логируем состояние медиа треков для отладки
       console.log(`Media state for ${participant.identity}:`, {
         microphone: micPub ? { isMuted: micPub.isMuted, isSubscribed: micPub.isSubscribed } : 'none',
         camera: cameraPub ? { isMuted: cameraPub.isMuted, isSubscribed: cameraPub.isSubscribed } : 'none',
         screen: screenPub ? { isMuted: screenPub.isMuted, isSubscribed: screenPub.isSubscribed } : 'none'
       });
       
+      // Обновляем состояние UI на основе треков
       setIsMuted(!micPub || micPub.isMuted);
-      setIsCameraEnabled(!!cameraPub && !cameraPub.isMuted);
-      setIsScreenSharing(!!screenPub && !screenPub.isMuted);
+      setIsCameraEnabled(!!cameraPub && !cameraPub.isMuted && cameraPub.isSubscribed);
+      setIsScreenSharing(!!screenPub && !screenPub.isMuted && screenPub.isSubscribed);
       
-      // Обновление видео элементов
+      // Функция для безопасного подключения видеотрека
+      const safeAttachVideoTrack = (pub: any, element: HTMLVideoElement) => {
+        try {
+          if (!pub || !pub.track || !element) return false;
+          
+          const track = pub.track;
+          
+          // Проверяем, что трек не отключен и имеет правильный тип
+          if (pub.isMuted || (track.kind !== 'video')) {
+            console.log(`Skipping attachment for ${participant.identity}, track is muted or not video`);
+            return false;
+          }
+          
+          // Очищаем все существующие подключения
+          if (element.srcObject) {
+            const stream = element.srcObject as MediaStream;
+            if (stream.getTracks) {
+              stream.getTracks().forEach(t => t.stop());
+            }
+            element.srcObject = null;
+          }
+          
+          // Подключаем трек к элементу
+          console.log(`Attaching ${pub.kind} track to ${participant.identity}`);
+          track.attach(element);
+          
+          // Включаем воспроизведение
+          element.play().catch((err: Error) => {
+            console.error(`Error playing video for ${participant.identity}:`, err);
+          });
+          
+          return true;
+        } catch (error) {
+          console.error(`Error attaching ${pub.kind || 'unknown'} track for ${participant.identity}:`, error);
+          return false;
+        }
+      };
+      
+      // Обновление видео элементов с безопасным приведением типов
       if (cameraPub?.track && videoEl) {
-        if (isLocal) {
-          const localTrack = cameraPub.track as LocalTrackPublication["track"];
-          if (localTrack && localTrack.attach) {
-            localTrack.attach(videoEl);
+        try {
+          // Сначала останавливаем существующий видеопоток, если он есть
+          if (videoEl.srcObject) {
+            const stream = videoEl.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+            videoEl.srcObject = null;
           }
-        } else {
-          const remoteTrack = cameraPub.track as RemoteTrackPublication["track"];
-          if (remoteTrack && remoteTrack.attach) {
-            remoteTrack.attach(videoEl);
+          
+          // Затем подключаем новый
+          if (cameraPub.track && cameraPub.track.attach) {
+            console.log(`Attaching camera track to ${participant.identity}`);
+            cameraPub.track.attach(videoEl);
+            videoEl.play().catch(err => console.error('Error playing video:', err));
           }
+        } catch (error) {
+          console.error(`Error attaching camera track:`, error);
         }
       }
       
-      // Обновление элемента демонстрации экрана
+      // Аналогично для экрана
       if (screenPub?.track && screenEl) {
-        if (isLocal) {
-          const localTrack = screenPub.track as LocalTrackPublication["track"];
-          if (localTrack && localTrack.attach) {
-            localTrack.attach(screenEl);
+        try {
+          if (screenEl.srcObject) {
+            const stream = screenEl.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+            screenEl.srcObject = null;
           }
-        } else {
-          const remoteTrack = screenPub.track as RemoteTrackPublication["track"];
-          if (remoteTrack && remoteTrack.attach) {
-            remoteTrack.attach(screenEl);
+          
+          if (screenPub.track && screenPub.track.attach) {
+            console.log(`Attaching screenshare track to ${participant.identity}`);
+            screenPub.track.attach(screenEl);
+            screenEl.play().catch(err => console.error('Error playing screenshare:', err));
           }
+        } catch (error) {
+          console.error(`Error attaching screenshare track:`, error);
         }
       }
       
       // Обновление аудио элемента
       if (micPub?.track && audioEl && !micPub.isMuted) {
-        if (isLocal) {
-          const localTrack = micPub.track as LocalTrackPublication["track"];
-          if (localTrack && localTrack.attach) {
-            localTrack.attach(audioEl);
+        try {
+          const track = micPub.track;
+          if (track.kind === 'audio') {
+            console.log(`Attaching audio track to ${participant.identity}`);
+            track.attach(audioEl);
           }
-        } else {
-          const remoteTrack = micPub.track as RemoteTrackPublication["track"];
-          if (remoteTrack && remoteTrack.attach) {
-            remoteTrack.attach(audioEl);
-          }
+        } catch (error) {
+          console.error(`Error attaching audio for ${participant.identity}:`, error);
         }
       }
     };
