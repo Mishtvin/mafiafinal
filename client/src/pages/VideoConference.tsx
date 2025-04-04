@@ -8,6 +8,7 @@ import SettingsModal from '../components/VideoConference/SettingsModal';
 import JoinModal from '../components/VideoConference/JoinModal';
 import ErrorModal from '../components/VideoConference/ErrorModal';
 import VideoDebug from '../components/VideoConference/VideoDebug';
+import TrackHealthMonitor from '../components/VideoConference/TrackHealthMonitor';
 import { fetchToken } from '../lib/livekit';
 import { Room, VideoPresets, LogLevel, RoomOptions, Track, ConnectionState } from 'livekit-client';
 import { decodePassphrase, encodePassphrase, generateRoomId } from '../lib/utils';
@@ -415,6 +416,7 @@ export default function VideoConference() {
               {/* Отладочный компонент для проверки локального видео */}
               <div className="fixed bottom-24 right-4 z-50">
                 <VideoDebug />
+                <TrackHealthMonitor />
               </div>
             </main>
 

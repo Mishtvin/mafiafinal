@@ -1,351 +1,278 @@
-import { VideoTrack } from '@livekit/components-react';
-import { Participant, RemoteTrack, Track, TrackPublication } from "livekit-client";
-import { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useState, useRef } from 'react';
+import { Participant, Track, TrackPublication } from 'livekit-client';
 
 interface ParticipantTileProps {
   participant: Participant;
 }
 
 export default function ParticipantTile({ participant }: ParticipantTileProps) {
-  // Состояния для отображения UI
+  const [videoTrack, setVideoTrack] = useState<TrackPublication | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [isCameraEnabled, setIsCameraEnabled] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   
-  // Состояния для хранения треков (чтобы треки "закрепились" и не обновлялись слишком часто)
-  const [cameraTrackPublication, setCameraTrackPublication] = useState<TrackPublication | null>(null);
-  const [screenTrackPublication, setScreenTrackPublication] = useState<TrackPublication | null>(null);
-  
-  // Аудио элемент для звука
-  const audioRef = useRef<HTMLAudioElement>(null);
-  // Ссылка на видео элемент для прямого доступа
+  // Кэш для информации о состоянии трека
+  const [trackState, setTrackState] = useState({
+    hasVideo: false,
+    hasAudio: false,
+    hasScreen: false
+  });
+
+  // Используем ref для сохранения ссылки на видеоэлемент
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Отдельный ref для отслеживания состояния подключения
+  const attachedRef = useRef<boolean>(false);
   
-  // Флаг локального участника
-  const isLocal = participant.isLocal;
-
-  // Получаем трек для видео камеры
-  const getCameraTrack = () => {
-    return participant.getTrackPublications().find(pub => 
-      pub.kind === 'video' && 
-      pub.track?.source === Track.Source.Camera &&
-      !pub.isMuted
-    );
-  };
-
-  // Получаем трек для демонстрации экрана
-  const getScreenTrack = () => {
-    return participant.getTrackPublications().find(pub => 
-      pub.kind === 'video' && 
-      pub.track?.source === Track.Source.ScreenShare && 
-      !pub.isMuted
-    );
-  };
-
-  // Получаем аудио трек
-  const getAudioTrack = () => {
-    return participant.getTrackPublications().find(pub => 
-      pub.kind === 'audio' && 
-      !pub.isMuted
-    );
-  };
-  
-  // Функция для ручного подключения видео трека к элементу
-  // Этот метод увеличивает стабильность воспроизведения видео
-  const attachVideoTrackManually = (publication: TrackPublication, videoElement: HTMLVideoElement | null) => {
-    if (!publication?.track || !videoElement) return false;
-    
-    try {
-      // Сначала очищаем предыдущий видеопоток
-      if (videoElement.srcObject) {
-        const stream = videoElement.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-        videoElement.srcObject = null;
-      }
-      
-      // Устанавливаем основные параметры видео
-      videoElement.autoplay = true;
-      videoElement.playsInline = true;
-      videoElement.muted = isLocal;
-      
-      // Применяем стили для отображения
-      if (isLocal && publication.track.source === Track.Source.Camera) {
-        videoElement.style.transform = 'scaleX(-1)';
-      } else {
-        videoElement.style.transform = '';
-      }
-      
-      // Для локальных видео используем прямой метод с MediaStreamTrack
-      if (isLocal && publication.track.mediaStreamTrack) {
-        const stream = new MediaStream([publication.track.mediaStreamTrack]);
-        videoElement.srcObject = stream;
-      } 
-      // Для надёжности проверяем наличие mediaStream
-      else if (publication.track.mediaStream) {
-        videoElement.srcObject = publication.track.mediaStream;
-      }
-      // В крайнем случае используем attach из LiveKit
-      else {
-        publication.track.attach(videoElement);
-      }
-      
-      // Активно пытаемся запустить воспроизведение
-      const startPlayback = async () => {
-        try {
-          await videoElement.play();
-          console.log(`Successfully started video playback for ${participant.identity}`);
-          return true;
-        } catch (err) {
-          console.warn(`Error starting video playback:`, err);
-          
-          // Вторая попытка с принудительным muted=true
-          setTimeout(async () => {
-            try {
-              videoElement.muted = true;
-              await videoElement.play();
-              if (!isLocal) {
-                setTimeout(() => { videoElement.muted = false; }, 100);
-              }
-            } catch (e) {
-              console.error(`Failed second playback attempt:`, e);
-            }
-          }, 200);
-          return false;
-        }
-      };
-      
-      startPlayback();
-      
-      // Установка обработчика на случай, если метаданные загрузятся позже
-      videoElement.addEventListener('loadedmetadata', () => {
-        startPlayback();
-      }, { once: true });
-      
-      return true;
-    } catch (error) {
-      console.error(`Failed to manually attach video track:`, error);
-      return false;
-    }
-  };
-
-  // Обновление состояний UI и подключение треков
   useEffect(() => {
-    console.log(`Setting up track handling for ${participant.identity}, isLocal: ${isLocal}`);
-
-    // Функция обновления состояния и треков
-    const updateTracksAndState = () => {
-      const videoTrack = getCameraTrack();
-      const screenTrack = getScreenTrack();
-      const audioTrack = getAudioTrack();
+    console.log(`Setting up track handling for ${participant.identity}, isLocal: ${participant.isLocal}`);
+    
+    // Функция для проверки доступных треков участника и их подключения
+    const updateTracks = () => {
+      // Сначала получаем все публикации треков от участника
+      const trackPublications = participant.getTrackPublications();
       
-      console.log(`Tracks for ${participant.identity}:`, {
-        hasVideo: !!videoTrack,
-        hasAudio: !!audioTrack,
-        hasScreen: !!screenTrack
+      // Находим видеотрек камеры (не демонстрации экрана)
+      const cameraPublication = trackPublications.find(
+        pub => pub.kind === 'video' && pub.track?.source === Track.Source.Camera
+      );
+      
+      // Находим аудиотрек (для будущих обновлений)
+      const audioPublication = trackPublications.find(
+        pub => pub.kind === 'audio' && pub.track?.source === Track.Source.Microphone
+      );
+      
+      // Находим демонстрацию экрана (не используется, но для полноты)
+      const screenPublication = trackPublications.find(
+        pub => pub.kind === 'video' && pub.track?.source === Track.Source.ScreenShare
+      );
+
+      // Обновляем состояние треков
+      setTrackState({
+        hasVideo: !!cameraPublication,
+        hasAudio: !!audioPublication,
+        hasScreen: !!screenPublication
       });
       
-      // Обновляем состояния на основе наличия треков
-      setIsCameraEnabled(!!videoTrack);
-      setIsScreenSharing(!!screenTrack);
-      setIsMuted(!audioTrack);
-      
-      // Сохраняем ссылки на публикации треков для стабильности
-      if (videoTrack) {
-        setCameraTrackPublication(videoTrack);
-      }
-      
-      if (screenTrack) {
-        setScreenTrackPublication(screenTrack);
-      }
-      
-      // Подключаем аудио трек если есть
-      if (audioTrack && audioTrack.track && audioRef.current) {
-        // Отключаем предыдущий аудио
-        if (audioRef.current.srcObject) {
-          const stream = audioRef.current.srcObject as MediaStream;
-          stream.getTracks().forEach(t => t.stop());
-          audioRef.current.srcObject = null;
-        }
+      console.log(`Tracks for ${participant.identity}:`, {
+        hasVideo: !!cameraPublication,
+        hasAudio: !!audioPublication,
+        hasScreen: !!screenPublication
+      });
+
+      // Если у нас есть видеотрек и он отличается от того, что мы отслеживали ранее - обновляем
+      if (cameraPublication && (!videoTrack || videoTrack.trackSid !== cameraPublication.trackSid)) {
+        setVideoTrack(cameraPublication);
+        setIsMuted(cameraPublication.isMuted);
         
-        // Подключаем новый аудио поток
-        try {
-          audioTrack.track.attach(audioRef.current);
-          // Локальное аудио всегда должно быть заглушено чтобы избежать эха
-          audioRef.current.muted = isLocal;
-        } catch (error) {
-          console.error(`Failed to attach audio for ${participant.identity}:`, error);
-        }
-      }
-      
-      // Если мы видим напрямую videoRef, то пробуем подключить видео вручную
-      // Это дополнительная стабилизация, которая сработает если VideoTrack компонент не работает
-      if (videoRef.current && videoTrack) {
-        attachVideoTrackManually(videoTrack, videoRef.current);
+        // Активно подключаем трек к видеоэлементу - не ждем подписки
+        attachVideoTrackManually(cameraPublication, videoRef.current);
+      } else if (!cameraPublication && videoTrack) {
+        // Нет публикации, но был трек - убираем его
+        setVideoTrack(null);
       }
     };
     
-    // Обновляем треки сразу при монтировании
-    updateTracksAndState();
+    // Непосредственно ручное подключение видеотрека к элементу DOM
+    // Используем этот подход вместо стандартного, потому что он более надежный
+    const attachVideoTrackManually = (publication: TrackPublication, videoElement: HTMLVideoElement | null) => {
+      if (!videoElement) return;
+      if (!publication.track) return;
+      
+      try {
+        // Сначала очищаем текущие треки, если есть
+        if (videoElement.srcObject) {
+          // Останавливаем все имеющиеся треки
+          const stream = videoElement.srcObject as MediaStream;
+          stream.getTracks().forEach(track => track.stop());
+          videoElement.srcObject = null;
+        }
+        
+        const track = publication.track;
+        
+        // Если у трека есть mediaStreamTrack, то создаем из него новый MediaStream
+        if (track.mediaStreamTrack) {
+          console.log(`Attaching track ${publication.trackSid} to video element using mediaStreamTrack`);
+          try {
+            const stream = new MediaStream([track.mediaStreamTrack]);
+            videoElement.srcObject = stream;
+            videoElement.muted = true; // Всегда заглушаем аудио в видеоэлементе (для избежания эха)
+            videoElement.autoplay = true;
+            videoElement.playsInline = true;
+            
+            // Активно пытаемся запустить воспроизведение (это требуется из-за политик браузеров)
+            const playPromise = videoElement.play();
+            if (playPromise) {
+              playPromise.catch(e => {
+                console.warn(`Error playing video for ${participant.identity}:`, e);
+                // Повторная попытка воспроизведения через небольшую задержку
+                setTimeout(() => {
+                  videoElement.play().catch(console.error);
+                }, 500);
+              });
+            }
+            
+            attachedRef.current = true;
+            console.log(`Successfully started video playback for ${participant.identity}`);
+          } catch (e) {
+            console.error(`Failed to attach video track for ${participant.identity}:`, e);
+          }
+        } else {
+          // В крайнем случае, используем встроенный метод LiveKit для подключения трека
+          console.log(`Using LiveKit's attach method for track ${publication.trackSid}`);
+          track.attach(videoElement);
+          attachedRef.current = true;
+        }
+      } catch (e) {
+        console.error(`Error attaching video track for ${participant.identity}:`, e);
+      }
+    };
     
-    // Подписываемся на все события, влияющие на наличие или состояние треков
-    const handleTrackEvent = () => updateTracksAndState();
+    // Обработчики событий для отслеживания изменений в треках
+    const handleTrackPublished = (pub: TrackPublication) => {
+      if (pub.kind === 'video' && pub.track?.source === Track.Source.Camera) {
+        setVideoTrack(pub);
+        setIsMuted(pub.isMuted);
+        // Активно подключаем трек при публикации
+        attachVideoTrackManually(pub, videoRef.current);
+      }
+    };
     
-    participant.on('trackPublished', handleTrackEvent);
-    participant.on('trackUnpublished', handleTrackEvent);
-    participant.on('trackSubscribed', handleTrackEvent);
-    participant.on('trackUnsubscribed', handleTrackEvent);
-    participant.on('trackMuted', handleTrackEvent);
-    participant.on('trackUnmuted', handleTrackEvent);
+    const handleTrackUnpublished = (pub: TrackPublication) => {
+      if (videoTrack && pub.trackSid === videoTrack.trackSid) {
+        setVideoTrack(null);
+        attachedRef.current = false;
+      }
+    };
     
-    // Для отслеживания состояния "говорящего"
-    const speakingInterval = setInterval(() => {
-      const nowSpeaking = participant.isSpeaking;
-      setIsSpeaking(nowSpeaking);
-    }, 300);
+    const handleTrackMuted = (pub: TrackPublication) => {
+      if (videoTrack && pub.trackSid === videoTrack.trackSid) {
+        setIsMuted(true);
+      }
+    };
     
-    // Периодическое обновление для стабильности с немного увеличенным интервалом
-    // для уменьшения переподключений
-    const updateInterval = setInterval(updateTracksAndState, 5000);
+    const handleTrackUnmuted = (pub: TrackPublication) => {
+      if (videoTrack && pub.trackSid === videoTrack.trackSid) {
+        setIsMuted(false);
+      }
+    };
+    
+    // Подписываемся на события
+    participant.on('trackPublished', handleTrackPublished);
+    participant.on('trackUnpublished', handleTrackUnpublished);
+    participant.on('trackMuted', handleTrackMuted);
+    participant.on('trackUnmuted', handleTrackUnmuted);
+    
+    // Инициализация - вызываем сразу, чтобы получить текущие треки
+    updateTracks();
+    
+    // Запускаем интервал для периодической проверки и перезаключения при необходимости
+    const checkInterval = setInterval(() => {
+      if (videoTrack && videoTrack.track && videoRef.current) {
+        // Если трек есть, но не подключен - переподключаем
+        if (!attachedRef.current) {
+          console.log(`Re-attaching video for ${participant.identity} after lost connection`);
+          attachVideoTrackManually(videoTrack, videoRef.current);
+        }
+        
+        // Периодически проверяем наличие новых треков
+        updateTracks();
+      }
+    }, 3000);
     
     // Очистка при размонтировании
     return () => {
-      clearInterval(speakingInterval);
-      clearInterval(updateInterval);
+      console.log(`Cleaned up track handling for ${participant.identity}`);
+      participant.off('trackPublished', handleTrackPublished);
+      participant.off('trackUnpublished', handleTrackUnpublished);
+      participant.off('trackMuted', handleTrackMuted);
+      participant.off('trackUnmuted', handleTrackUnmuted);
       
-      participant.off('trackPublished', handleTrackEvent);
-      participant.off('trackUnpublished', handleTrackEvent);
-      participant.off('trackSubscribed', handleTrackEvent);
-      participant.off('trackUnsubscribed', handleTrackEvent);
-      participant.off('trackMuted', handleTrackEvent);
-      participant.off('trackUnmuted', handleTrackEvent);
+      clearInterval(checkInterval);
       
-      // Очистка аудио элемента
-      if (audioRef.current && audioRef.current.srcObject) {
-        const stream = audioRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(t => t.stop());
-        audioRef.current.srcObject = null;
-      }
-      
-      // Очистка видео элемента
+      // Очищаем видеоэлемент
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(track => track.stop());
         videoRef.current.srcObject = null;
       }
-      
-      console.log(`Cleaned up track handling for ${participant.identity}`);
     };
-  }, [participant, isLocal]);
+  }, [participant]);
   
-  // Создание трек-референса для VideoTrack компонента из LiveKit
-  const createTrackReference = (publication?: TrackPublication | null) => {
-    if (!publication || !publication.track) return null;
-    
-    return {
-      publication,
-      participant,
-      source: publication.track.source,
-      track: publication.track
-    };
-  };
-  
-  // Активный камера-трек для отображения
-  // Используем сохраненный трек для большей стабильности или получаем новый
-  const activeCameraTrack = useMemo(() => {
-    return cameraTrackPublication || getCameraTrack() || null;
-  }, [cameraTrackPublication, participant]);
-  
-  // Активный скрин-трек для отображения
-  const activeScreenTrack = useMemo(() => {
-    return screenTrackPublication || getScreenTrack() || null;
-  }, [screenTrackPublication, participant]);
-  
-  return (
-    <div 
-      className={`relative w-full h-full bg-slate-800 rounded-md overflow-hidden flex items-center justify-center ${
-        isSpeaking ? 'ring-2 ring-blue-500' : ''
-      }`}
-    >
-      {/* Аватар пользователя (виден, когда нет видео) */}
-      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-r from-blue-900 to-indigo-800">
-        <div className="h-20 w-20 rounded-full bg-slate-700 flex items-center justify-center text-white text-2xl font-bold">
-          {participant.identity.charAt(0).toUpperCase()}
-        </div>
-      </div>
-      
-      {/* Видео с камеры пользователя */}
-      {/* Видео с камеры пользователя - используем сохраненный или активный трек */}
-      {isCameraEnabled && !isScreenSharing && (
-        <div className="absolute inset-0 w-full h-full z-10">
-          {/* Основной VideoTrack с компонентом из LiveKit */}
-          {activeCameraTrack && (
-            <VideoTrack
-              trackRef={createTrackReference(activeCameraTrack)}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                transform: isLocal ? 'scaleX(-1)' : 'none'
-              }}
-            />
-          )}
-          
-          {/* Запасной прямой видеоэлемент на случай проблем с VideoTrack */}
-          <video 
-            ref={videoRef}
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ 
-              transform: isLocal ? 'scaleX(-1)' : 'none',
-              // Показываем только если нетVideoTrack
-              display: activeCameraTrack ? 'none' : 'block' 
-            }}
-            autoPlay 
-            playsInline 
-            muted={isLocal}
-          />
-        </div>
-      )}
-      
-      {/* Демонстрация экрана */}
-      {isScreenSharing && activeScreenTrack && (
-        <div className="absolute inset-0 w-full h-full z-20">
-          <VideoTrack
-            trackRef={createTrackReference(activeScreenTrack)}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain'
-            }}
-          />
-        </div>
-      )}
-      
-      {/* Аудио трек */}
-      <audio ref={audioRef} autoPlay />
-      
-      {/* Информационная панель снизу */}
-      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent flex justify-between items-center text-white text-sm z-30">
-        <div className="flex items-center">
-          <span className="font-medium truncate">
-            {participant.identity}{isLocal ? ' (Вы)' : ''}
-          </span>
-        </div>
+  // Повторно подключаем при изменении videoTrack
+  useEffect(() => {
+    if (videoTrack && videoTrack.track && videoRef.current) {
+      // Если трек изменился - нужно переподключить
+      if (!attachedRef.current) {
+        console.log(`Attaching updated video track ${videoTrack.trackSid} for ${participant.identity}`);
+        videoRef.current.srcObject = null; // Сначала очищаем
         
-        <div className="flex space-x-1">
-          {isMuted && (
-            <div className="text-red-400 bg-black/30 rounded-full p-0.5">
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="16" 
-                height="16" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-              >
+        try {
+          if (videoTrack.track.mediaStreamTrack) {
+            const stream = new MediaStream([videoTrack.track.mediaStreamTrack]);
+            videoRef.current.srcObject = stream;
+            videoRef.current.muted = true;
+            videoRef.current.autoplay = true;
+            videoRef.current.playsInline = true;
+            videoRef.current.play().catch(console.error);
+            attachedRef.current = true;
+          } else {
+            videoTrack.track.attach(videoRef.current);
+            attachedRef.current = true;
+          }
+        } catch (e) {
+          console.error(`Error re-attaching video track for ${participant.identity}:`, e);
+        }
+      }
+    }
+  }, [videoTrack, participant]);
+  
+  // Для отображения имени в компактном виде
+  const displayName = participant.identity.length > 15 
+    ? `${participant.identity.substring(0, 12)}...` 
+    : participant.identity;
+
+  // Применяем стили для зеркального отображения локального видео
+  // Если это локальный участник, отображаем видео как в зеркале
+  const videoStyle = {
+    transform: participant.isLocal ? 'scaleX(-1)' : 'none',
+    objectFit: 'cover' as 'cover',
+    width: '100%',
+    height: '100%'
+  };
+
+  return (
+    <div className="relative bg-slate-800 rounded-lg overflow-hidden flex flex-col">
+      {/* Видеоконтейнер */}
+      <div className="relative flex-grow h-full min-h-[240px] bg-slate-900 flex items-center justify-center">
+        <video 
+          ref={videoRef}
+          autoPlay 
+          playsInline 
+          muted
+          className="w-full h-full object-cover"
+          style={videoStyle}
+        />
+        
+        {/* Показываем заглушку, когда видео нет или оно заглушено */}
+        {(!trackState.hasVideo || isMuted) && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-800 to-slate-900">
+            <div className="flex flex-col items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-slate-700 flex items-center justify-center mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+              </div>
+              <div className="text-slate-300 text-sm">
+                {displayName}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Индикатор заглушенного микрофона */}
+        {isMuted && trackState.hasVideo && (
+          <div className="absolute bottom-3 right-3">
+            <div className="bg-slate-800 rounded-full p-1.5 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500">
                 <line x1="1" y1="1" x2="23" y2="23"></line>
                 <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
                 <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
@@ -353,43 +280,24 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
                 <line x1="8" y1="23" x2="16" y2="23"></line>
               </svg>
             </div>
-          )}
-          
-          {!isCameraEnabled && (
-            <div className="text-red-400 bg-black/30 rounded-full p-0.5">
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="16" 
-                height="16" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-              >
-                <line x1="1" y1="1" x2="23" y2="23"></line>
-                <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06a4 4 0 1 1-5.56-5.56"></path>
-              </svg>
-            </div>
-          )}
-          
-          {isScreenSharing && (
-            <div className="text-green-400 bg-black/30 rounded-full p-0.5">
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="16" 
-                height="16" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-              >
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
+          </div>
+        )}
+      </div>
+      
+      {/* Нижняя панель с информацией */}
+      <div className="px-3 py-2 flex justify-between items-center bg-black bg-opacity-30 absolute bottom-0 left-0 right-0">
+        <div className="text-white text-sm font-medium truncate">
+          {displayName}
+          {participant.isLocal && ' (Вы)'}
+        </div>
+        
+        {/* Индикаторы активных треков */}
+        <div className="flex space-x-2">
+          {trackState.hasVideo && (
+            <div className={`rounded-full p-1 ${isMuted ? 'bg-red-900 text-red-400' : 'bg-green-900 text-green-400'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
               </svg>
             </div>
           )}

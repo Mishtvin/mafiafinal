@@ -64,6 +64,130 @@ export default function CustomLiveKitRoom({
     new Map()
   );
   
+  // Отслеживаем состояние каждого активного трека
+  const trackStatsRef = useRef(new Map<string, {
+    lastActive: number;
+    restartAttempts: number;
+    frozen: boolean;
+    bytesReceived: number;
+    bytesSent: number;
+  }>());
+  
+  // Функция для проверки состояния трека по его SID
+  const checkTrackHealth = async (track: any, pub: TrackPublication) => {
+    try {
+      // Только видеотреки
+      if (track.kind !== 'video') return;
+      
+      const trackSid = pub.trackSid;
+      let trackStats = trackStatsRef.current.get(trackSid);
+      
+      if (!trackStats) {
+        // Инициализируем статистику для нового трека
+        trackStats = {
+          lastActive: Date.now(),
+          restartAttempts: 0,
+          frozen: false,
+          bytesReceived: 0,
+          bytesSent: 0
+        };
+        trackStatsRef.current.set(trackSid, trackStats);
+      }
+      
+      // Получаем статистику, если возможно
+      let currentBytes = 0;
+      try {
+        // Так как getStats не гарантированно существует на всех треках,
+        // проверяем наличие метода перед вызовом
+        if ('getStats' in track && typeof (track as any).getStats === 'function') {
+          const stats = await (track as any).getStats();
+          if (stats && Array.isArray(stats)) {
+            stats.forEach((stat: any) => {
+              // Для локальных треков важен bytesSent, для удаленных - bytesReceived
+              if ('bytesSent' in stat && typeof stat.bytesSent === 'number') {
+                currentBytes = stat.bytesSent;
+              } else if ('bytesReceived' in stat && typeof stat.bytesReceived === 'number') {
+                currentBytes = stat.bytesReceived;
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to get stats for track', trackSid, e);
+      }
+      
+      // Локальный трек - сравниваем bytesSent
+      if (track instanceof LocalTrack) {
+        if (currentBytes > trackStats.bytesSent) {
+          // Трек активен, обновляем статус
+          if (trackStats.frozen) {
+            console.log(`Track ${trackSid} is no longer frozen. Data is flowing again.`);
+            trackStats.frozen = false;
+          }
+          trackStats.lastActive = Date.now();
+          trackStats.bytesSent = currentBytes;
+        } else if (!trackStats.frozen && (Date.now() - trackStats.lastActive > 3000)) {
+          // Если трек не отправляет данные более 3 секунд, считаем его замороженным
+          console.warn(`Local track ${trackSid} appears to be frozen (no bytes sent in 3+ seconds).`);
+          trackStats.frozen = true;
+          
+          // Пытаемся перезапустить трек
+          if (trackStats.restartAttempts < 3 && roomRef.current?.localParticipant) {
+            trackStats.restartAttempts++;
+            console.log(`Attempting to restart frozen camera track (attempt ${trackStats.restartAttempts})...`);
+            
+            try {
+              await roomRef.current.localParticipant.setCameraEnabled(false);
+              setTimeout(async () => {
+                if (roomRef.current?.localParticipant) {
+                  await roomRef.current.localParticipant.setCameraEnabled(true);
+                  console.log('Camera track restarted after freeze');
+                }
+              }, 1000);
+            } catch (err) {
+              console.error('Failed to restart frozen camera track:', err);
+            }
+          }
+        }
+      }
+      // Удаленный трек - сравниваем bytesReceived
+      else if (track instanceof RemoteTrack) {
+        if (currentBytes > trackStats.bytesReceived) {
+          // Трек активен, обновляем статус
+          if (trackStats.frozen) {
+            console.log(`Remote track ${trackSid} is no longer frozen. Data is flowing again.`);
+            trackStats.frozen = false;
+          }
+          trackStats.lastActive = Date.now();
+          trackStats.bytesReceived = currentBytes;
+        } else if (!trackStats.frozen && (Date.now() - trackStats.lastActive > 5000)) {
+          // Для удаленных треков даем больший таймаут - 5 секунд
+          console.warn(`Remote track ${trackSid} appears to be frozen (no bytes received in 5+ seconds).`);
+          trackStats.frozen = true;
+          
+          // Для удаленных треков пытаемся переподписаться
+          if (track.attachedElements && track.attachedElements.length > 0) {
+            console.log('Attempting to reattach frozen remote track...');
+            const elements = [...track.attachedElements];
+            elements.forEach(el => {
+              track.detach(el);
+              setTimeout(() => {
+                try {
+                  track.attach(el);
+                  console.log('Reattached remote track to element');
+                } catch (e) {
+                  console.error('Failed to reattach remote track:', e);
+                }
+              }, 500);
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error in track health check:', err);
+    }
+  };
+  
   // Эта функция проверяет все треки и их состояния
   const verifyTracks = (room: Room) => {
     if (!room) return;
@@ -83,6 +207,13 @@ export default function CustomLiveKitRoom({
           muted: pub.isMuted,
           hasTrack: !!pub.track
         });
+        
+        // Проверяем здоровье трека
+        if (pub.track) {
+          checkTrackHealth(pub.track as any, pub).catch(e => 
+            console.warn('Error checking track health:', e)
+          );
+        }
         
         // Если видеотрек заглушен и должен быть включен, пробуем включить
         if (pub.kind === 'video' && 
@@ -259,18 +390,63 @@ export default function CustomLiveKitRoom({
         // Уведомляем родительский компонент о подключении
         if (onConnected) onConnected(room);
         
-        // Настраиваем интервал для периодической проверки треков
-        const checkInterval = setInterval(() => {
+        // Настраиваем интервалы для периодической проверки состояния треков
+        // Быстрый интервал для проверки здоровья треков
+        const fastCheckInterval = setInterval(() => {
+          if (room.state === ConnectionState.Connected) {
+            // Проверяем только активные видеотреки, не выводя полный лог
+            if (room.localParticipant) {
+              const localTracks = room.localParticipant.getTrackPublications();
+              localTracks.forEach(pub => {
+                if (pub.track && pub.kind === 'video') {
+                  checkTrackHealth(pub.track as any, pub).catch(e => 
+                    console.warn('Error checking track health in fast interval:', e)
+                  );
+                }
+              });
+            }
+          } else {
+            clearInterval(fastCheckInterval);
+          }
+        }, 2000); // Быстрая проверка каждые 2 секунды
+        
+        // Полная проверка всех треков и состояния комнаты
+        const fullCheckInterval = setInterval(() => {
           if (room.state === ConnectionState.Connected) {
             verifyTracks(room);
+            
+            // Дополнительно проверяем общее состояние комнаты
+            console.log('Debug Room Status:', {
+              name: room.name,
+              state: room.state === ConnectionState.Connected ? 'подключено' : 'отключено',
+              roomState: room.state,
+              numParticipants: room.numParticipants, // В LiveKit нет публичного метода participants, используем numParticipants
+              metadata: room.metadata || ''
+            });
           } else {
-            clearInterval(checkInterval);
+            clearInterval(fullCheckInterval);
+            
+            // Если комната отключена - пытаемся переподключиться
+            if (room.state === ConnectionState.Disconnected) {
+              console.log('Room disconnected unexpectedly, attempting to reconnect...');
+              // Очищаем статус отслеживания треков
+              trackStatsRef.current.clear();
+              
+              try {
+                // Переподключение происходит автоматически через onDisconnected колбэк
+                // Отправляем сообщение о необходимости переподключения
+                if (onDisconnected) onDisconnected();
+              } catch (e) {
+                console.error('Error during reconnection attempt:', e);
+              }
+            }
           }
-        }, 10000); // Проверяем каждые 10 секунд
+        }, 5000); // Полная проверка каждые 5 секунд
         
-        // Очистка интервала при размонтировании
+        // Очистка интервалов при размонтировании
         return () => {
-          clearInterval(checkInterval);
+          clearInterval(fastCheckInterval);
+          clearInterval(fullCheckInterval);
         };
       } catch (error) {
         console.error('Error connecting to LiveKit room:', error);

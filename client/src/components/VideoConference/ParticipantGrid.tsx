@@ -29,14 +29,15 @@ export default function ParticipantGrid() {
     }
     
     // Получаем начальный список участников
+    // В LiveKit нет прямого room.participants, нам нужно использовать API для получения участников
+    // LiveKit не предоставляет доступа к списку remote participants, только количество через numParticipants
+    // Поэтому будем полагаться на события для обновления списка
     const remoteParticipants: Participant[] = [];
-    // В новой версии LiveKit нет room.participants, но есть другие методы
-    // для получения участников
     
     // Комбинируем с локальным участником, если он есть
     const allParticipants = room.localParticipant 
-      ? [...remoteParticipants] 
-      : remoteParticipants;
+      ? [room.localParticipant] 
+      : [];
     
     setParticipants(allParticipants);
     
