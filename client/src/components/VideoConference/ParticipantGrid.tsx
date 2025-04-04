@@ -1,5 +1,4 @@
 import { useMemo, useEffect, useState } from "react";
-import { useParticipants, useLocalParticipant } from "@livekit/components-react";
 import ParticipantTile from "./ParticipantTileV2";
 import { Participant, Track, ConnectionState } from "livekit-client";
 // Импортируем хук контекста из нашей реализации
@@ -10,27 +9,69 @@ import { useRoomContext } from "./CustomLiveKitRoom";
  * и оптимизацией для правильной работы с треками участников
  */
 export default function ParticipantGrid() {
-  const participants = useParticipants();
-  const { localParticipant } = useLocalParticipant();
+  // Используем только наш кастомный контекст
   const room = useRoomContext();
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [localParticipant, setLocalParticipant] = useState<Participant | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   
-  // Отслеживаем изменения статуса подключения
+  // Отслеживаем изменения комнаты и участников
   useEffect(() => {
     if (!room) return;
     
+    // Установка начального состояния
     console.log("Room connection state:", room.state);
     setIsConnected(room.state === ConnectionState.Connected);
     
+    // Если есть локальный участник, добавляем его
+    if (room.localParticipant) {
+      setLocalParticipant(room.localParticipant);
+    }
+    
+    // Получаем начальный список участников
+    const remoteParticipants: Participant[] = [];
+    // В новой версии LiveKit нет room.participants, но есть другие методы
+    // для получения участников
+    
+    // Комбинируем с локальным участником, если он есть
+    const allParticipants = room.localParticipant 
+      ? [...remoteParticipants] 
+      : remoteParticipants;
+    
+    setParticipants(allParticipants);
+    
+    // Обработчики событий
     const handleConnectionStateChanged = (state: ConnectionState) => {
       console.log("Room connection state changed:", state);
       setIsConnected(state === ConnectionState.Connected);
     };
     
-    room.on('connectionStateChanged', handleConnectionStateChanged);
+    const handleParticipantConnected = (participant: Participant) => {
+      console.log("Participant connected:", participant.identity);
+      setParticipants(prev => [...prev, participant]);
+    };
     
+    const handleParticipantDisconnected = (participant: Participant) => {
+      console.log("Participant disconnected:", participant.identity);
+      setParticipants(prev => prev.filter(p => p.sid !== participant.sid));
+    };
+    
+    const handleLocalParticipantChanged = () => {
+      if (room.localParticipant) {
+        setLocalParticipant(room.localParticipant);
+      }
+    };
+    
+    // Подписываемся на события
+    room.on('connectionStateChanged', handleConnectionStateChanged);
+    room.on('participantConnected', handleParticipantConnected);
+    room.on('participantDisconnected', handleParticipantDisconnected);
+    
+    // Очистка при размонтировании
     return () => {
       room.off('connectionStateChanged', handleConnectionStateChanged);
+      room.off('participantConnected', handleParticipantConnected);
+      room.off('participantDisconnected', handleParticipantDisconnected);
     };
   }, [room]);
   

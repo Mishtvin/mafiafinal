@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Room, LocalParticipant, Participant, Track, ConnectionState } from 'livekit-client';
-import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
+import { useRoomContext } from './CustomLiveKitRoom';
 
 /**
  * Улучшенный компонент VideoDebug помогает отлаживать проблемы с видео и микрофоном
@@ -10,7 +10,14 @@ import { useLocalParticipant, useRoomContext } from '@livekit/components-react';
 export default function VideoDebug() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const room = useRoomContext();
-  const { localParticipant } = useLocalParticipant();
+  const [localParticipant, setLocalParticipant] = useState<LocalParticipant | null>(null);
+  
+  // Получаем локального участника из комнаты
+  useEffect(() => {
+    if (room && room.localParticipant) {
+      setLocalParticipant(room.localParticipant);
+    }
+  }, [room]);
   
   // Расширенное состояние для отслеживания дополнительной отладочной информации
   const [debugState, setDebugState] = useState<{
@@ -104,12 +111,32 @@ export default function VideoDebug() {
     // Определяем статус комнаты
     let roomStatus = 'Не подключено';
     if (room) {
-      roomStatus = `${room.name} (${ConnectionState[room.state]})`;
+      // Используем ручное преобразование состояния в строку вместо ConnectionState[room.state]
+      let stateStr;
+      switch (room.state) {
+        case ConnectionState.Disconnected:
+          stateStr = 'отключено';
+          break;
+        case ConnectionState.Connected:
+          stateStr = 'подключено';
+          break;
+        case ConnectionState.Connecting:
+          stateStr = 'подключение';
+          break;
+        case ConnectionState.Reconnecting:
+          stateStr = 'переподключение';
+          break;
+        default:
+          stateStr = 'неизвестно';
+      }
+      
+      roomStatus = `${room.name} (${stateStr})`;
       
       // Дополнительная информация о комнате для отладки
       console.log('Debug Room Status:', {
         name: room.name,
-        state: ConnectionState[room.state],
+        state: stateStr,
+        roomState: room.state,
         numParticipants: room.numParticipants,
         metadata: room.metadata,
       });

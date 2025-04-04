@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
 import { Room, LocalParticipant, Track } from "livekit-client";
-import { useLocalParticipant } from "@livekit/components-react";
+import { useRoomContext } from "./CustomLiveKitRoom";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle } from "lucide-react";
 
@@ -11,7 +11,15 @@ interface ControlBarProps {
 }
 
 export default function ControlBar({ onLeave }: ControlBarProps) {
-  const { localParticipant } = useLocalParticipant();
+  const room = useRoomContext();
+  const [localParticipant, setLocalParticipant] = useState<LocalParticipant | null>(null);
+  
+  // Получаем локального участника из комнаты
+  useEffect(() => {
+    if (room && room.localParticipant) {
+      setLocalParticipant(room.localParticipant);
+    }
+  }, [room]);
   const [isMicrophoneMuted, setIsMicrophoneMuted] = useState(false);
   const [isCameraMuted, setIsCameraMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
