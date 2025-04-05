@@ -129,90 +129,9 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
   ).filter(track => track.participant.identity === participant.identity);
   
   const hasVideo = videoTracks.length > 0;
-  const slotsManager = useSlots(participant.identity);
-
-  // Состояния для поддержки drag and drop
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // Обработчики событий drag and drop
-  const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('text/plain', participant.identity);
-    e.dataTransfer.effectAllowed = 'move';
-    setIsDragging(true);
-    
-    // Добавляем класс для стилизации при перетаскивании
-    e.currentTarget.classList.add('dragging');
-    
-    // Создаем и отображаем красивую превью для перетаскивания
-    try {
-      const previewDiv = document.createElement('div');
-      previewDiv.className = 'drag-preview';
-      previewDiv.textContent = `${participant.identity} (Слот ${slotNumber})`;
-      previewDiv.style.cssText = `
-        position: absolute; 
-        left: -9999px;
-        background-color: rgba(30, 41, 59, 0.8);
-        color: white;
-        border-radius: 8px;
-        padding: 10px;
-        font-size: 14px;
-        font-weight: 500;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        pointer-events: none;
-        z-index: 9999;
-      `;
-      document.body.appendChild(previewDiv);
-      e.dataTransfer.setDragImage(previewDiv, 75, 25);
-      setTimeout(() => {
-        document.body.removeChild(previewDiv);
-      }, 0);
-    } catch (error) {
-      console.log('Error creating drag preview:', error);
-    }
-  };
-  
-  const handleDragEnd = (e: React.DragEvent) => {
-    setIsDragging(false);
-    e.currentTarget.classList.remove('dragging');
-  };
-  
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    e.currentTarget.classList.add('drop-target');
-  };
-  
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.currentTarget.classList.remove('drop-target');
-  };
-  
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.currentTarget.classList.remove('drop-target');
-    
-    const draggedUserId = e.dataTransfer.getData('text/plain');
-    
-    // Перемещаем пользователя на новый слот
-    if (draggedUserId && draggedUserId !== participant.identity) {
-      console.log(`[DRAG-DROP] Перемещаем пользователя ${draggedUserId} в слот ${slotNumber}, занятый ${participant.identity}`);
-      slotsManager.moveUserToSlot(slotNumber, draggedUserId);
-    } else if (draggedUserId === participant.identity) {
-      console.log(`[DRAG-DROP] Предотвращена попытка перемещения пользователя ${draggedUserId} в собственный слот ${slotNumber}`);
-    } else {
-      console.log(`[DRAG-DROP] Получен пустой draggedUserId при перетаскивании в слот ${slotNumber}`);
-    }
-  };
   
   return (
-    <div 
-      className={`video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700 ${isDragging ? 'opacity-50' : ''}`}
-      draggable="true"
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+    <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
       {hasVideo ? (
         <div className="h-full w-full relative flex items-center justify-center">
           {/* Здесь мы используем первый найденный трек */}
@@ -252,13 +171,6 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
       <div className="absolute bottom-2 left-8 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
         {participant.identity}
       </div>
-      
-      {/* Индикатор перетаскивания */}
-      {isDragging && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
-          <div className="text-white font-medium">Перетаскивание...</div>
-        </div>
-      )}
     </div>
   );
 }
@@ -267,44 +179,10 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
  * Компонент для отображения пустого слота
  */
 function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) {
-  const slotNumber = index + 1;
-  const participants = useParticipants();
-  const slotsManager = useSlots('');
-  
-  // Обработчики drag-and-drop для пустого слота
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    e.currentTarget.classList.add('drop-target');
-  };
-  
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.currentTarget.classList.remove('drop-target');
-  };
-  
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.currentTarget.classList.remove('drop-target');
-    
-    const draggedUserId = e.dataTransfer.getData('text/plain');
-    
-    // Если получен идентификатор пользователя, перемещаем его в этот пустой слот
-    if (draggedUserId) {
-      console.log(`[DRAG-DROP] Перемещаем пользователя ${draggedUserId} в пустой слот ${slotNumber}`);
-      slotsManager.moveUserToSlot(slotNumber, draggedUserId);
-    } else {
-      console.log(`[DRAG-DROP] Получен пустой draggedUserId при перетаскивании в пустой слот ${slotNumber}`);
-    }
-  };
-  
   return (
     <div 
-      className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 
-                cursor-pointer hover:border-slate-500/50 transition-colors"
+      className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 cursor-pointer"
       onClick={onClick}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
     >
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center">
@@ -324,19 +202,12 @@ function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) 
               />
             </svg>
           </div>
+
         </div>
       </div>
-      
       {/* Только номер слота для пустого слота */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
-        {slotNumber === 12 ? "Ведучий" : slotNumber}
-      </div>
-      
-      {/* Визуальная подсказка для drag-and-drop */}
-      <div className="absolute inset-0 bg-slate-900/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-        <div className="text-white text-xs font-medium bg-slate-900/60 py-1 px-3 rounded-full">
-          Перетащите сюда участника
-        </div>
+        {index + 1 === 12 ? "Ведучий" : index + 1}
       </div>
     </div>
   );

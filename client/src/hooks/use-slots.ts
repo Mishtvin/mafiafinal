@@ -28,22 +28,6 @@ export function useSlots(userId: string) {
 
   const socketRef = useRef<WebSocket | null>(null);
   const userIdRef = useRef(userId);
-  
-  // Добавляем поддержку для операции обмена слотами
-  const moveUserToSlot = useCallback((targetSlot: number, userId: string) => {
-    if (targetSlot < 1 || targetSlot > 12) {
-      console.log(`[MOVE USER] Ошибка: некорректный номер слота ${targetSlot}`);
-      return false;
-    }
-    
-    console.log(`[MOVE USER] Отправляем запрос на перемещение пользователя ${userId} в слот ${targetSlot}`);
-    
-    return sendMessage({
-      type: 'move_user',
-      userId,
-      targetSlot
-    });
-  }, []);
 
   // Функция для отправки сообщения через WebSocket
   const sendMessage = useCallback((message: any) => {
@@ -237,7 +221,6 @@ export function useSlots(userId: string) {
     ...state,
     selectSlot,
     releaseSlot,
-    setCameraState,
-    moveUserToSlot
+    setCameraState
   };
 }
