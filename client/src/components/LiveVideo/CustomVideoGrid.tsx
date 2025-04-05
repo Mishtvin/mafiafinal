@@ -186,34 +186,6 @@ export function CustomVideoGrid() {
           );
         })}
       </div>
-      
-      {/* Кнопка для сброса всех состояний игроков (только для ведущего) */}
-      {isHost && (
-        <div className="absolute bottom-2 left-0 right-0 flex justify-center">
-          <button
-            className="bg-yellow-600/80 hover:bg-yellow-700/90 text-white px-3 py-2 rounded-md shadow-md text-sm font-medium flex items-center space-x-2"
-            onClick={() => playerStatesManager.resetAllPlayerStates()}
-            title="Сбросить все отметки 'убит'"
-          >
-            <span>🔄</span>
-            <span>Сбросить все состояния</span>
-          </button>
-        </div>
-      )}
-      
-      {/* Кнопка для перемешивания всех игроков (только для ведущего) */}
-      {isHost && (
-        <div className="absolute bottom-2 right-4">
-          <button
-            className="bg-blue-600/80 hover:bg-blue-700/90 text-white px-3 py-2 rounded-md shadow-md text-sm font-medium flex items-center space-x-2"
-            onClick={() => slotsManager.shuffleAllUsers()}
-            title="Случайно перемешать всех игроков"
-          >
-            <span>🎲</span>
-            <span>Перемешать</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
