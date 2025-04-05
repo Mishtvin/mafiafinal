@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-// Используем стандартную обертку LiveKitRoom из пакета
-import { LiveKitRoom } from '@livekit/components-react';
+// Используем кастомную обертку вместо стандартного LiveKitRoom
+import CustomLiveKitRoom from '../components/VideoConference/CustomLiveKitRoom';
 import ParticipantGrid from '../components/VideoConference/ParticipantGrid';
 import ControlBar from '../components/VideoConference/ControlBar';
 import ConnectionIndicator from '../components/VideoConference/ConnectionIndicator';
@@ -362,7 +362,7 @@ export default function VideoConference() {
       )}
 
       {token ? (
-        <LiveKitRoom
+        <CustomLiveKitRoom
           serverUrl={serverUrl}
           token={token}
           connect={true}
@@ -370,10 +370,7 @@ export default function VideoConference() {
           options={roomOptions}
           video={initialVideo}
           audio={false}
-          onConnected={() => {
-            // Получаем объект Room из РумКонтекста позже в компоненте
-            console.log('Room connected');
-          }}
+          onConnected={handleRoomConnection}
         >
           <div className="flex flex-col h-screen">
             {/* Header section */}
@@ -439,7 +436,7 @@ export default function VideoConference() {
               onClose={() => setIsSettingsOpen(false)} 
             />
           </div>
-        </LiveKitRoom>
+        </CustomLiveKitRoom>
       ) : (
         <div className="flex items-center justify-center h-screen bg-slate-900">
           {hasJoined && !error && (
