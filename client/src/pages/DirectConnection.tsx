@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Room, VideoPresets, RoomOptions, VideoCodec } from 'livekit-client';
+import { VideoCodec } from 'livekit-client';
 import { fetchToken } from '../lib/livekit';
 import { decodePassphrase, encodePassphrase, generateRoomId } from '../lib/utils';
+import { VideoConferenceClient } from '../components/LiveVideo/VideoConferenceClient';
 
 export default function DirectConnection() {
   const [token, setToken] = useState<string | null>(null);
@@ -49,27 +50,23 @@ export default function DirectConnection() {
     setHasJoined(true);
   };
 
-  const roomOptions: RoomOptions = {
-    publishDefaults: {
-      videoSimulcastLayers: [VideoPresets.h540, VideoPresets.h216],
-      red: !isE2EEEnabled,
-      videoCodec: codec,
-    },
-    adaptiveStream: { pixelDensity: 'screen' },
-    dynacast: true,
-    // E2EE is handled separately
-  };
-
-  const handleRoomConnection = (room: Room) => {
-    console.log('Connected to LiveKit room:', room.name);
+  const handleCreateRoom = () => {
+    const newRoomId = generateRoomId();
+    setRoomId(newRoomId);
     
-    room.on('participantConnected', (participant) => {
-      console.log('Remote participant connected:', participant.identity);
-    });
-
-    room.on('participantDisconnected', (participant) => {
-      console.log('Remote participant disconnected:', participant.identity);
-    });
+    // Если включено E2EE, генерируем passphrase и добавляем в хеш
+    if (isE2EEEnabled) {
+      const passphrase = Math.random().toString(36).substring(2, 15) + 
+                        Math.random().toString(36).substring(2, 15);
+      setE2eePassphrase(passphrase);
+      
+      // Добавляем passphrase в хеш URL
+      if (typeof window !== 'undefined') {
+        window.location.hash = encodePassphrase(passphrase);
+      }
+    }
+    
+    setHasJoined(true);
   };
 
   return (
@@ -78,29 +75,58 @@ export default function DirectConnection() {
         <div className="flex items-center justify-center h-screen">
           <div className="text-center p-8 max-w-md">
             <h1 className="text-3xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-              Direct Connection
+              MafiaLive - Direct Connection
             </h1>
             <p className="mb-8">
-              Basic VideoConference without custom components.
+              Использует LiveKit компоненты для видеоконференции.
             </p>
-            <button 
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-              onClick={handleJoin}
-            >
-              Join Conference
-            </button>
+            
+            <div className="flex flex-col space-y-4 mb-6">
+              <div className="flex items-center">
+                <input
+                  id="e2ee"
+                  type="checkbox"
+                  checked={isE2EEEnabled}
+                  onChange={(e) => setIsE2EEEnabled(e.target.checked)}
+                  className="mr-2"
+                />
+                <label htmlFor="e2ee">Включить E2EE шифрование</label>
+              </div>
+            </div>
+            
+            <div className="flex space-x-4">
+              <button 
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                onClick={handleJoin}
+              >
+                Подключиться к существующей комнате
+              </button>
+              
+              <button 
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                onClick={handleCreateRoom}
+              >
+                Создать новую комнату
+              </button>
+            </div>
           </div>
         </div>
       ) : token ? (
-        <div>
-          <p>Implementing base LiveKit connection</p>
-          {/* We would implement direct LiveKit components here */}
+        <div className="h-screen">
+          <VideoConferenceClient 
+            liveKitUrl={serverUrl}
+            token={token}
+            codec={codec}
+          />
         </div>
       ) : (
         <div className="flex items-center justify-center h-screen">
           <div className="text-center text-white">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p>Connecting to conference...</p>
+            <p>Подключение к конференции...</p>
+            <p className="text-sm mt-2">Комната: {roomId}</p>
+            <p className="text-sm">Пользователь: {username}</p>
+            {isE2EEEnabled && <p className="text-sm text-green-400">E2EE шифрование включено</p>}
           </div>
         </div>
       )}
