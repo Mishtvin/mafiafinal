@@ -39,6 +39,33 @@ export function useSlots(userId: string) {
   const userIdRef = useRef(userId);
   const reconnectAttempts = useRef(0);
   
+  // Функция для генерации уникального sessionId
+  const generateSessionId = useCallback(() => {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    const devicePart = navigator.userAgent.slice(0, 5)
+      .split('')
+      .map(c => c.charCodeAt(0))
+      .join('');
+    
+    return `session-${timestamp}-${random}-${devicePart}`;
+  }, []);
+  
+  // Функция для получения или создания sessionId
+  const getOrCreateSessionId = useCallback(() => {
+    let sessionId = localStorage.getItem('mafia_session_id');
+    
+    if (!sessionId) {
+      sessionId = generateSessionId();
+      localStorage.setItem('mafia_session_id', sessionId);
+      console.log(`🆕 Создан новый sessionId: ${sessionId}`);
+    } else {
+      console.log(`📋 Найден существующий sessionId: ${sessionId}`);
+    }
+    
+    return sessionId;
+  }, [generateSessionId]);
+  
   // Функция для сохранения информации о слоте в localStorage
   const saveSlotToStorage = useCallback((slotNumber: number) => {
     try {
@@ -52,7 +79,8 @@ export function useSlots(userId: string) {
         timestamp: Date.now(),
         globalIdentity: window.currentUserIdentity || 'not_set',
         origin: window.location.origin,
-        device: navigator.userAgent.substring(0, 50)
+        device: navigator.userAgent.substring(0, 50),
+        sessionId: getOrCreateSessionId() // Добавляем sessionId в сохраняемые данные
       };
       
       // Сохраняем в localStorage
@@ -76,7 +104,7 @@ export function useSlots(userId: string) {
     } catch (error) {
       console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при сохранении слота:', error);
     }
-  }, [userId]);
+  }, [userId, getOrCreateSessionId]);
   
   // Получение сохраненного слота для пользователя из localStorage
   const getSavedSlot = useCallback(() => {
@@ -305,14 +333,19 @@ export function useSlots(userId: string) {
         // Получаем предпочтительный слот из localStorage
         const preferredSlot = getSavedSlot();
         
-        // Регистрируем пользователя на сервере, включая предпочтительный слот
+        // Получаем идентификатор сессии из localStorage, если есть
+        const sessionId = localStorage.getItem('mafia_session_id');
+        
+        // Регистрируем пользователя на сервере, включая предпочтительный слот и sessionId
         console.log('📲 Регистрируем пользователя:', effectiveUserId, 
-                    preferredSlot ? `с предпочтительным слотом ${preferredSlot}` : 'без предпочтительного слота');
+                    preferredSlot ? `с предпочтительным слотом ${preferredSlot}` : 'без предпочтительного слота',
+                    sessionId ? `и sessionId ${sessionId}` : 'без sessionId');
         
         sendMessage({
           type: 'register',
           userId: effectiveUserId,
-          preferredSlot: preferredSlot
+          preferredSlot: preferredSlot,
+          sessionId // Передаем ID сессии для восстановления данных на сервере
         });
       };
 

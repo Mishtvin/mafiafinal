@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { AccessToken, VideoGrant } from "livekit-server-sdk";
 import { WebSocketServer } from "ws";
 import { WebSocket } from "ws";
+import { randomUUID } from 'crypto';
 
 // LiveKit настройки
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
@@ -15,6 +16,35 @@ interface SlotInfo {
   userId: string;
   slotNumber: number;
 }
+
+// Сессионное хранилище для сохранения данных между перезагрузками
+interface SessionData {
+  userId: string;
+  preferredSlot?: number;
+  timestamp: number;
+}
+
+// Создаем сессионное хранилище
+const SESSION_STORE = new Map<string, SessionData>();
+
+// Периодически очищаем старые сессии (старше 24 часов)
+setInterval(() => {
+  const MAX_SESSION_AGE = 24 * 60 * 60 * 1000; // 24 часа
+  const now = Date.now();
+  
+  let sessionsRemoved = 0;
+  
+  SESSION_STORE.forEach((data, sessionId) => {
+    if (now - data.timestamp > MAX_SESSION_AGE) {
+      SESSION_STORE.delete(sessionId);
+      sessionsRemoved++;
+    }
+  });
+  
+  if (sessionsRemoved > 0) {
+    console.log(`🧹 Очищено ${sessionsRemoved} устаревших сессий`);
+  }
+}, 3600000); // Проверяем каждый час
 
 // Хранилище данных о слотах
 const slotAssignments = new Map<number, string>(); // slotNumber -> userId
@@ -90,7 +120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST endpoint для токенов LiveKit
   app.post('/api/livekit/token', async (req, res) => {
     try {
-      const { identity, roomName } = req.body;
+      const { identity, roomName, sessionId, deviceId } = req.body;
       
       if (!identity) {
         return res.status(400).json({ error: 'Missing identity parameter' });
@@ -128,8 +158,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log("Generated token for POST request:", identity, "room:", actualRoomName);
         
+        // Обработка сессии для установления постоянной идентификации
+        let validSessionId = sessionId;
+        let userSlot: number | undefined = undefined;
+        
+        if (sessionId && SESSION_STORE.has(sessionId)) {
+          // Если сессия существует, проверяем соответствие пользователя
+          const sessionData = SESSION_STORE.get(sessionId)!;
+          if (sessionData.userId === identity) {
+            // Пользователь совпадает, восстанавливаем его предпочтительный слот
+            userSlot = sessionData.preferredSlot;
+            
+            // Обновляем временную метку для продления жизни сессии
+            sessionData.timestamp = Date.now();
+            SESSION_STORE.set(sessionId, sessionData);
+            
+            console.log(`🔄 Обновлена существующая сессия ${sessionId} для ${identity}, слот=${userSlot}`);
+          } else {
+            // Пользователь изменился - создадим новую сессию
+            console.log(`⚠️ Сессия ${sessionId} принадлежит ${sessionData.userId}, а не ${identity}. Создаем новую.`);
+            validSessionId = randomUUID();
+            SESSION_STORE.set(validSessionId, {
+              userId: identity,
+              timestamp: Date.now()
+            });
+          }
+        } else if (!validSessionId) {
+          // Если сессия не существует, создаем новую
+          validSessionId = randomUUID();
+          SESSION_STORE.set(validSessionId, {
+            userId: identity,
+            timestamp: Date.now()
+          });
+          console.log(`🆕 Создана новая сессия ${validSessionId} для ${identity}`);
+        }
+        
+        // Проверяем наличие сохраненного слота для пользователя
+        if (!userSlot && userSlots.has(identity)) {
+          userSlot = userSlots.get(identity);
+          console.log(`📋 Найден активный слот ${userSlot} для ${identity}`);
+        }
+        
+        // Если есть слот и сессия - сохраняем слот в сессии
+        if (userSlot && validSessionId) {
+          const sessionData = SESSION_STORE.get(validSessionId) || { 
+            userId: identity, 
+            timestamp: Date.now(),
+            preferredSlot: undefined
+          } as SessionData;
+          
+          sessionData.preferredSlot = userSlot;
+          SESSION_STORE.set(validSessionId, sessionData);
+          console.log(`💾 Сохранен слот ${userSlot} в сессии ${validSessionId} для ${identity}`);
+        }
+        
         // Возвращаем токен в формате, который ожидает клиент
-        return res.json({ token: tokenString, identity, room: actualRoomName });
+        return res.json({ 
+          token: tokenString, 
+          identity, 
+          room: actualRoomName,
+          sessionId: validSessionId,
+          slot: userSlot
+        });
       } catch (tokenError) {
         console.error('Error generating token:', tokenError);
         return res.status(500).json({ error: 'Failed to generate token' });
@@ -330,6 +420,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             console.log(`🆕 РЕГИСТРАЦИЯ: пользователь ${userId}`);
             connections.set(userId, ws);
+            
+            // Обрабатываем sessionId, если он был передан
+            const sessionId = data.sessionId;
+            if (sessionId) {
+              console.log(`🔑 Получен sessionId ${sessionId} при регистрации ${userId}`);
+              
+              // Проверяем, существует ли сессия
+              if (SESSION_STORE.has(sessionId)) {
+                const sessionData = SESSION_STORE.get(sessionId)!;
+                
+                // Обновляем время сессии
+                sessionData.timestamp = Date.now();
+                
+                // Если пользователь совпадает, и есть предпочтительный слот в сессии,
+                // используем его вместо переданного в сообщении
+                if (sessionData.userId === userId && sessionData.preferredSlot) {
+                  console.log(`📋 Найден предпочтительный слот ${sessionData.preferredSlot} в сессии ${sessionId} для ${userId}`);
+                  data.preferredSlot = sessionData.preferredSlot;
+                } else if (sessionData.userId !== userId) {
+                  // Пользователь не совпадает с сессией - это неожиданно
+                  console.warn(`⚠️ SessionId ${sessionId} принадлежит ${sessionData.userId}, а не ${userId}`);
+                }
+              } else {
+                // Сессия не найдена, но клиент передал sessionId - создаем новую запись
+                console.log(`⚠️ Сессия ${sessionId} не найдена, создаем новую`);
+                SESSION_STORE.set(sessionId, {
+                  userId,
+                  timestamp: Date.now(),
+                  preferredSlot: undefined
+                } as SessionData);
+              }
+            }
             
             // Обрабатываем предпочтительный слот с дополнительными проверками
             let preferredSlot: number | null = null;
