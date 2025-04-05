@@ -54,10 +54,19 @@ export function CustomVideoGrid() {
   const slotNumbers = Array.from({ length: 12 }, (_, i) => i + 1);
   
   // Создаем мапу для участников в нужных слотах
+  // Создаем мапу для всех участников
   const participantsMap = new Map<string, Participant>();
   participants.forEach(p => {
     participantsMap.set(p.identity, p);
+    console.log(`Найден участник: ${p.identity}, isLocal: ${p.isLocal}`);
   });
+  
+  // Добавляем текущего локального участника в мапу слотов
+  if (currentLocalParticipant && slotsManager.connected && slotsManager.userSlot) {
+    console.log(
+      `Принудительно добавляем локального участника в слот ${slotsManager.userSlot}: ${currentLocalParticipant.identity}`
+    );
+  }
   
   // Debug
   useEffect(() => {
@@ -67,14 +76,28 @@ export function CustomVideoGrid() {
     }
   }, [slotsManager.slots, slotsManager.userSlot, slotsManager.connected]);
 
+  // Принудительно отображаем локального участника в его слоте
+  // даже если в мапе слотов не совпадают идентификаторы
+  useEffect(() => {
+    if (currentLocalParticipant && slotsManager.userSlot && slotsManager.connected) {
+      // Добавляем текущего участника принудительно в его слот
+      slotsManager.slots[slotsManager.userSlot] = currentLocalParticipant.identity;
+      console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
+    }
+  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected]);
+
   return (
     <div className="h-full w-full p-4">
       <div className="video-grid">
         {slotNumbers.map(slotNumber => {
           // Получаем ID пользователя, занимающего слот
           const userId = slotsManager.slots[slotNumber];
-          // Получаем объект участника по ID
-          const participant = userId ? participantsMap.get(userId) : undefined;
+          // Проверяем, является ли этот слот слотом текущего локального участника
+          const isCurrentUserSlot = slotsManager.userSlot === slotNumber && currentLocalParticipant;
+          // Получаем объект участника по ID или локального участника для его слота
+          const participant = isCurrentUserSlot 
+            ? currentLocalParticipant 
+            : (userId ? participantsMap.get(userId) : undefined);
           
           return participant ? (
             <ParticipantSlot 

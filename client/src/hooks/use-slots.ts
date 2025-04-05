@@ -55,6 +55,7 @@ export function useSlots(userId: string) {
   useEffect(() => {
     // Сохраняем актуальный userId в ref
     userIdRef.current = userId;
+    console.log('ID пользователя обновлен в useSlots:', userId);
 
     // Функция для установки соединения
     const connectWebSocket = () => {
@@ -123,6 +124,7 @@ export function useSlots(userId: string) {
                 console.log(`Слот ${slot.slotNumber} занят пользователем ${slot.userId}`);
                 
                 // Если это слот текущего пользователя
+                console.log(`Сравниваем ${slot.userId} и ${userIdRef.current}`);
                 if (slot.userId === userIdRef.current) {
                   userSlot = slot.slotNumber;
                   console.log(`Найден слот текущего пользователя: ${userSlot}`);
