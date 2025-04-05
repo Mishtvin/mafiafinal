@@ -168,15 +168,67 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
     };
   }, []);
   
-  // ВАЖНО: Обработка разъединения комнаты при включении камеры
+  // КРИТИЧЕСКИ ВАЖНОЕ РЕШЕНИЕ: переопределяем метод setCameraEnabled, 
+  // чтобы предотвратить отключение от комнаты
   useEffect(() => {
-    if (room) {
-      console.log('Настраиваем обработчик разъединения для комнаты LiveKit');
+    if (room && room.localParticipant) {
+      console.log('Переопределяем метод setCameraEnabled для предотвращения отключений');
       
-      // Функция обработки разъединения
+      // Сохраняем ссылку на оригинальный метод
+      const originalSetCameraEnabled = room.localParticipant.setCameraEnabled;
+      
+      // Переопределяем метод
+      // @ts-ignore - игнорируем TypeScript здесь, т.к. мы модифицируем приватный API
+      room.localParticipant.setCameraEnabled = async function(enabled: boolean) {
+        console.log('ПЕРЕОПРЕДЕЛЕННЫЙ МЕТОД setCameraEnabled вызван с', enabled);
+        
+        // Сохраняем состояние для будущего восстановления при возможном отключении
+        window.sessionStorage.setItem('camera-state', String(enabled));
+        
+        try {
+          // Главный хак: если мы включаем камеру, делаем это с особой защитой
+          if (enabled) {
+            // Заглушаем события отключения перед включением камеры
+            const originalDisconnectHandler = room._disconnectHandler;
+            // @ts-ignore
+            room._disconnectHandler = () => {
+              console.log('Блокировка автоматического отключения при включении камеры');
+            };
+            
+            try {
+              // Вызываем оригинальный метод
+              await originalSetCameraEnabled.call(room.localParticipant, enabled);
+              console.log('Камера успешно включена без отключения от комнаты');
+              
+              // Устанавливаем таймер для восстановления handler после успешного включения
+              setTimeout(() => {
+                // @ts-ignore
+                room._disconnectHandler = originalDisconnectHandler;
+                console.log('Восстановлен оригинальный обработчик отключений');
+              }, 1000);
+              
+              return true;
+            } catch (err) {
+              console.error('Ошибка при включении камеры:', err);
+              // Восстанавливаем handler в случае ошибки
+              // @ts-ignore
+              room._disconnectHandler = originalDisconnectHandler;
+              throw err;
+            }
+          } else {
+            // Для выключения камеры используем оригинальный метод без изменений
+            return await originalSetCameraEnabled.call(room.localParticipant, enabled);
+          }
+        } catch (err) {
+          console.error('Ошибка в переопределенном методе setCameraEnabled:', err);
+          throw err;
+        }
+      };
+      
+      // Функция обработки разъединения для обычных случаев (не связанных с камерой)
       const handleDisconnected = () => {
         console.log('Обнаружено отключение от комнаты LiveKit');
-        // Если отключение происходит при включении камеры, сохраняем желаемое состояние
+        // Сохраняем последнее состояние камеры
         const savedState = window.sessionStorage.getItem('camera-state');
         console.log('При отключении: сохраняем состояние камеры:', savedState);
       };
@@ -184,9 +236,14 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       // Добавляем слушатель события отключения
       room.on('disconnected', handleDisconnected);
       
-      // Удаляем слушатель при размонтировании
+      // Удаляем слушатель и восстанавливаем оригинальный метод при размонтировании
       return () => {
         room.off('disconnected', handleDisconnected);
+        // Восстанавливаем оригинальный метод при размонтировании
+        if (room && room.localParticipant) {
+          // @ts-ignore
+          room.localParticipant.setCameraEnabled = originalSetCameraEnabled;
+        }
       };
     }
   }, [room]);
