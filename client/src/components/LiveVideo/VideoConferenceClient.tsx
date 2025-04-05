@@ -96,27 +96,29 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       try {
         console.log('Переключаем на камеру с ID:', deviceId);
         
-        // Сначала отключаем камеру
-        await room.localParticipant.setCameraEnabled(false);
+        // Обновляем выбранную камеру и используем её при следующем включении
+        setSelectedCamera(deviceId);
         
-        // Небольшая задержка перед сменой трека
-        setTimeout(async () => {
-          try {
-            // Создаем новый трек с указанным deviceId
-            const { localTrack: videoTrack } = await createLocalVideoTrack({
-              deviceId: { exact: deviceId },
-            });
-            
-            // Публикуем новый трек
-            await room.localParticipant.publishTrack(videoTrack);
-            setSelectedCamera(deviceId);
-            console.log('Камера успешно переключена');
-          } catch (err) {
-            console.error('Ошибка при публикации нового трека:', err);
-            // В случае ошибки пробуем восстановить камеру
-            room.localParticipant.setCameraEnabled(true);
-          }
-        }, 200);
+        // Если камера уже включена, то быстро переключаем её
+        if (room.localParticipant.isCameraEnabled) {
+          // Временно отключаем камеру
+          await room.localParticipant.setCameraEnabled(false);
+          
+          // Переключаем на новую камеру с задержкой
+          setTimeout(async () => {
+            try {
+              // Включаем камеру с новым deviceId
+              await room.localParticipant.setCameraEnabled(true, {
+                deviceId: { exact: deviceId }
+              });
+              console.log('Камера успешно переключена на:', deviceId);
+            } catch (err) {
+              console.error('Ошибка при включении новой камеры:', err);
+              // Пробуем просто включить камеру обратно
+              room.localParticipant.setCameraEnabled(true);
+            }
+          }, 300);
+        }
       } catch (err) {
         console.error('Ошибка при переключении камеры:', err);
       }
@@ -149,22 +151,16 @@ const ControlDrawer = ({ room }: { room: Room }) => {
               onClick={toggleCamera}
             >
               {cameraEnabled ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 7 16 12 23 17z"></path>
-                    <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
-                  </svg>
-                  <span>Выкл. камеру</span>
-                </>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 7 16 12 23 17z"></path>
+                  <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
+                </svg>
               ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="m2 2 20 20"></path>
-                    <path d="M9 9a3 3 0 0 1 5.12-2.12"></path>
-                    <path d="M22 12 A10 10 0 0 0 12 2v0a10 10 0 0 0-2 19.5"></path>
-                  </svg>
-                  <span>Вкл. камеру</span>
-                </>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500">
+                  <path d="M23 7 16 12 23 17z"></path>
+                  <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
+                  <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2"></line>
+                </svg>
               )}
             </button>
             
@@ -211,7 +207,6 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                 <polyline points="16 17 21 12 16 7"></polyline>
                 <line x1="21" x2="9" y1="12" y2="12"></line>
               </svg>
-              <span>Выйти</span>
             </button>
           </div>
         </div>
