@@ -74,6 +74,29 @@ export function CustomVideoGrid() {
   // Логируем рендер контейнера
   console.log('[RENDER] CustomVideoGrid контейнер - перерисовывается при любых изменениях состояния');
   
+  // Получаем все видео треки для проверки локальной камеры
+  const localVideoTracks = useTracks(
+    [Track.Source.Camera],
+    { onlySubscribed: false }
+  ).filter(track => track.participant.isLocal);
+  
+  // Определяем, включена ли локальная камера, даже если это еще не отражено в cameraStates
+  const localCameraEnabled = localVideoTracks.length > 0 && localVideoTracks[0].publication.isEnabled;
+  
+  // Принудительно синхронизируем локальную камеру в cameraStates
+  useEffect(() => {
+    if (currentLocalParticipant) {
+      const localUserId = currentLocalParticipant.identity;
+      const currentSavedState = slotsManager.cameraStates[localUserId];
+      
+      if (localCameraEnabled !== currentSavedState) {
+        console.log(`Синхронизируем локальное состояние камеры: ${localCameraEnabled ? 'включена' : 'выключена'}`);
+        // Синхронизируем состояние без отправки WebSocket сообщений
+        slotsManager.setCameraEnabled(localCameraEnabled);
+      }
+    }
+  }, [currentLocalParticipant, localCameraEnabled, slotsManager]);
+
   // Рендерим мемоизированный grid для предотвращения перерисовки
   // при изменении только состояния камеры
   return (
@@ -87,6 +110,7 @@ export function CustomVideoGrid() {
         cameraStates={slotsManager.cameraStates}
         lastUpdatedCamera={slotsManager.lastUpdatedCamera}
         cameraUpdateTimestamp={slotsManager.cameraUpdateTimestamp}
+        localCameraEnabled={localCameraEnabled}
       />
     </div>
   );
@@ -106,7 +130,8 @@ const MemoizedVideoGrid = React.memo(
     onSlotClick,
     cameraStates,
     lastUpdatedCamera,
-    cameraUpdateTimestamp
+    cameraUpdateTimestamp,
+    localCameraEnabled
   }: {
     slots: Record<number, string>;
     userSlot: number | null;
@@ -116,6 +141,7 @@ const MemoizedVideoGrid = React.memo(
     cameraStates: Record<string, boolean>;
     lastUpdatedCamera?: string;
     cameraUpdateTimestamp?: number;
+    localCameraEnabled: boolean;
   }) {
     // Создаем сетку из 12 слотов
     const slotNumbers = useMemo(() => {
@@ -140,12 +166,18 @@ const MemoizedVideoGrid = React.memo(
           const needsUpdate = userId && lastUpdatedCamera === userId && cameraUpdateTimestamp;
           const updateKey = needsUpdate ? `update-${cameraUpdateTimestamp}` : '';
           
+          // Определяем, включена ли камера
+          // Особый случай для локального участника: используем локальное состояние
+          const cameraOn = isCurrentUserSlot 
+            ? localCameraEnabled 
+            : (userId ? cameraStates[userId] || false : false);
+            
           return participant ? (
             <ParticipantSlot 
               key={`slot-${slotNumber}-${updateKey}`}
               participant={participant}
               slotNumber={slotNumber}
-              cameraOn={cameraStates[userId] || false}
+              cameraOn={cameraOn}
             />
           ) : (
             <EmptySlot 
@@ -179,15 +211,21 @@ const MemoizedVideoGrid = React.memo(
       (prevProps.currentLocalParticipant && nextProps.currentLocalParticipant &&
        prevProps.currentLocalParticipant.identity === nextProps.currentLocalParticipant.identity);
     
+    // Проверяем изменение состояния локальной камеры
+    const localCameraEqual = prevProps.localCameraEnabled === nextProps.localCameraEnabled;
+    
     // Если все ключевые значения равны, то не перерисовываем
-    const shouldNotUpdate = slotsEqual && userSlotEqual && participantsMapSizeEqual && localParticipantEqual;
+    const shouldNotUpdate = slotsEqual && userSlotEqual && participantsMapSizeEqual && 
+                            localParticipantEqual && localCameraEqual;
     
     if (!shouldNotUpdate) {
       console.log('[GRID CHANGE] Причина перерисовки сетки:', 
         !slotsEqual ? 'изменились слоты' : 
         !userSlotEqual ? 'изменился userSlot' : 
         !participantsMapSizeEqual ? 'изменилось количество участников' : 
-        !localParticipantEqual ? 'изменился локальный участник' : 'неизвестная причина');
+        !localParticipantEqual ? 'изменился локальный участник' : 
+        !localCameraEqual ? 'изменилось состояние локальной камеры' : 
+        'неизвестная причина');
     }
     
     // Перерисовываем, если изменилось базовое расположение участников
@@ -220,10 +258,19 @@ const ParticipantSlot = React.memo(
     // Получаем видеотреки участника
     const videoTracks = useTracks(
       [Track.Source.Camera],
-      { onlySubscribed: true }
+      { onlySubscribed: isLocal ? false : true }
     ).filter(track => track.participant.identity === identity);
     
-    const hasVideo = videoTracks.length > 0 && cameraOn;
+    // Явное логирование для отладки
+    if (isLocal) {
+      console.log(`Локальный участник ${identity}: треков ${videoTracks.length}, cameraOn=${cameraOn}`);
+      if (videoTracks.length > 0) {
+        console.log(`Статус публикации: ${videoTracks[0].publication.isEnabled ? 'включена' : 'выключена'}`);
+      }
+    }
+    
+    // Для локального участника дополнительно проверяем трек напрямую
+    const hasVideo = videoTracks.length > 0 && (isLocal ? videoTracks[0].publication.isEnabled : cameraOn);
 
     return (
       <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
@@ -265,7 +312,7 @@ const ParticipantSlot = React.memo(
         
         {/* Имя пользователя рядом с номером слота */}
         <div className="absolute bottom-2 left-8 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
-          {identity}
+          {identity} {isLocal ? '(Вы)' : ''}
         </div>
       </div>
     );

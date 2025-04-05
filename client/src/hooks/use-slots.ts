@@ -40,6 +40,33 @@ export function useSlots(userId: string) {
     return false;
   }, []);
   
+  // Функция для локального обновления состояния камеры (без отправки сообщения)
+  // Это используется для синхронизации состояния с реальным состоянием локальной камеры
+  const setCameraEnabled = useCallback((enabled: boolean) => {
+    // Сохраняем состояние камеры в sessionStorage для устойчивости к сбросам
+    window.sessionStorage.setItem('camera-state', String(enabled));
+    console.log(`Сохраняем состояние камеры в sessionStorage: ${enabled}`);
+    
+    // Обновляем состояние локально без отправки на сервер
+    setState(prev => {
+      // Определяем эффективный ID
+      const effectiveUserId = window.currentUserIdentity || userIdRef.current;
+      
+      // Создаем новое состояние камер
+      const newCameraStates = { ...prev.cameraStates };
+      newCameraStates[effectiveUserId] = enabled;
+      
+      return {
+        ...prev,
+        cameraStates: newCameraStates,
+        lastUpdatedCamera: effectiveUserId,
+        cameraUpdateTimestamp: Date.now()
+      };
+    });
+    
+    return true;
+  }, []);
+  
   // Функция для обновления состояния камеры с защитой от слишком частых обновлений
   const lastCameraToggleTime = useRef<number>(0);
   const setCameraState = useCallback((enabled: boolean) => {
@@ -342,6 +369,7 @@ export function useSlots(userId: string) {
     selectSlot,
     releaseSlot,
     setCameraState,
+    setCameraEnabled,
     registerUser
   };
 }
