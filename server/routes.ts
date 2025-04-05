@@ -183,6 +183,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
+    // Проверяем целостность данных между slotAssignments и userSlots
+    userSlots.forEach((slotNumber, userId) => {
+      const assignedUserId = slotAssignments.get(slotNumber);
+      if (!assignedUserId || assignedUserId !== userId) {
+        console.log(`Исправляем несоответствие: слот ${slotNumber} для пользователя ${userId}`);
+        slotAssignments.set(slotNumber, userId);
+        needsUpdate = true;
+      }
+    });
+    
     // Если были изменения - рассылаем обновление
     if (needsUpdate) {
       console.log('Очистка неактивных соединений вызвала рассылку обновлений');
@@ -191,7 +201,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     console.log(`Периодическая проверка: соединения=${connections.size}, слоты=${slotAssignments.size}, присвоено=${userSlots.size}, камеры=${cameraStates.size}`);
-  }, 10000); // каждые 10 секунд
+    
+    // Проверяем корректность назначения слотов
+    // Отладка: показываем все текущие слоты
+    console.log('Текущие назначения слотов:');
+    slotAssignments.forEach((userId, slot) => {
+      console.log(`- Слот ${slot}: ${userId}`);
+    });
+    
+    // Периодически отправляем обновление всем клиентам для синхронизации
+    broadcastSlotUpdate();
+    broadcastCameraStates();
+  }, 5000); // каждые 5 секунд
 
   const pingInterval = 5000; // 5 секунд
   const pingIntervalId = setInterval(() => {
@@ -288,42 +309,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // Если пользователь не занял слот, назначаем свободный
               if (!userSlots.has(userId)) {
+                // Список уже занятых слотов
+                const occupiedSlots = new Set<number>();
+                slotAssignments.forEach((_, slot) => {
+                  occupiedSlots.add(slot);
+                });
+                
+                // Отладка: показываем занятые слоты перед назначением
+                console.log(`Занятые слоты перед назначением для ${userId}:`, Array.from(occupiedSlots));
+                
                 // Находим первый свободный слот
+                let assignedSlot = false;
                 for (let i = 1; i <= 12; i++) {
-                  if (!slotAssignments.has(i)) {
+                  if (!occupiedSlots.has(i)) {
                     slotAssignments.set(i, userId);
                     userSlots.set(userId, i);
                     console.log(`Автоматически назначен слот ${i} для ${userId}`);
+                    assignedSlot = true;
                     break;
                   }
+                }
+                
+                if (!assignedSlot) {
+                  console.warn(`Не удалось найти свободный слот для ${userId}`);
                 }
               }
             } else {
               console.error('Ошибка: получен пустой userId при регистрации');
             }
             
-            // Отправляем текущее состояние слотов
-            const currentSlots: SlotInfo[] = [];
-            slotAssignments.forEach((userId, slotNumber) => {
-              currentSlots.push({ userId, slotNumber });
-            });
+            // Отправляем текущее состояние слотов всем клиентам для синхронизации
+            broadcastSlotUpdate();
             
-            // Отправляем состояние слотов
-            sendToClient({
-              type: 'slots_update',
-              slots: currentSlots
-            });
-            
-            // Отправляем состояние камер
-            const currentCameraStates: Record<string, boolean> = {};
-            cameraStates.forEach((enabled, userId) => {
-              currentCameraStates[userId] = enabled;
-            });
-            
-            sendToClient({
-              type: 'camera_states_update',
-              cameraStates: currentCameraStates
-            });
+            // Отправляем состояние камер всем клиентам для синхронизации
+            broadcastCameraStates();
             break;
             
           case 'select_slot':
