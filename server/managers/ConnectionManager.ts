@@ -344,9 +344,14 @@ export class ConnectionManager {
         break;
         
       case 'camera_state_change':
+      case 'setCameraState':
         // Изменение состояния камеры
+        // Поддерживаем два типа сообщений для обратной совместимости
         if (data.enabled !== undefined) {
           const isEnabled = Boolean(data.enabled);
+          cameraManager.setCameraState(userId, isEnabled);
+        } else if (data.isEnabled !== undefined) {
+          const isEnabled = Boolean(data.isEnabled);
           cameraManager.setCameraState(userId, isEnabled);
         }
         break;

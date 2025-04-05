@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { webSocketService } from '../lib/websocket';
+import { webSocketService, ClientMessage, WebSocketMessage } from '../lib/websocket';
 
 // Интерфейс для контекста WebSocket
 export interface WebSocketContextType {
   status: 'connected' | 'disconnected' | 'connecting' | 'reconnecting';
   isConnected: boolean;
-  sendMessage: (message: any) => boolean;
+  sendMessage: (message: ClientMessage | WebSocketMessage) => boolean;
 }
 
 // Создаем контекст с дефолтными значениями
@@ -18,7 +18,7 @@ const WebSocketContext = createContext<WebSocketContextType>({
 // Провайдер контекста
 export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
   const [status, setStatus] = useState<'connected' | 'disconnected' | 'connecting' | 'reconnecting'>(
-    'disconnected'
+    webSocketService.getStatus()
   );
 
   useEffect(() => {
@@ -49,12 +49,12 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
   const isConnected = status === 'connected';
 
   // Функция для отправки сообщений
-  const sendMessage = (message: any) => {
+  const sendMessage = (message: ClientMessage | WebSocketMessage) => {
     return webSocketService.send(message);
   };
 
   // Предоставляем состояние и функции через контекст
-  const value = {
+  const value: WebSocketContextType = {
     status,
     isConnected,
     sendMessage,
@@ -64,7 +64,7 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
 };
 
 // Хук для использования контекста
-export const useWebSocketContext = () => {
+export const useWebSocketContext = (): WebSocketContextType => {
   const context = useContext(WebSocketContext);
   if (context === undefined) {
     throw new Error('useWebSocketContext must be used within a WebSocketProvider');

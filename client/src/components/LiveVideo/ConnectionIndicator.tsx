@@ -1,12 +1,12 @@
 import React from 'react';
-import { useWebSocket } from '../../hooks/use-websocket';
+import { useWebSocketContext } from '../../contexts/WebSocketContext';
 
 /**
  * Компонент для отображения статуса соединения WebSocket
  * Показывает различные индикаторы в зависимости от состояния соединения
  */
 export const ConnectionIndicator: React.FC = () => {
-  const { status } = useWebSocket();
+  const { status } = useWebSocketContext();
   
   // Определяем классы и текст в зависимости от статуса
   let indicatorClass = '';

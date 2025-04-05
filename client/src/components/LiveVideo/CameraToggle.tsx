@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useWebSocket } from '../../hooks/use-websocket';
-import { useSlots } from '../../hooks/use-slots';
+import React, { useState } from 'react';
+import { useWebSocketContext } from '../../contexts/WebSocketContext';
 import { useCameraContext } from '../../contexts/CameraContext';
 
 /**
@@ -8,10 +7,8 @@ import { useCameraContext } from '../../contexts/CameraContext';
  */
 export const CameraToggle: React.FC = () => {
   // Получаем доступ к состоянию и функциям из контекстов
-  const { isConnected } = useWebSocket();
-  const currentUserId = (window as any).currentUserIdentity || 'unknown-user';
+  const { isConnected } = useWebSocketContext();
   const { cameraEnabled, toggleCamera } = useCameraContext();
-  const slotsManager = useSlots(currentUserId);
   
   // Локальное состояние для анимации
   const [animating, setAnimating] = useState(false);
@@ -20,7 +17,7 @@ export const CameraToggle: React.FC = () => {
   const handleToggle = () => {
     // Не выполняем действие, если не подключены к серверу
     if (!isConnected) {
-      console.log('Невозможно переключить камеру: нет соединения с сервером');
+      console.log('[CameraToggle] Невозможно переключить камеру: нет соединения с сервером');
       return;
     }
     
@@ -29,13 +26,11 @@ export const CameraToggle: React.FC = () => {
     
     // Новое состояние (инвертируем текущее)
     const newState = !cameraEnabled;
-    console.log('Переключение камеры на:', newState);
+    console.log('[CameraToggle] Переключение камеры на:', newState);
     
     // Обновляем состояние камеры в контексте
+    // (это запустит эффект в CameraContext, который отправит WebSocket сообщение)
     toggleCamera();
-    
-    // Отправляем обновление на сервер
-    slotsManager.setCameraState(newState);
     
     // Останавливаем анимацию после завершения
     setTimeout(() => {
