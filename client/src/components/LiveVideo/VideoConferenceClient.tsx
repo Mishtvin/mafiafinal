@@ -51,7 +51,46 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       
       setCameras(videoDevices);
       
-      // Устанавливаем выбранную камеру, если есть хотя бы одна
+      // Проверяем, какая камера используется сейчас через медиа-треки
+      if (room && room.localParticipant) {
+        const videoTracks = room.localParticipant.getTrackPublications().filter(
+          track => track.kind === 'video' && !track.isMuted && track.track
+        );
+        
+        if (videoTracks.length > 0 && videoTracks[0].track) {
+          try {
+            const mediaStreamTrack = videoTracks[0].track.mediaStreamTrack;
+            const trackSettings = mediaStreamTrack.getSettings();
+            
+            // Если у трека есть deviceId, используем его напрямую
+            if (trackSettings.deviceId) {
+              console.log('Определена активная камера через трек:', trackSettings.deviceId);
+              setSelectedCamera(trackSettings.deviceId);
+              return videoDevices;
+            }
+            
+            // Пробуем найти по groupId или label (в случае, если deviceId недоступен)
+            if (trackSettings.groupId || mediaStreamTrack.label) {
+              const matchingDevice = videoDevices.find(device => 
+                (trackSettings.groupId && device.groupId === trackSettings.groupId) ||
+                (mediaStreamTrack.label && 
+                 device.label && 
+                 device.label.includes(mediaStreamTrack.label.split(' ')[0]))
+              );
+              
+              if (matchingDevice) {
+                console.log('Найдено совпадение для активной камеры:', matchingDevice.deviceId);
+                setSelectedCamera(matchingDevice.deviceId);
+                return videoDevices;
+              }
+            }
+          } catch (err) {
+            console.error('Ошибка при определении активной камеры через треки:', err);
+          }
+        }
+      }
+      
+      // Если до сих пор не смогли определить активную камеру, используем первую доступную
       if (videoDevices.length > 0 && !selectedCamera) {
         setSelectedCamera(videoDevices[0].deviceId);
         console.log('Выбрана камера по умолчанию:', videoDevices[0].deviceId);
@@ -69,12 +108,25 @@ const ControlDrawer = ({ room }: { room: Room }) => {
     // Первый запрос при загрузке
     getCameras();
     
-    // Повторный запрос через 2 секунды (для случаев, когда пользователь только что дал разрешение)
-    const delayedRequest = setTimeout(() => {
+    // Также делаем повторные запросы на определение активной камеры
+    // с некоторыми интервалами, чтобы гарантированно определить текущую камеру
+    const delayedRequest1 = setTimeout(() => {
+      getCameras();
+    }, 1000);
+    
+    const delayedRequest2 = setTimeout(() => {
       getCameras();
     }, 2000);
     
-    return () => clearTimeout(delayedRequest);
+    const delayedRequest3 = setTimeout(() => {
+      getCameras();
+    }, 3000);
+    
+    return () => {
+      clearTimeout(delayedRequest1);
+      clearTimeout(delayedRequest2);
+      clearTimeout(delayedRequest3);
+    };
   }, []);
   
   // Обновляем статус камеры при изменении состояния локального участника
@@ -83,35 +135,8 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       if (room && room.localParticipant) {
         setCameraEnabled(room.localParticipant.isCameraEnabled);
         
-        try {
-          // Получаем текущее активное устройство ввода напрямую (не Promise)
-          const activeDevice = room.getActiveDevice('videoinput');
-          if (activeDevice) {
-            console.log('Активное устройство через LiveKit API:', activeDevice);
-            setSelectedCamera(activeDevice);
-          } else {
-            // Запасной вариант - получение через media tracks
-            const videoTracks = room.localParticipant.getTrackPublications().filter(
-              track => track.kind === 'video' && !track.isMuted
-            );
-            
-            if (videoTracks.length > 0 && videoTracks[0].track) {
-              try {
-                const mediaStreamTrack = videoTracks[0].track.mediaStreamTrack;
-                const currentSettings = mediaStreamTrack.getSettings();
-                
-                if (currentSettings.deviceId) {
-                  console.log('Определена активная камера через settings:', currentSettings.deviceId);
-                  setSelectedCamera(currentSettings.deviceId);
-                }
-              } catch (err) {
-                console.error('Ошибка при определении ID камеры через медиатрек:', err);
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Ошибка при получении активного устройства:', err);
-        }
+        // Этот вызов только обновляет список доступных камер и определяет текущую активную
+        getCameras();
       }
     };
     
