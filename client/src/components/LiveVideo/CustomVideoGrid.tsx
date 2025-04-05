@@ -80,13 +80,29 @@ export function CustomVideoGrid() {
   // даже если в мапе слотов не совпадают идентификаторы
   useEffect(() => {
     if (currentLocalParticipant && slotsManager.userSlot && slotsManager.connected) {
-      // Добавляем текущего участника принудительно в его слот
-      const updatedSlots = {...slotsManager.slots};
-      updatedSlots[slotsManager.userSlot] = currentLocalParticipant.identity;
+      // Синхронизируем отображаемый идентификатор участника в слоте
+      // с реальным идентификатором локального участника
+      const localUserSlot = slotsManager.userSlot;
+      const localUserId = currentLocalParticipant.identity;
+      const currentAssignedId = slotsManager.slots[localUserSlot];
       
-      // Проверяем, сколько слотов изменилось
-      const slotEntries = Object.entries(updatedSlots);
-      console.log(`Сработал эффект принудительного обновления`, slotEntries.length);
+      // Проверяем, нужно ли обновление
+      if (currentAssignedId !== localUserId) {
+        console.log(`Фиксируем несоответствие ID в слоте ${localUserSlot}: сейчас=${currentAssignedId}, должен быть=${localUserId}`);
+        
+        // Регистрируем пользователя на сервере повторно для обновления ID
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+          try {
+            socketRef.current.send(JSON.stringify({
+              type: 'register',
+              userId: localUserId
+            }));
+            console.log(`Переотправлена регистрация для синхронизации ID: ${localUserId}`);
+          } catch (e) {
+            console.error('Ошибка отправки синхронизации:', e);
+          }
+        }
+      }
       
       console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
     }
