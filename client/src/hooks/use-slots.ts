@@ -75,8 +75,13 @@ export function useSlots(userId: string) {
     userIdRef.current = userId;
     console.log('ID пользователя обновлен в useSlots:', userId);
 
+    // Увеличиваем попытки переподключения для улучшения надёжности
+    const maxReconnectAttempts = 5;
+    let reconnectAttempt = 0;
+
     // Функция для установки соединения
     const connectWebSocket = () => {
+      reconnectAttempt++;
       setState(prev => ({ ...prev, loading: true, error: null }));
 
       // Определяем адрес WebSocket сервера
@@ -123,12 +128,28 @@ export function useSlots(userId: string) {
         console.log('WebSocket соединение закрыто');
         setState(prev => ({ ...prev, connected: false }));
         
-        // Переподключение через 5 секунд при разрыве соединения
-        setTimeout(() => {
-          if (socketRef.current === socket) {
-            connectWebSocket();
-          }
-        }, 5000);
+        // Уменьшаем время переподключения для более быстрого восстановления
+        // Адаптивный интервал в зависимости от попытки: чем больше попыток, тем больше интервал
+        const reconnectDelay = Math.min(1000 * Math.pow(1.5, reconnectAttempt - 1), 5000);
+        
+        if (reconnectAttempt <= maxReconnectAttempts) {
+          console.log(`Попытка переподключения ${reconnectAttempt}/${maxReconnectAttempts} через ${reconnectDelay}мс`);
+          
+          setTimeout(() => {
+            if (socketRef.current === socket) {
+              connectWebSocket();
+            }
+          }, reconnectDelay);
+        } else {
+          console.log(`Достигнуто максимальное количество попыток переподключения (${maxReconnectAttempts})`);
+          // Сбрасываем счетчик попыток и пробуем ещё раз через больший интервал
+          reconnectAttempt = 0;
+          setTimeout(() => {
+            if (socketRef.current === socket) {
+              connectWebSocket();
+            }
+          }, 5000);
+        }
       };
 
       // Обработчик входящих сообщений

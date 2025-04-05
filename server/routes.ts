@@ -214,7 +214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     broadcastCameraStates();
   }, 5000); // каждые 5 секунд
 
-  const pingInterval = 5000; // 5 секунд
+  const pingInterval = 2000; // Уменьшаем до 2 секунд для более быстрой синхронизации
   const pingIntervalId = setInterval(() => {
     // Проверяем и удаляем любые устаревшие соединения
     connections.forEach((ws, userId) => {
@@ -499,10 +499,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
-    // Проверка активности соединения
+    // Проверка активности соединения (уменьшаем интервал для более быстрой синхронизации)
     const connectionCheckInterval = setInterval(() => {
       const now = Date.now();
-      if (now - lastPongTime > 15000) { // 15 секунд без ответа
+      if (now - lastPongTime > 10000) { // Уменьшаем с 15 до 10 секунд без ответа
         console.log(`Соединение неактивно более 15 секунд для ${userId || 'неизвестного пользователя'}`);
         
         // Очищаем все ресурсы пользователя
@@ -531,7 +531,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ws.terminate();
         clearInterval(connectionCheckInterval);
       }
-    }, 5000);
+    }, 3000); // Уменьшаем интервал проверки с 5000 до 3000 мс
     
     // Обработка отключения
     ws.on('close', () => {
@@ -566,6 +566,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Функция для отправки обновления слотов всем подключенным клиентам
   function broadcastSlotUpdate() {
+    // Добавляем микрозадержку для снижения вероятности гонки состояний
+    setTimeout(() => {
+      _broadcastSlotUpdate();
+    }, 10);
+  }
+
+  // Внутренняя реализация для отправки обновлений слотов
+  function _broadcastSlotUpdate() {
     const currentSlots: SlotInfo[] = [];
     slotAssignments.forEach((userId, slotNumber) => {
       currentSlots.push({ userId, slotNumber });
@@ -648,6 +656,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Функция для отправки обновления состояния камер всем клиентам
   function broadcastCameraStates() {
+    // Добавляем микрозадержку для снижения вероятности гонки состояний
+    setTimeout(() => {
+      _broadcastCameraStates();
+    }, 10);
+  }
+  
+  // Внутренняя реализация для отправки обновлений камер
+  function _broadcastCameraStates() {
     const currentCameraStates: Record<string, boolean> = {};
     cameraStates.forEach((enabled, userId) => {
       currentCameraStates[userId] = enabled;
