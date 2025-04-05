@@ -1,43 +1,48 @@
 import React, { useEffect } from 'react';
 import { useCameraContext } from '../../contexts/CameraContext';
+import { useLocalParticipant } from '@livekit/components-react';
 
 /**
- * Компонент для обработки входящих событий камеры и обновления контекста
- * Изолирует логику обработки событий камеры от компонентов отображения
+ * Невидимый компонент для управления WebRTC-камерой в зависимости от состояния в контексте
  */
-export const CameraController: React.FC<{
-  userId: string;
-}> = ({ userId }) => {
-  const { updateRemoteCameraState } = useCameraContext();
+export const CameraController: React.FC<{ userId: string }> = ({ userId }) => {
+  // Получаем состояние камеры из контекста
+  const { cameraEnabled } = useCameraContext();
   
-  // Обрабатываем события изменения состояния камеры
+  // Получаем локального участника из LiveKit
+  const { localParticipant } = useLocalParticipant();
+  
+  // Синхронизируем состояние камеры с LiveKit
   useEffect(() => {
-    const handleCameraUpdate = (event: Event) => {
-      // Приводим к типу CustomEvent с ожидаемыми полями
-      const customEvent = event as CustomEvent<{
-        userId: string;
-        enabled: boolean;
-      }>;
-      
-      const { userId: remoteUserId, enabled } = customEvent.detail;
-      
-      // Проверяем, что это не наша собственная камера
-      if (remoteUserId !== userId) {
-        console.log(`[CameraController] Обновление состояния удаленной камеры: ${remoteUserId} -> ${enabled}`);
-        updateRemoteCameraState(remoteUserId, enabled);
-      } else {
-        console.log(`[CameraController] Игнорирую обновление своей камеры из события: ${remoteUserId}`);
+    if (!localParticipant) {
+      console.warn('[CameraController] Локальный участник не найден');
+      return;
+    }
+    
+    // Получаем видеотреки от локального участника
+    const videoTracks = Array.from(localParticipant.videoTracks.values())
+      .map(track => track.track)
+      .filter(track => track && track.kind === 'video');
+    
+    if (videoTracks.length === 0) {
+      console.warn('[CameraController] Видеотреки не найдены для локального участника');
+      return;
+    }
+    
+    // Включаем или выключаем видеотреки в зависимости от состояния в контексте
+    videoTracks.forEach(track => {
+      if (track) {
+        if (cameraEnabled && track.enabled === false) {
+          console.log('[CameraController] Включение видеотрека:', track.id);
+          track.enabled = true;
+        } else if (!cameraEnabled && track.enabled === true) {
+          console.log('[CameraController] Выключение видеотрека:', track.id);
+          track.enabled = false;
+        }
       }
-    };
-    
-    // Слушаем событие camera-state-update
-    window.addEventListener('camera-state-update', handleCameraUpdate);
-    
-    return () => {
-      window.removeEventListener('camera-state-update', handleCameraUpdate);
-    };
-  }, [userId, updateRemoteCameraState]);
+    });
+  }, [cameraEnabled, localParticipant]);
   
-  // Этот компонент не рендерит ничего видимого
+  // Этот компонент не рендерит никакого UI
   return null;
 };

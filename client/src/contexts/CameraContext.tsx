@@ -1,99 +1,119 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type CameraStates = Record<string, boolean>;
-
-// Интерфейс контекста камеры
-interface CameraContextType {
-  cameraStates: CameraStates;
-  setCameraState: (userId: string, enabled: boolean) => void;
-  updateRemoteCameraState: (userId: string, enabled: boolean) => void;
-  getVideoEnabled: (userId: string, isLocal: boolean) => boolean;
+// Интерфейс для контекста камеры
+export interface CameraContextType {
+  cameraEnabled: boolean;
+  enableCamera: () => void;
+  disableCamera: () => void;
+  toggleCamera: () => void;
+  setCameraEnabled: (enabled: boolean) => void;
 }
 
-// Создаем контекст с начальными значениями
+// Создаем контекст с дефолтными значениями
 const CameraContext = createContext<CameraContextType>({
-  cameraStates: {},
-  setCameraState: () => {},
-  updateRemoteCameraState: () => {},
-  getVideoEnabled: () => false
+  cameraEnabled: false,
+  enableCamera: () => {},
+  disableCamera: () => {},
+  toggleCamera: () => {},
+  setCameraEnabled: () => {},
 });
 
-// Хук для использования контекста камеры
-export const useCameraContext = () => useContext(CameraContext);
-
 // Провайдер контекста камеры
-export const CameraProvider: React.FC<React.PropsWithChildren<{
+export const CameraProvider = ({ 
+  children, 
+  localParticipantId
+}: { 
+  children: ReactNode; 
   localParticipantId: string;
-}>> = ({ children, localParticipantId }) => {
-  // Состояние для хранения информации о включенных/выключенных камерах
-  const [cameraStates, setCameraStates] = useState<CameraStates>({});
+}) => {
+  // Локальное состояние камеры
+  const [cameraEnabled, setCameraEnabled] = useState<boolean>(false);
   
-  // Метод для обновления состояния своей камеры
-  const setCameraState = useCallback((userId: string, enabled: boolean) => {
-    console.log(`[CameraContext] Устанавливаю состояние своей камеры: ${userId} -> ${enabled}`);
+  // При монтировании компонента, пытаемся восстановить состояние камеры
+  useEffect(() => {
+    // Получаем сохраненное состояние из sessionStorage
+    const savedState = window.sessionStorage.getItem('camera-state');
+    console.log(`[CameraContext] Инициализация с localParticipantId=${localParticipantId}, сохранённое состояние=`, savedState);
     
-    // Защита от случайных обновлений чужих камер
-    if (userId !== localParticipantId) {
-      console.warn(`[CameraContext] Попытка установить состояние чужой камеры как своей! Игнорируем.`);
-      return;
-    }
-    
-    // Обновляем состояние
-    setCameraStates(prev => ({
-      ...prev,
-      [userId]: enabled
-    }));
-    
-    // Сохраняем в sessionStorage для устойчивости
-    try {
-      window.sessionStorage.setItem('camera-state', String(enabled));
-    } catch (e) {
-      console.error('[CameraContext] Ошибка при сохранении состояния камеры:', e);
+    // Если есть сохраненное состояние, устанавливаем его
+    if (savedState !== null) {
+      const isEnabled = savedState === 'true';
+      console.log(`[CameraContext] Восстановление состояния камеры: ${isEnabled}`);
+      setCameraEnabled(isEnabled);
+    } else {
+      // По умолчанию камера выключена при первом запуске
+      console.log(`[CameraContext] Инициализация с выключенной камерой по умолчанию`);
+      setCameraEnabled(false);
+      // Сохраняем состояние в sessionStorage
+      window.sessionStorage.setItem('camera-state', 'false');
     }
   }, [localParticipantId]);
   
-  // Метод для обновления состояния удаленной камеры
-  const updateRemoteCameraState = useCallback((userId: string, enabled: boolean) => {
-    console.log(`[CameraContext] Обновляю состояние удаленной камеры: ${userId} -> ${enabled}`);
-    
-    // Защита от случайных обновлений своей камеры через этот метод
-    if (userId === localParticipantId) {
-      console.warn(`[CameraContext] Попытка обновить свою камеру через updateRemoteCameraState! Игнорируем.`);
-      return;
-    }
-    
-    setCameraStates(prev => ({
-      ...prev,
-      [userId]: enabled
-    }));
-  }, [localParticipantId]);
-  
-  // Получение состояния видео для участника
-  const getVideoEnabled = useCallback((userId: string, isLocal: boolean) => {
-    // Для локального участника проверяем sessionStorage и контекст
-    if (isLocal || userId === localParticipantId) {
-      // Проверяем сохраненное состояние в sessionStorage
-      const savedState = window.sessionStorage.getItem('camera-state');
-      if (savedState !== null) {
-        return savedState === 'true';
+  // Слушаем события обновления состояния камеры из сети
+  useEffect(() => {
+    // Функция-обработчик события
+    const handleCameraUpdate = (event: CustomEvent) => {
+      const { userId, enabled } = event.detail;
+      
+      // Проверяем, что это событие для текущего пользователя
+      if (userId === localParticipantId) {
+        console.log(`[CameraContext] Получено событие обновления камеры для текущего пользователя (${userId}): ${enabled}`);
+        // Синхронизируем состояние с событием
+        setCameraEnabled(enabled);
       }
-    }
+    };
     
-    // В остальных случаях используем состояние из контекста
-    return cameraStates[userId] || false;
-  }, [cameraStates, localParticipantId]);
+    // Типизация для TypeScript
+    const handler = (e: Event) => {
+      handleCameraUpdate(e as CustomEvent);
+    };
+    
+    // Подписываемся на кастомное событие
+    window.addEventListener('camera-state-update', handler);
+    
+    // Отписываемся при размонтировании
+    return () => {
+      window.removeEventListener('camera-state-update', handler);
+    };
+  }, [localParticipantId]);
   
-  // Предоставляем контекст потомкам
-  return (
-    <CameraContext.Provider 
-      value={{ 
-        cameraStates, 
-        setCameraState, 
-        updateRemoteCameraState,
-        getVideoEnabled
-      }}
-    >
-      {children}
-    </CameraContext.Provider>
-  );
+  // Функции для управления камерой
+  const enableCamera = () => {
+    console.log('[CameraContext] Включение камеры');
+    setCameraEnabled(true);
+    window.sessionStorage.setItem('camera-state', 'true');
+  };
+  
+  const disableCamera = () => {
+    console.log('[CameraContext] Выключение камеры');
+    setCameraEnabled(false);
+    window.sessionStorage.setItem('camera-state', 'false');
+  };
+  
+  const toggleCamera = () => {
+    console.log(`[CameraContext] Переключение камеры с ${cameraEnabled} на ${!cameraEnabled}`);
+    const newState = !cameraEnabled;
+    setCameraEnabled(newState);
+    window.sessionStorage.setItem('camera-state', String(newState));
+  };
+  
+  // Предоставляем состояние и функции через контекст
+  const value = {
+    cameraEnabled,
+    enableCamera,
+    disableCamera,
+    toggleCamera,
+    setCameraEnabled,
+  };
+  
+  return <CameraContext.Provider value={value}>{children}</CameraContext.Provider>;
+};
+
+// Хук для использования контекста камеры
+export const useCameraContext = () => {
+  const context = useContext(CameraContext);
+  if (context === undefined) {
+    throw new Error('useCameraContext must be used within a CameraProvider');
+  }
+  return context;
 };
