@@ -88,30 +88,16 @@ export function VideoConferenceClient(props: {
         <main className="flex-1 relative overflow-hidden">
           <CustomVideoGrid />
           
-          {/* Кнопка-триггер для открытия панели управления */}
-          <button 
-            className="drawer-trigger"
-            onClick={() => setControlsOpen(!controlsOpen)}
-            aria-label="Toggle Controls"
-          >
-            {controlsOpen ? (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="18 15 12 9 6 15"></polyline>
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            )}
-          </button>
-          
           {/* Выдвижная панель управления */}
           <div className={`control-drawer ${controlsOpen ? 'open' : ''}`}>
-            <div className="controls-container" style={{ paddingTop: '40px' }}>
+            <div className="controls-container" style={{ marginTop: '60px' }}>
               <button 
                 className="control-button" 
                 aria-label="Toggle Camera"
-                onClick={() => room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled)}
+                onClick={(e) => {
+                  e.stopPropagation(); // Предотвращаем всплытие события
+                  room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled);
+                }}
               >
                 {room.localParticipant.isCameraEnabled ? (
                   <>
@@ -136,7 +122,10 @@ export function VideoConferenceClient(props: {
               <button 
                 className="control-button danger" 
                 aria-label="Leave Room"
-                onClick={() => room.disconnect()}
+                onClick={(e) => {
+                  e.stopPropagation(); // Предотвращаем всплытие события
+                  room.disconnect();
+                }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -146,6 +135,28 @@ export function VideoConferenceClient(props: {
                 <span>Выйти</span>
               </button>
             </div>
+          </div>
+          
+          {/* Кнопка-триггер для открытия панели управления */}
+          <div className="drawer-trigger-wrapper">
+            <button 
+              className="drawer-trigger"
+              onClick={(e) => {
+                e.stopPropagation(); // Предотвращаем всплытие события
+                setControlsOpen(!controlsOpen);
+              }}
+              aria-label="Toggle Controls"
+            >
+              {controlsOpen ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="18 15 12 9 6 15"></polyline>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              )}
+            </button>
           </div>
         </main>
       </div>

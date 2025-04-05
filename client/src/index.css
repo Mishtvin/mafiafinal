@@ -63,12 +63,20 @@
   transform: translateY(0);
 }
 
-/* Кнопка-триггер для открытия панели */
-.drawer-trigger {
+/* Обертка для кнопки-триггера */
+.drawer-trigger-wrapper {
   position: fixed;
   bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 52;
+  pointer-events: none; /* Чтобы не блокировать взаимодействие с элементами под ним */
+}
+
+/* Кнопка-триггер для открытия панели */
+.drawer-trigger {
   background-color: rgba(30, 41, 59, 0.6);
   color: white;
   border: none;
@@ -79,9 +87,9 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 51;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   transition: background-color 0.2s, transform 0.2s;
+  pointer-events: auto; /* Восстанавливаем события для самой кнопки */
 }
 
 .drawer-trigger:hover {
@@ -89,7 +97,7 @@
 }
 
 .drawer-trigger:active {
-  transform: translateX(-50%) scale(0.95);
+  transform: scale(0.95);
 }
 
 .drawer-trigger svg {
