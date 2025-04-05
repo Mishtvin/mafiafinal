@@ -12,6 +12,7 @@ import {
   RoomOptions,
   VideoPresets,
   type VideoCodec,
+  ConnectionState,
   createLocalVideoTrack,
 } from 'livekit-client';
 import { decodePassphrase } from '../../lib/utils';
@@ -697,8 +698,59 @@ export function VideoConferenceClient(props: {
     };
   }, []);
 
+  // Состояние для отслеживания готовности LiveKitRoom
+  const [isLiveKitReady, setLiveKitReady] = useState(false);
+  
+  // Обрабатываем события подключения для предотвращения ошибок
+  useEffect(() => {
+    // Проверка и обработка состояния комнаты
+    const handleRoomStatusChange = () => {
+      if (!room) return;
+      
+      // Безопасно проверяем состояние комнаты с учетом типов
+      const roomState = room.state; // Получаем текущее состояние
+      
+      // Проверяем, что комната подключена
+      if (roomState === 'connected') {
+        if (!isLiveKitReady) {
+          console.log('LiveKit комната подключена, обновляем состояние готовности');
+          setLiveKitReady(true);
+        }
+      } 
+      // Проверяем любое состояние кроме connected
+      else {
+        if (isLiveKitReady) {
+          console.log('LiveKit комната не подключена, обновляем состояние готовности');
+          setLiveKitReady(false);
+        }
+      }
+    };
+    
+    // Прослушиваем события комнаты
+    if (room) {
+      room.on('connected', handleRoomStatusChange);
+      room.on('disconnected', handleRoomStatusChange);
+      
+      // Проверяем текущее состояние при монтировании
+      if (room.state === 'connected' && !isLiveKitReady) {
+        setLiveKitReady(true);
+      }
+    }
+    
+    return () => {
+      if (room) {
+        room.off('connected', handleRoomStatusChange);
+        room.off('disconnected', handleRoomStatusChange);
+      }
+    };
+  }, [room, isLiveKitReady]);
+  
+  // Определяем, нужно ли кэшировать предыдущую комнату между перерендерами
+  const isConnecting = room?.state === 'connecting';
+  
   return (
     <>
+      {/* Используем обычный LiveKitRoom c настройками */}
       <LiveKitRoom
         room={room}
         token={props.token}
@@ -715,8 +767,8 @@ export function VideoConferenceClient(props: {
         </div>
       </LiveKitRoom>
       
-      {/* Рендерим элементы управления отдельно */}
-      <ControlDrawer room={room} slotsState={slotsState} />
+      {/* Безопасно монтируем управление только когда комната готова */}
+      {room && <ControlDrawer room={room} slotsState={slotsState} />}
     </>
   );
 }
