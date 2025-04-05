@@ -69,7 +69,7 @@ function ParticipantSlot({ participant }: { participant: Participant }) {
   return (
     <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
       {hasVideo ? (
-        <div className="h-full w-full relative">
+        <div className="h-full w-full relative flex items-center justify-center">
           {/* Здесь мы используем первый найденный трек */}
           <VideoTrack 
             trackRef={videoTracks[0]}
@@ -81,7 +81,7 @@ function ParticipantSlot({ participant }: { participant: Participant }) {
         <div className="flex items-center justify-center h-full">
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            className="h-14 w-14 text-slate-500" 
+            className="h-12 w-12 text-slate-500" 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -95,7 +95,7 @@ function ParticipantSlot({ participant }: { participant: Participant }) {
           </svg>
         </div>
       )}
-      <div className="absolute bottom-3 left-3 bg-slate-900/80 py-1 px-3 rounded-md text-sm text-white font-medium backdrop-blur-sm">
+      <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
         {participant.identity}
       </div>
     </div>
@@ -110,10 +110,10 @@ function EmptySlot({ index }: { index: number }) {
     <div className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30">
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center">
-          <div className="bg-slate-800/40 p-3 rounded-full mb-2">
+          <div className="bg-slate-800/40 p-2 rounded-full mb-1">
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              className="h-12 w-12 text-slate-500" 
+              className="h-10 w-10 text-slate-500" 
               fill="none" 
               viewBox="0 0 24 24" 
               stroke="currentColor"
@@ -126,8 +126,8 @@ function EmptySlot({ index }: { index: number }) {
               />
             </svg>
           </div>
-          <div className="bg-slate-800/60 px-3 py-1 rounded-md">
-            <span className="text-sm font-medium text-slate-400">Слот {index + 1}</span>
+          <div className="bg-slate-800/60 px-2 py-0.5 rounded-md">
+            <span className="text-xs font-medium text-slate-400">Слот {index + 1}</span>
           </div>
         </div>
       </div>
