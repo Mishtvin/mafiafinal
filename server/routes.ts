@@ -153,17 +153,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const cameraStates = new Map<string, boolean>(); // userId -> камера включена
   
   // Интервал для проверки соединений (pings)
-  const pingInterval = 10000; // 10 секунд
+  const pingInterval = 5000; // 5 секунд
   const pingIntervalId = setInterval(() => {
+    // Проверяем и удаляем любые устаревшие соединения
     connections.forEach((ws, userId) => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        // Удаляем закрытые соединения
+        connections.delete(userId);
+        
+        // Освобождаем слот при необходимости
+        const slotToRelease = userSlots.get(userId);
+        if (slotToRelease !== undefined) {
+          slotAssignments.delete(slotToRelease);
+          userSlots.delete(userId);
+          console.log(`Очистка неактивного соединения: освобожден слот ${slotToRelease} для ${userId}`);
+        }
+        
+        // Удаляем информацию о камере
+        cameraStates.delete(userId);
+        
+        // Отправляем обновление всем
+        broadcastSlotUpdate();
+        broadcastCameraStates();
+      } else if (ws.readyState === WebSocket.OPEN) {
         try {
           ws.send(JSON.stringify({ type: 'ping' }));
         } catch (e) {
           console.error(`Ошибка отправки ping для ${userId}:`, e);
+          
+          // При ошибке отправки удаляем соединение
+          connections.delete(userId);
+          
+          // Освобождаем слот при необходимости
+          const slotToRelease = userSlots.get(userId);
+          if (slotToRelease !== undefined) {
+            slotAssignments.delete(slotToRelease);
+            userSlots.delete(userId);
+          }
+          
+          // Удаляем информацию о камере
+          cameraStates.delete(userId);
+          
+          console.log(`Соединение удалено из-за ошибки ping: ${userId}`);
+          
+          // Отправляем обновление всем
+          broadcastSlotUpdate();
+          broadcastCameraStates();
         }
       }
     });
+    
+    // Выводим текущее состояние для отладки
+    console.log(`Активные соединения: ${connections.size}, активные слоты: ${slotAssignments.size}`);
   }, pingInterval);
   
   // Обработчик подключений WebSocket
@@ -320,12 +361,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Проверка активности соединения
     const connectionCheckInterval = setInterval(() => {
       const now = Date.now();
-      if (now - lastPongTime > 30000) { // 30 секунд без ответа
-        console.log(`Соединение неактивно более 30 секунд для ${userId || 'неизвестного пользователя'}`);
-        ws.terminate(); // Принудительно закрываем соединение
+      if (now - lastPongTime > 15000) { // 15 секунд без ответа
+        console.log(`Соединение неактивно более 15 секунд для ${userId || 'неизвестного пользователя'}`);
+        
+        // Очищаем все ресурсы пользователя
+        if (userId) {
+          // Освобождаем все слоты этого пользователя
+          const slotToRelease = userSlots.get(userId);
+          if (slotToRelease !== undefined) {
+            slotAssignments.delete(slotToRelease);
+            userSlots.delete(userId);
+            console.log(`Автоматически освобожден слот ${slotToRelease} для ${userId} из-за неактивности`);
+          }
+          
+          // Удаляем информацию о состоянии камеры
+          cameraStates.delete(userId);
+          
+          // Удаляем из списка подключений
+          connections.delete(userId);
+          console.log(`Пользователь отключен из-за неактивности: ${userId}`);
+          
+          // Транслируем обновление всем клиентам
+          broadcastSlotUpdate();
+          broadcastCameraStates();
+        }
+        
+        // Принудительно закрываем соединение
+        ws.terminate();
         clearInterval(connectionCheckInterval);
       }
-    }, 10000);
+    }, 5000);
     
     // Обработка отключения
     ws.on('close', () => {
