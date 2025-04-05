@@ -218,10 +218,11 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
         setCameraEnabled(effectiveState);
         
         // Если мы восстанавливаем состояние и камера должна быть включена, 
-        // то включаем ее через LiveKit API
+        // то включаем ее через LiveKit API с увеличенной задержкой
         if (hasSavedState && effectiveState && !apiCameraEnabled) {
-          console.log('Восстанавливаю сохраненное состояние камеры: включение');
+          console.log('Восстанавливаю сохраненное состояние камеры: включение (с задержкой)');
           setTimeout(() => {
+            console.log('Запускаем включение камеры после задержки');
             room.localParticipant.setCameraEnabled(true)
               .then(() => {
                 console.log('Камера успешно включена после переподключения');
@@ -231,7 +232,7 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
                 }
               })
               .catch(err => console.error('Ошибка при восстановлении состояния камеры:', err));
-          }, 1000); // Задержка для стабильности
+          }, 2500); // Увеличенная задержка для стабильности
         }
         
         // Этот вызов только обновляет список доступных камер и определяет текущую активную
@@ -260,7 +261,8 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       // Вызываем немедленно для обновления состояния
       updateCameraState();
       
-      // Дополнительно проверяем состояние иконки после небольшой задержки
+      // Дополнительно проверяем состояние иконки после увеличенной задержки
+      // для гарантированной синхронизации с LiveKit
       setTimeout(() => {
         // Проверяем на рассогласование и если есть - исправляем
         const realCameraState = room.localParticipant.isCameraEnabled;
@@ -273,7 +275,7 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
           // Обновляем сохраненное состояние
           window.sessionStorage.setItem('camera-state', String(realCameraState));
         }
-      }, 1500);
+      }, 3000);
     }
     
     return () => {
@@ -317,8 +319,9 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
         // Запоминаем время последнего переключения
         sessionStorage.setItem('last-camera-toggle', String(currentTime));
         
-        // Небольшая задержка для предотвращения потенциальных проблем синхронизации
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Увеличенная задержка для предотвращения потенциальных проблем синхронизации
+        console.log('Ожидаем перед переключением камеры через LiveKit API...');
+        await new Promise(resolve => setTimeout(resolve, 800));
         
         // ВАЖНО: Сначала управляем камерой через LiveKit API
         // а потом отправляем обновление через WebSocket
