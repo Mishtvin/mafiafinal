@@ -152,34 +152,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Создаем хранилище для состояния камер
   const cameraStates = new Map<string, boolean>(); // userId -> камера включена
   
-  // Периодическая полная очистка состояния для устранения рассинхронизации
+  // Временные метки отключения пользователей (userId -> timestamp)
+  const userDisconnectTimes = new Map<string, number>();
+  const SLOT_RESERVATION_TIMEOUT = 60000; // 60 секунд для возможности переподключения
+  
+  // Периодическая проверка состояния для устранения рассинхронизации
   setInterval(() => {
+    // Текущее время для проверки таймаутов
+    const currentTime = Date.now();
+    
     // Проверяем, что все слоты соответствуют активным соединениям
     const validUserIds = new Set<string>(connections.keys());
     
-    // Найдем все слоты с неактивными пользователями
+    // Для отладки
+    console.log(`🔎 Периодическая проверка: соединения=${connections.size}, слоты=${slotAssignments.size}, присвоено=${userSlots.size}, камеры=${cameraStates.size}`);
+    
+    // Ищем слоты, где пользователь отключен более 60 секунд
     let needsUpdate = false;
+    
+    // Проверяем слоты на предмет долго отключенных пользователей
     slotAssignments.forEach((userId, slotNumber) => {
       if (!validUserIds.has(userId)) {
-        console.log(`Очистка слота ${slotNumber} для отключенного пользователя ${userId}`);
-        slotAssignments.delete(slotNumber);
-        needsUpdate = true;
-      }
-    });
-    
-    // Удаляем записи в userSlots для отключенных пользователей
-    userSlots.forEach((slotNumber, userId) => {
-      if (!validUserIds.has(userId)) {
-        userSlots.delete(userId);
-        needsUpdate = true;
-      }
-    });
-    
-    // Очищаем состояние камер для отключенных пользователей
-    cameraStates.forEach((enabled, userId) => {
-      if (!validUserIds.has(userId)) {
-        cameraStates.delete(userId);
-        needsUpdate = true;
+        // Пользователь не подключен в данный момент
+        
+        // Записываем время отключения, если еще не записано
+        if (!userDisconnectTimes.has(userId)) {
+          userDisconnectTimes.set(userId, currentTime);
+          console.log(`⏰ Начало отсчета времени для ${userId} в слоте ${slotNumber}`);
+        }
+        
+        // Проверяем, прошло ли достаточно времени для очистки
+        const disconnectTime = userDisconnectTimes.get(userId) || 0;
+        const timePassed = currentTime - disconnectTime;
+        
+        if (timePassed > SLOT_RESERVATION_TIMEOUT) {
+          // Прошло более 60 секунд - освобождаем слот
+          console.log(`⌛ Время истекло (${Math.round(timePassed/1000)}с) - очистка слота ${slotNumber} для отключенного пользователя ${userId}`);
+          slotAssignments.delete(slotNumber);
+          userSlots.delete(userId);
+          cameraStates.delete(userId);
+          userDisconnectTimes.delete(userId);
+          needsUpdate = true;
+        } else {
+          // Показываем оставшееся время
+          const remainingSeconds = Math.round((SLOT_RESERVATION_TIMEOUT - timePassed) / 1000);
+          console.log(`🕘 Слот ${slotNumber} зарезервирован для ${userId} еще на ${remainingSeconds}с`);
+        }
+      } else {
+        // Пользователь снова подключен - сбрасываем таймер
+        if (userDisconnectTimes.has(userId)) {
+          console.log(`✅ Пользователь ${userId} вернулся в слот ${slotNumber}, сбрасываем таймер`);
+          userDisconnectTimes.delete(userId);
+        }
       }
     });
     
@@ -187,7 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     userSlots.forEach((slotNumber, userId) => {
       const assignedUserId = slotAssignments.get(slotNumber);
       if (!assignedUserId || assignedUserId !== userId) {
-        console.log(`Исправляем несоответствие: слот ${slotNumber} для пользователя ${userId}`);
+        console.log(`🔄 Исправляем несоответствие: слот ${slotNumber} для пользователя ${userId}`);
         slotAssignments.set(slotNumber, userId);
         needsUpdate = true;
       }
@@ -195,77 +219,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Если были изменения - рассылаем обновление
     if (needsUpdate) {
-      console.log('Очистка неактивных соединений вызвала рассылку обновлений');
+      console.log('🔄 Очистка неактивных соединений вызвала рассылку обновлений');
       broadcastSlotUpdate();
       broadcastCameraStates();
     }
     
-    console.log(`Периодическая проверка: соединения=${connections.size}, слоты=${slotAssignments.size}, присвоено=${userSlots.size}, камеры=${cameraStates.size}`);
-    
-    // Проверяем корректность назначения слотов
     // Отладка: показываем все текущие слоты
-    console.log('Текущие назначения слотов:');
+    console.log('📊 Текущие назначения слотов:');
     slotAssignments.forEach((userId, slot) => {
-      console.log(`- Слот ${slot}: ${userId}`);
+      const status = validUserIds.has(userId) ? '✅' : '⏳';
+      console.log(`- Слот ${slot}: ${userId} ${status}`);
     });
     
     // Периодически отправляем обновление всем клиентам для синхронизации
     broadcastSlotUpdate();
     broadcastCameraStates();
+    
+    console.log(`📡 Активные соединения: ${connections.size}, активные слоты: ${slotAssignments.size}`);
   }, 5000); // каждые 5 секунд
 
   const pingInterval = 5000; // 5 секунд
   const pingIntervalId = setInterval(() => {
-    // Проверяем и удаляем любые устаревшие соединения
+    // Проверяем соединения и отправляем пинги
     connections.forEach((ws, userId) => {
       if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-        // Удаляем закрытые соединения
+        // Соединение закрыто, удаляем его из активных соединений
         connections.delete(userId);
         
-        // Освобождаем слот при необходимости
-        const slotToRelease = userSlots.get(userId);
-        if (slotToRelease !== undefined) {
-          slotAssignments.delete(slotToRelease);
-          userSlots.delete(userId);
-          console.log(`Очистка неактивного соединения: освобожден слот ${slotToRelease} для ${userId}`);
+        // Отмечаем время отключения для будущей очистки
+        if (!userDisconnectTimes.has(userId)) {
+          userDisconnectTimes.set(userId, Date.now());
+          console.log(`⏰ Обнаружено закрытое соединение для ${userId}, запускаем таймер бронирования`);
+          
+          const userSlot = userSlots.get(userId);
+          if (userSlot !== undefined) {
+            console.log(`🕒 Слот ${userSlot} забронирован для ${userId} на 60 секунд (обнаружено закрытое соединение)`);
+          }
         }
         
-        // Удаляем информацию о камере
-        cameraStates.delete(userId);
-        
-        // Отправляем обновление всем
+        // Отправляем обновление всем для синхронизации статусов
         broadcastSlotUpdate();
         broadcastCameraStates();
       } else if (ws.readyState === WebSocket.OPEN) {
+        // Соединение открыто, отправляем ping для проверки активности
         try {
           ws.send(JSON.stringify({ type: 'ping' }));
         } catch (e) {
-          console.error(`Ошибка отправки ping для ${userId}:`, e);
+          // Ошибка при отправке ping
+          console.error(`❌ Ошибка отправки ping для ${userId}:`, e);
           
-          // При ошибке отправки удаляем соединение
+          // Удаляем соединение из активных
           connections.delete(userId);
           
-          // Освобождаем слот при необходимости
-          const slotToRelease = userSlots.get(userId);
-          if (slotToRelease !== undefined) {
-            slotAssignments.delete(slotToRelease);
-            userSlots.delete(userId);
+          // Отмечаем время отключения для будущей очистки
+          if (!userDisconnectTimes.has(userId)) {
+            userDisconnectTimes.set(userId, Date.now());
+            console.log(`⏰ Ошибка ping для ${userId}, запускаем таймер бронирования`);
+            
+            const userSlot = userSlots.get(userId);
+            if (userSlot !== undefined) {
+              console.log(`🕒 Слот ${userSlot} забронирован для ${userId} на 60 секунд (ошибка ping)`);
+            }
           }
           
-          // Удаляем информацию о камере
-          cameraStates.delete(userId);
-          
-          console.log(`Соединение удалено из-за ошибки ping: ${userId}`);
-          
-          // Отправляем обновление всем
+          // Отправляем обновления всем
           broadcastSlotUpdate();
           broadcastCameraStates();
         }
       }
     });
     
-    // Выводим текущее состояние для отладки
-    console.log(`Активные соединения: ${connections.size}, активные слоты: ${slotAssignments.size}`);
+    // Обрабатываем броню слотов для отключенных пользователей
+    // Это делается в периодической проверке каждые 5 секунд, выше в коде
   }, pingInterval);
   
   // Обработчик подключений WebSocket
@@ -298,82 +323,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'register':
             // Регистрация пользователя
             userId = data.userId;
-            if (userId) {
-              connections.set(userId, ws);
-              const preferredSlot = data.preferredSlot ? Number(data.preferredSlot) : null;
-              console.log(`Пользователь зарегистрирован: ${userId}${preferredSlot ? `, предпочтительный слот: ${preferredSlot}` : ', без предпочтительного слота'}`);
-              
-              // Устанавливаем начальное состояние камеры (выключена по умолчанию)
-              if (!cameraStates.has(userId)) {
-                cameraStates.set(userId, false);
-              }
-              
-              // Если пользователь не занял слот, пытаемся назначить предпочтительный или свободный
-              if (!userSlots.has(userId)) {
-                // Список уже занятых слотов
-                const occupiedSlots = new Set<number>();
-                slotAssignments.forEach((_, slot) => {
-                  occupiedSlots.add(slot);
-                });
-                
-                // Отладка: показываем занятые слоты перед назначением
-                console.log(`Занятые слоты перед назначением для ${userId}:`, Array.from(occupiedSlots));
-                
-                // Проверяем, есть ли предпочтительный слот
-                const preferredSlot = data.preferredSlot ? Number(data.preferredSlot) : null;
-                let assignedSlot = false;
-                
-                // Пытаемся назначить предпочтительный слот, если он свободен
-                if (preferredSlot && preferredSlot >= 1 && preferredSlot <= 12) {
-                  // Проверяем, действительно ли слот свободен
-                  if (!occupiedSlots.has(preferredSlot)) {
-                    slotAssignments.set(preferredSlot, userId);
-                    userSlots.set(userId, preferredSlot);
-                    console.log(`Назначен предпочтительный слот ${preferredSlot} для ${userId}`);
-                    assignedSlot = true;
-                  } else {
-                    // Дополнительная проверка: возможно, слот занят пользователем, который отключился
-                    const slotUserId = slotAssignments.get(preferredSlot);
-                    if (slotUserId && !connections.has(slotUserId)) {
-                      // Слот занят отключенным пользователем, можно освободить и занять
-                      console.log(`Освобождаем слот ${preferredSlot} от неактивного пользователя ${slotUserId}`);
-                      slotAssignments.delete(preferredSlot);
-                      userSlots.delete(slotUserId);
-                      
-                      // Занимаем слот текущим пользователем
-                      slotAssignments.set(preferredSlot, userId);
-                      userSlots.set(userId, preferredSlot);
-                      console.log(`Назначен предпочтительный слот ${preferredSlot} для ${userId} после очистки`);
-                      assignedSlot = true;
-                    } else {
-                      console.log(`Предпочтительный слот ${preferredSlot} для ${userId} уже занят активным пользователем`);
-                      
-                      // Запоминаем, что пользователь хотел этот слот в случае его освобождения
-                      // Это поможет при дальнейших подключениях быстрее вернуть нужный слот
-                      console.log(`Исправляем несоответствие: слот ${preferredSlot} для пользователя ${userId}`);
-                    }
-                  }
-                }
-                
-                // Если предпочтительный слот не указан или занят, находим первый свободный
-                if (!assignedSlot) {
-                  for (let i = 1; i <= 12; i++) {
-                    if (!occupiedSlots.has(i)) {
-                      slotAssignments.set(i, userId);
-                      userSlots.set(userId, i);
-                      console.log(`Автоматически назначен слот ${i} для ${userId}`);
-                      assignedSlot = true;
-                      break;
-                    }
-                  }
-                }
-                
-                if (!assignedSlot) {
-                  console.warn(`Не удалось найти свободный слот для ${userId}`);
-                }
+            if (!userId) {
+              console.error('❌ Ошибка: получен пустой userId при регистрации');
+              break;
+            }
+            
+            console.log(`🆕 РЕГИСТРАЦИЯ: пользователь ${userId}`);
+            connections.set(userId, ws);
+            
+            // Обрабатываем предпочтительный слот с дополнительными проверками
+            let preferredSlot: number | null = null;
+            if (data.preferredSlot !== undefined && data.preferredSlot !== null) {
+              preferredSlot = Number(data.preferredSlot);
+              // Проверка на корректность номера слота
+              if (isNaN(preferredSlot) || preferredSlot < 1 || preferredSlot > 12) {
+                console.error(`❌ Некорректный предпочтительный слот: ${data.preferredSlot}`);
+                preferredSlot = null;
+              } else {
+                console.log(`📱 Пользователь ${userId} имеет предпочтительный слот: ${preferredSlot}`);
               }
             } else {
-              console.error('Ошибка: получен пустой userId при регистрации');
+              console.log(`⚠️ Пользователь ${userId} без предпочтительного слота`);
+            }
+            
+            // Устанавливаем начальное состояние камеры (выключена по умолчанию)
+            if (!cameraStates.has(userId)) {
+              cameraStates.set(userId, false);
+              console.log(`📷 Установлено начальное состояние камеры (выкл) для ${userId}`);
+            }
+            
+            // Если пользователь уже имеет слот, проверяем его валидность
+            if (userSlots.has(userId)) {
+              const currentSlot = userSlots.get(userId);
+              const slotOwner = slotAssignments.get(currentSlot!);
+              
+              if (slotOwner === userId) {
+                console.log(`✅ Пользователь ${userId} уже имеет корректный слот ${currentSlot}`);
+                
+                // Если есть предпочтительный слот и он отличается от текущего,
+                // сохраним его и попробуем назначить
+                if (preferredSlot && preferredSlot !== currentSlot) {
+                  console.log(`🔄 У пользователя ${userId} текущий слот ${currentSlot}, но предпочтительный ${preferredSlot}`);
+                }
+              } else {
+                // Несоответствие между userSlots и slotAssignments
+                console.error(`❌ Несоответствие слотов: userId=${userId}, currentSlot=${currentSlot}, slotOwner=${slotOwner}`);
+                userSlots.delete(userId); // Сбрасываем некорректное состояние
+              }
+            }
+            
+            // Если пользователь не имеет слота, пытаемся назначить предпочтительный или свободный
+            if (!userSlots.has(userId)) {
+              console.log(`🔎 Ищем слот для пользователя ${userId}`);
+              
+              // Список уже занятых слотов
+              const occupiedSlots = new Set<number>();
+              slotAssignments.forEach((_, slot) => {
+                occupiedSlots.add(slot);
+              });
+              
+              // Отладка: показываем занятые слоты перед назначением
+              console.log(`📋 Занятые слоты перед назначением для ${userId}:`, Array.from(occupiedSlots));
+              
+              let assignedSlot = false;
+              
+              // Пытаемся назначить предпочтительный слот, если он свободен
+              if (preferredSlot && preferredSlot >= 1 && preferredSlot <= 12) {
+                console.log(`🎯 Проверка доступности предпочтительного слота ${preferredSlot} для ${userId}`);
+                
+                // Проверяем, действительно ли слот свободен
+                if (!occupiedSlots.has(preferredSlot)) {
+                  slotAssignments.set(preferredSlot, userId);
+                  userSlots.set(userId, preferredSlot);
+                  console.log(`✅ Успешно назначен предпочтительный слот ${preferredSlot} для ${userId}`);
+                  assignedSlot = true;
+                } else {
+                  // Дополнительная проверка: возможно, слот занят пользователем, который отключился
+                  const slotUserId = slotAssignments.get(preferredSlot);
+                  if (slotUserId && !connections.has(slotUserId)) {
+                    // Слот занят отключенным пользователем, можно освободить и занять
+                    console.log(`♻️ Освобождаем слот ${preferredSlot} от неактивного пользователя ${slotUserId}`);
+                    slotAssignments.delete(preferredSlot);
+                    userSlots.delete(slotUserId);
+                    
+                    // Занимаем слот текущим пользователем
+                    slotAssignments.set(preferredSlot, userId);
+                    userSlots.set(userId, preferredSlot);
+                    console.log(`✅ Успешно назначен предпочтительный слот ${preferredSlot} после очистки`);
+                    assignedSlot = true;
+                  } else {
+                    console.log(`🚫 Предпочтительный слот ${preferredSlot} уже занят активным пользователем ${slotUserId}`);
+                  }
+                }
+              }
+              
+              // Если предпочтительный слот не указан или занят, ищем свободный
+              if (!assignedSlot) {
+                // Особая обработка для слотов 11 и 12
+                const prioritySlots = preferredSlot && (preferredSlot === 11 || preferredSlot === 12) 
+                  ? [preferredSlot] // Сначала проверяем предпочтительный 11/12
+                  : [];
+                
+                // Затем добавляем остальные слоты
+                const allSlots = [...prioritySlots];
+                for (let i = 1; i <= 12; i++) {
+                  if (!prioritySlots.includes(i)) {
+                    allSlots.push(i);
+                  }
+                }
+                
+                // Ищем первый свободный слот в порядке приоритета
+                for (const slotToCheck of allSlots) {
+                  if (!occupiedSlots.has(slotToCheck)) {
+                    slotAssignments.set(slotToCheck, userId);
+                    userSlots.set(userId, slotToCheck);
+                    console.log(`✅ Автоматически назначен слот ${slotToCheck} для ${userId}`);
+                    assignedSlot = true;
+                    break;
+                  }
+                }
+              }
+              
+              if (!assignedSlot) {
+                console.warn(`⚠️ Не удалось найти свободный слот для ${userId}, все слоты заняты`);
+              }
             }
             
             // Отправляем текущее состояние слотов всем клиентам для синхронизации
@@ -385,32 +458,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
           case 'select_slot':
             // Пользователь выбирает слот
-            if (!userId) break;
+            if (!userId) {
+              console.error('❌ Получен запрос на выбор слота без userId');
+              break;
+            }
             
-            const selectedSlot = data.slotNumber;
+            const selectedSlot = Number(data.slotNumber); // Принудительное приведение к числу
+            if (isNaN(selectedSlot) || selectedSlot < 1 || selectedSlot > 12) {
+              console.error(`❌ Некорректный номер слота: ${data.slotNumber}, пользователь: ${userId}`);
+              sendToClient({
+                type: 'error',
+                message: 'Некорректный номер слота'
+              });
+              break;
+            }
+            
+            console.log(`🎯 Попытка выбора: пользователь ${userId} хочет выбрать слот ${selectedSlot}`);
             const previousSlot = userSlots.get(userId);
             
             // Освобождаем предыдущий слот, если был
             if (previousSlot !== undefined) {
               slotAssignments.delete(previousSlot);
+              console.log(`📋 Освободили предыдущий слот ${previousSlot} для пользователя ${userId}`);
             }
             
             // Проверяем, не занят ли выбранный слот
             const currentOccupant = slotAssignments.get(selectedSlot);
             if (currentOccupant && currentOccupant !== userId) {
               // Слот занят другим пользователем
+              console.log(`🚫 Слот ${selectedSlot} уже занят пользователем ${currentOccupant}`);
               sendToClient({
                 type: 'slot_busy',
                 slotNumber: selectedSlot
               });
-              return;
+              
+              // Восстанавливаем предыдущий слот, если был
+              if (previousSlot !== undefined) {
+                slotAssignments.set(previousSlot, userId);
+                console.log(`♻️ Восстановлен предыдущий слот ${previousSlot} для пользователя ${userId}`);
+              }
+              break;
             }
             
             // Занимаем новый слот
             slotAssignments.set(selectedSlot, userId);
             userSlots.set(userId, selectedSlot);
             
-            console.log(`Пользователь ${userId} выбрал слот ${selectedSlot}`);
+            console.log(`✅ Пользователь ${userId} успешно выбрал слот ${selectedSlot}`);
             
             // Отправляем обновление всем подключенным клиентам
             broadcastSlotUpdate();
@@ -459,26 +553,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const connectionCheckInterval = setInterval(() => {
       const now = Date.now();
       if (now - lastPongTime > 15000) { // 15 секунд без ответа
-        console.log(`Соединение неактивно более 15 секунд для ${userId || 'неизвестного пользователя'}`);
+        console.log(`⚠️ Соединение неактивно более 15 секунд для ${userId || 'неизвестного пользователя'}`);
         
-        // Очищаем все ресурсы пользователя
         if (userId) {
-          // Освобождаем все слоты этого пользователя
-          const slotToRelease = userSlots.get(userId);
-          if (slotToRelease !== undefined) {
-            slotAssignments.delete(slotToRelease);
-            userSlots.delete(userId);
-            console.log(`Автоматически освобожден слот ${slotToRelease} для ${userId} из-за неактивности`);
+          // НЕ удаляем информацию о слоте и камере!
+          // Вместо этого отмечаем время отключения для будущей очистки
+          if (!userDisconnectTimes.has(userId)) {
+            userDisconnectTimes.set(userId, now);
+            const userSlot = userSlots.get(userId);
+            console.log(`⏰ Запускаем таймер резервирования для ${userId} в слоте ${userSlot || 'нет'}`);
           }
           
-          // Удаляем информацию о состоянии камеры
-          cameraStates.delete(userId);
-          
-          // Удаляем из списка подключений
+          // Удаляем только из активных соединений
           connections.delete(userId);
-          console.log(`Пользователь отключен из-за неактивности: ${userId}`);
           
-          // Транслируем обновление всем клиентам
+          // Отправляем обновления всем клиентам
           broadcastSlotUpdate();
           broadcastCameraStates();
         }
@@ -494,22 +583,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       clearInterval(connectionCheckInterval);
       
       if (userId) {
-        // Освобождаем слот при отключении пользователя
-        const slotToRelease = userSlots.get(userId);
-        if (slotToRelease !== undefined) {
-          slotAssignments.delete(slotToRelease);
-          userSlots.delete(userId);
-        }
+        // Отмечаем время отключения пользователя
+        const disconnectTime = Date.now();
+        const userSlot = userSlots.get(userId);
         
-        // Удаляем информацию о состоянии камеры
-        cameraStates.delete(userId);
+        console.log(`⏳ Пользователь отключился: ${userId}, слот: ${userSlot || 'нет'}`);
         
+        // Важно: НЕ освобождаем слот сразу, даем возможность переподключиться с сохранением слота
+        // Это особенно важно для слотов 11 и 12, которые имеют особую роль
+        // Используем таймер на 60 секунд (вместо мгновенного освобождения)
+        
+        // Удаляем только из активных соединений
         connections.delete(userId);
-        console.log(`Пользователь отключился: ${userId}`);
         
         // Отправляем обновление всем подключенным клиентам
+        // НЕ удаляем информацию о слоте и состоянии камеры!
+        // Эта информация будет очищена через 60 секунд, если пользователь не переподключится
+        
+        // Отправляем обновления другим клиентам
         broadcastSlotUpdate();
         broadcastCameraStates();
+        
+        console.log(`🕐 Слот ${userSlot} забронирован для ${userId} на 60 секунд для возможного переподключения`);
       }
     });
     

@@ -34,40 +34,98 @@ export function useSlots(userId: string) {
   // Функция для сохранения информации о слоте в localStorage
   const saveSlotToStorage = useCallback((slotNumber: number) => {
     try {
-      const data = {
+      // Важное изменение: добавляем проверку на наличие localStorage
+      if (typeof localStorage === 'undefined') {
+        console.error('localStorage недоступен в данной среде');
+        return;
+      }
+      
+      // Явно задаем тип данных и расширяем для отладки
+      const storageData = {
         userId: userId,
         slotNumber: slotNumber,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        // Добавляем дополнительные данные для диагностики
+        origin: window.location.origin,
+        userAgent: navigator.userAgent.substring(0, 50),
+        isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
       };
-      localStorage.setItem(SLOT_STORAGE_KEY, JSON.stringify(data));
-      console.log(`Слот ${slotNumber} для пользователя ${userId} сохранен в localStorage`);
+      
+      // Создаем строку данных и сохраняем
+      const jsonData = JSON.stringify(storageData);
+      localStorage.setItem(SLOT_STORAGE_KEY, jsonData);
+      
+      // Подтверждаем в консоли
+      console.log(`СЛОТ СОХРАНЕН: ${slotNumber} для ${userId}`, jsonData.substring(0, 100));
+      
+      // Проверяем сохранение, считывая данные сразу после записи
+      const savedData = localStorage.getItem(SLOT_STORAGE_KEY);
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData);
+          console.log(`ПРОВЕРКА СЛОТА: сохранено ${parsedData.slotNumber} для ${parsedData.userId}`);
+        } catch (e) {
+          console.error('Ошибка при проверке сохраненных данных:', e);
+        }
+      } else {
+        console.error('ОШИБКА: Проверка слота не удалась, данные не найдены в localStorage');
+      }
     } catch (error) {
-      console.error('Ошибка при сохранении слота:', error);
+      console.error('КРИТИЧЕСКАЯ ОШИБКА при сохранении слота:', error);
     }
   }, [userId]);
   
   // Получение сохраненного слота для пользователя из localStorage
   const getSavedSlot = useCallback(() => {
     try {
+      console.log(`[ПОЛУЧЕНИЕ СЛОТА] Пытаемся получить сохраненный слот для ${userId}`);
+      
+      // Важное изменение: проверяем доступность localStorage
+      if (typeof localStorage === 'undefined') {
+        console.error('[ПОЛУЧЕНИЕ СЛОТА] localStorage недоступен в данной среде');
+        return null;
+      }
+      
+      // Читаем данные из localStorage
       const savedData = localStorage.getItem(SLOT_STORAGE_KEY);
-      if (savedData) {
-        const data = JSON.parse(savedData);
-        // Проверяем соответствие по userId или по глобальному идентификатору
-        const globalId = window.currentUserIdentity;
-        if ((data.userId === userId || (globalId && data.userId === globalId)) && data.slotNumber) {
-          console.log(`Восстановлен слот ${data.slotNumber} для пользователя ${userId} из localStorage`);
-          return data.slotNumber;
-        } else {
-          console.log(`Данные в localStorage не соответствуют: ${data.userId} != ${userId} и ${globalId}`);
+      if (!savedData) {
+        console.warn('[ПОЛУЧЕНИЕ СЛОТА] Нет сохраненных данных о слоте в localStorage');
+        return null;
+      }
+      
+      // Пытаемся распарсить данные
+      console.log(`[ПОЛУЧЕНИЕ СЛОТА] Найдены сохраненные данные: ${savedData.substring(0, 100)}...`);
+      const data = JSON.parse(savedData);
+      
+      // Проверяем корректность данных
+      if (!data || typeof data !== 'object' || !data.slotNumber) {
+        console.error('[ПОЛУЧЕНИЕ СЛОТА] Неверный формат данных в localStorage:', data);
+        return null;
+      }
+      
+      // Проверяем соответствие по userId или по глобальному идентификатору
+      const globalId = window.currentUserIdentity;
+      console.log(`[ПОЛУЧЕНИЕ СЛОТА] Сравниваем ${data.userId} с текущим ${userId} и глобальным ${globalId || 'отсутствует'}`);
+      
+      if ((data.userId === userId || (globalId && data.userId === globalId)) && data.slotNumber) {
+        console.log(`[СЛОТ ВОССТАНОВЛЕН!] ${data.slotNumber} для пользователя ${userId} из localStorage`);
+        
+        // Повторно сохраняем слот для "обновления" информации
+        try {
+          saveSlotToStorage(data.slotNumber);
+        } catch (e) {
+          console.error('[ПОЛУЧЕНИЕ СЛОТА] Ошибка при повторном сохранении слота:', e);
         }
+        
+        return data.slotNumber;
       } else {
-        console.log('Нет сохраненных данных о слоте в localStorage');
+        console.log(`[ПОЛУЧЕНИЕ СЛОТА] Данные в localStorage не соответствуют: ${data.userId} != ${userId} и ${globalId || 'отсутствует'}`);
       }
     } catch (error) {
-      console.error('Ошибка при чтении сохраненного слота:', error);
+      console.error('[КРИТИЧЕСКАЯ ОШИБКА] При чтении сохраненного слота:', error);
     }
     return null;
-  }, [userId]);
+  }, [userId, saveSlotToStorage]);
 
   // Очистка информации о слоте в localStorage
   const clearSlotStorage = useCallback(() => {
