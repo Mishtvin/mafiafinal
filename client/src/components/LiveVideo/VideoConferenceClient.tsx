@@ -16,7 +16,6 @@ import {
 } from 'livekit-client';
 import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
-import { RoleSelector } from './RoleSelector';
 import { useSlots } from '../../hooks/use-slots';
 
 /**
@@ -444,12 +443,6 @@ export function VideoConferenceClient(props: {
   token: string;
   codec: VideoCodec | undefined;
 }) {
-  // Состояния для выбора роли и отображения экрана выбора
-  const [userRole, setUserRole] = useState<'player' | 'host' | null>(null);
-  const [isRoleSelectorVisible, setIsRoleSelectorVisible] = useState(true);
-  const [isRoleSelectionLoading, setIsRoleSelectionLoading] = useState(false);
-  const [hostAvailable, setHostAvailable] = useState(true);
-  
   // Генерируем случайный идентификатор пользователя при первой загрузке
   const userId = useMemo(() => {
     if (typeof window !== 'undefined') {
@@ -468,23 +461,7 @@ export function VideoConferenceClient(props: {
   // Используем хук для слотов
   const slotsState = useSlots(userId);
   
-  // Обработчик выбора роли
-  const handleRoleSelect = async (role: 'player' | 'host') => {
-    setIsRoleSelectionLoading(true);
-    try {
-      // Отправляем запрос на сервер о выборе роли
-      await slotsState.setUserRole(role);
-      setUserRole(role);
-      setIsRoleSelectorVisible(false);
-    } catch (error) {
-      console.error('Ошибка при установке роли:', error);
-    } finally {
-      setIsRoleSelectionLoading(false);
-    }
-  };
-  
-  // Создаем Worker для E2EE и инициализируем все необходимые переменные,
-  // даже если они будут использоваться только после выбора роли
+  // Создаем Worker для E2EE
   const worker =
     typeof window !== 'undefined' &&
     new Worker(new URL('livekit-client/e2ee-worker', import.meta.url));
@@ -494,19 +471,6 @@ export function VideoConferenceClient(props: {
   const e2eePassphrase =
     typeof window !== 'undefined' ? decodePassphrase(window.location.hash.substring(1)) : undefined;
   const e2eeEnabled = !!(e2eePassphrase && worker);
-  
-  // Проверяем доступность роли хоста при изменении состояния слотов
-  useEffect(() => {
-    if (slotsState.hostId) {
-      // Если уже есть ведущий и это не текущий пользователь,
-      // устанавливаем флаг, что роль ведущего недоступна
-      const isCurrentUserHost = slotsState.hostId === userId;
-      setHostAvailable(isCurrentUserHost || !slotsState.hostId);
-    } else {
-      // Если ведущего нет, то роль доступна
-      setHostAvailable(true);
-    }
-  }, [slotsState.hostId, userId]);
   
   // Настраиваем параметры комнаты (в точности как в оригинале)
   const roomOptions = useMemo((): RoomOptions => {
@@ -543,20 +507,6 @@ export function VideoConferenceClient(props: {
     };
   }, []);
 
-  // Если выбор роли еще не сделан, показываем экран выбора
-  if (isRoleSelectorVisible) {
-    return (
-      <div className="h-full">
-        <RoleSelector 
-          onRoleSelect={handleRoleSelect}
-          isLoading={isRoleSelectionLoading}
-          hostAvailable={hostAvailable}
-        />
-      </div>
-    );
-  }
-
-  // Отображаем саму видеоконференцию только после выбора роли
   return (
     <>
       <LiveKitRoom
