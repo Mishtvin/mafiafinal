@@ -159,7 +159,15 @@ const ControlDrawer = ({ room }: { room: Room }) => {
   useEffect(() => {
     const updateCameraState = () => {
       if (room && room.localParticipant) {
-        setCameraEnabled(room.localParticipant.isCameraEnabled);
+        // Проверка состояния камеры напрямую через видеотреки
+        const hasActiveVideoTracks = room.localParticipant
+          .getTrackPublications()
+          .some(track => track.kind === 'video' && !track.isMuted && track.track);
+        
+        // Обновляем состояние UI на основе реального состояния треков
+        console.log('Состояние камеры обновлено:', hasActiveVideoTracks, 
+                    '(LiveKit API:', room.localParticipant.isCameraEnabled, ')');
+        setCameraEnabled(hasActiveVideoTracks);
         
         // Этот вызов только обновляет список доступных камер и определяет текущую активную
         getCameras();
@@ -173,8 +181,8 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       room.localParticipant.on('trackPublished', updateCameraState);
       room.localParticipant.on('trackUnpublished', updateCameraState);
       
-      // Инициализируем начальное состояние
-      setCameraEnabled(room.localParticipant.isCameraEnabled);
+      // Не устанавливаем начальное состояние здесь,
+      // оно будет установлено в updateCameraState на основе реальных треков
       
       // Вызываем немедленно для обновления состояния селекта
       updateCameraState();
