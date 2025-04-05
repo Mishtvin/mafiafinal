@@ -91,15 +91,20 @@ export class ConnectionManager {
           slots: currentSlots
         }));
         
-        // Отправляем индивидуальные обновления для каждой камеры
-        // вместо общего события camera_states_update
+        // Отправляем индивидуальные обновления только для ДРУГИХ камер, кроме своей
+        // Это предотвращает перезапись собственного состояния камеры при подключении
         Object.entries(currentCameraStates).forEach(([cameraUserId, isEnabled]) => {
-          ws.send(JSON.stringify({
-            type: 'individual_camera_update',
-            userId: cameraUserId,
-            enabled: isEnabled
-          }));
-          console.log(`Отправлено индивидуальное обновление состояния камеры для ${cameraUserId} (${isEnabled}) клиенту ${userId}`);
+          // Проверяем, не является ли это камерой самого подключающегося пользователя
+          if (cameraUserId !== userId) {
+            ws.send(JSON.stringify({
+              type: 'individual_camera_update',
+              userId: cameraUserId,
+              enabled: isEnabled
+            }));
+            console.log(`Отправлено индивидуальное обновление состояния ЧУЖОЙ камеры для ${cameraUserId} (${isEnabled}) клиенту ${userId}`);
+          } else {
+            console.log(`Пропускаем отправку состояния СВОЕЙ камеры для ${cameraUserId} клиенту ${userId}`);
+          }
         });
         
         console.log(`Отправлено первоначальное состояние клиенту ${userId}: ${currentSlots.length} слотов`);
@@ -409,19 +414,21 @@ export class ConnectionManager {
     const cameraStateChangedListener = (changedUserId: string, isEnabled: boolean) => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
-          // Создаем объект с одним обновлением
-          const updateData: Record<string, boolean> = {};
-          updateData[changedUserId] = isEnabled;
-          
-          // Отправляем специальное событие individual_camera_update вместо camera_states_update
-          // Это позволит клиенту понять, что нужно обновить только одну камеру, а не все
-          ws.send(JSON.stringify({
-            type: 'individual_camera_update',
-            userId: changedUserId,
-            enabled: isEnabled
-          }));
-          
-          console.log(`Отправлено индивидуальное обновление состояния камеры для ${changedUserId} (${isEnabled}) клиенту ${userId}`);
+          // Не отправляем обновление состояния собственной камеры пользователю
+          // Это предотвращает переопределение своего состояния камеры при подключении другого клиента
+          // и исключает бесконечный цикл обновлений при изменении состояния сервером
+          if (changedUserId !== userId) {
+            // Отправляем специальное событие individual_camera_update только для чужих камер
+            ws.send(JSON.stringify({
+              type: 'individual_camera_update',
+              userId: changedUserId,
+              enabled: isEnabled
+            }));
+            
+            console.log(`Отправлено индивидуальное обновление состояния ЧУЖОЙ камеры для ${changedUserId} (${isEnabled}) клиенту ${userId}`);
+          } else {
+            console.log(`Пропускаем отправку обновления СОБСТВЕННОЙ камеры для ${changedUserId} клиенту ${userId}`);
+          }
         } catch (error) {
           console.error(`Ошибка отправки обновления состояния камеры ${changedUserId} пользователю ${userId}:`, error);
         }
