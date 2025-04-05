@@ -218,12 +218,13 @@ export function useSlots(userId: string) {
                 const newCameraStates = { ...prev.cameraStates };
                 
                 // Проверяем, является ли эта камера нашим пользователем
+                // ТОЛЬКО точное соответствие одному из наших идентификаторов
                 const isCurrentUser = (
                   userId === currentUserId || 
-                  userId === globalId || 
-                  (globalId && globalId.includes(userId)) || 
-                  (userId && userId.includes(globalId))
+                  userId === globalId
                 );
+                
+                console.log(`Проверка своей камеры: userId=${userId}, currentUserId=${currentUserId}, globalId=${globalId}, isCurrentUser=${isCurrentUser}`);
                 
                 if (isCurrentUser) {
                   // ДЛЯ СВОЕЙ КАМЕРЫ:
