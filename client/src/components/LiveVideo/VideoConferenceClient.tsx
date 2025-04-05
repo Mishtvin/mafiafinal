@@ -17,6 +17,7 @@ import {
 import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
 import { IsolatedVideoGrid } from './IsolatedVideoGrid';
+import { CameraToggle } from './CameraToggle';
 import { useSlots } from '../../hooks/use-slots';
 
 import { SlotsState } from '../../hooks/use-slots';
@@ -455,24 +456,13 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       >
         <div className="controls-container">
           <div className="left-controls">
-            <button 
-              className="control-button" 
-              aria-label="Toggle Camera"
-              onClick={toggleCamera}
-            >
-              {cameraEnabled ? (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 7 16 12 23 17z"></path>
-                  <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500">
-                  <path d="M23 7 16 12 23 17z"></path>
-                  <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
-                  <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2"></line>
-                </svg>
-              )}
-            </button>
+            <div className="control-button">
+              <CameraToggle 
+                enabled={cameraEnabled}
+                onToggle={toggleCamera}
+                className="w-6 h-6"
+              />
+            </div>
             
             {/* Селектор камеры */}
             {cameras.length > 1 && (

@@ -1,74 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { useLocalParticipant } from '@livekit/components-react';
-import { useCameraContext } from '../../contexts/CameraContext';
+import React from 'react';
 
 /**
- * Компонент для переключения своей камеры
+ * Компонент для переключения камеры
+ * 
+ * @param enabled - текущее состояние камеры (включена/выключена)
+ * @param onToggle - функция для переключения состояния камеры
+ * @param className - дополнительные классы стилей
  */
-export const CameraToggle: React.FC = () => {
-  const { localParticipant } = useLocalParticipant();
-  const { cameraStates, setCameraState } = useCameraContext();
-  
-  // Получаем состояние своей камеры из контекста или по умолчанию выключено 
-  const cameraEnabled = localParticipant ? cameraStates[localParticipant.identity] || false : false;
-  
-  // Функция для переключения камеры
-  const toggleCamera = async () => {
-    if (!localParticipant) return;
-    
-    const newState = !cameraEnabled;
-    console.log(`[CAMERA_TOGGLE] Переключение камеры: ${newState}`);
-    
-    // Меняем состояние в контексте
-    setCameraState(localParticipant.identity, newState);
-    
-    // Управляем реальной камерой
-    try {
-      const tracks = Array.from(localParticipant.trackPublications.values());
-      const videoTrack = tracks.find(track => track.source === 'camera');
-      
-      if (videoTrack) {
-        // Если трек существует, включаем/отключаем его
-        if (newState) {
-          await videoTrack.track?.unmute();
-        } else {
-          await videoTrack.track?.mute();
-        }
-      } else if (newState) {
-        // Если трека нет и хотим включить, создаем новый
-        await localParticipant.enableCameraAndMicrophone();
-        await localParticipant.setMicrophoneEnabled(false); // Отключаем микрофон, так как нам нужна только камера
-      }
-      
-      // Отправляем событие на сервер
-      const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`);
-      ws.onopen = () => {
-        ws.send(JSON.stringify({
-          type: 'camera_state_update',
-          enabled: newState
-        }));
-        setTimeout(() => ws.close(), 100);
-      };
-    } catch (error) {
-      console.error('[CAMERA_TOGGLE] Ошибка при переключении камеры:', error);
-    }
-  };
-  
-  // Для отладки
-  useEffect(() => {
-    if (localParticipant) {
-      console.log(`[CAMERA_TOGGLE] Состояние камеры ${localParticipant.identity}: ${cameraEnabled}`);
-    }
-  }, [localParticipant, cameraEnabled]);
-  
-  if (!localParticipant) return null;
+export const CameraToggle: React.FC<{
+  enabled: boolean;
+  onToggle: () => void;
+  className?: string;
+}> = ({ enabled, onToggle, className = '' }) => {
   
   return (
     <button 
-      className={`flex items-center justify-center p-2 rounded-full transition-colors ${
-        cameraEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+      className={`flex items-center justify-center p-2 rounded-full transition-colors ${className} ${
+        enabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
       }`}
-      onClick={toggleCamera}
+      onClick={onToggle}
     >
       <svg 
         xmlns="http://www.w3.org/2000/svg" 
@@ -77,7 +27,7 @@ export const CameraToggle: React.FC = () => {
         viewBox="0 0 24 24" 
         stroke="currentColor"
       >
-        {cameraEnabled ? (
+        {enabled ? (
           <path 
             strokeLinecap="round" 
             strokeLinejoin="round" 

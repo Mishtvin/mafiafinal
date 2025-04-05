@@ -81,10 +81,8 @@ export function IsolatedVideoGrid() {
       {/* Контроллер камеры для обработки событий */}
       <CameraController userId={userIdentity} />
       
-      {/* Кнопка переключения камеры */}
-      <div className="absolute bottom-4 right-4 z-20">
-        <CameraToggle />
-      </div>
+      {/* Кнопка переключения камеры интегрируется в интерфейс 
+           через другие компоненты управления, поэтому здесь удалена */}
       
       {/* Сетка видео */}
       <div className="h-full w-full p-4">
