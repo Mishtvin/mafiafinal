@@ -37,6 +37,19 @@
 
 /* На мобильных устройствах */
 @media (max-width: 768px) {
+  /* Улучшаем поддержку скроллинга на iOS */
+  .mobile-scroller {
+    -webkit-overflow-scrolling: touch;
+    height: 100%;
+    touch-action: pan-y;
+    overflow-y: auto;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+  
   .video-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr); /* 2 колонки */
@@ -44,7 +57,7 @@
     grid-auto-flow: row; /* Автоматическое добавление новых рядов */
     height: auto; /* Автоматическая высота для поддержки скроллинга */
     max-height: none; /* Снимаем ограничение на максимальную высоту */
-    overflow-y: auto; /* Включаем вертикальный скроллинг */
+    overflow-y: visible; /* Делаем контент видимым вне контейнера */
     padding-bottom: 80px; /* Отступ внизу, чтобы учесть панель управления */
   }
   

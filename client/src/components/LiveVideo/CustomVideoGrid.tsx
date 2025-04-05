@@ -46,7 +46,7 @@ export function CustomVideoGrid() {
   }, [participants]);
 
   return (
-    <div className="h-full w-full p-4 overflow-hidden">
+    <div className="h-full w-full p-4">
       <div className="video-grid">
         {slots}
       </div>
