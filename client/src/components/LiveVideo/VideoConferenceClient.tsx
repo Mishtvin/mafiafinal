@@ -165,31 +165,33 @@ const ControlDrawer = ({ room }: { room: Room }) => {
           .getTrackPublications()
           .some(track => track.kind === 'video' && !track.isMuted && track.track);
         
-        // При самом первом подключении всегда устанавливаем камеру как включенную,
-        // так как это соответствует реальному поведению LiveKit
-        // За исключением случаев, когда явно детектируем выключенную камеру
+        // По умолчанию используем API статус для синхронизации UI
+        const apiCameraEnabled = room.localParticipant.isCameraEnabled;
+        
+        // Проверяем первое ли это подключение
         const isFirstConnection = !window.sessionStorage.getItem('camera-state-initialized');
         
-        // Определяем эффективное состояние камеры
-        // Принудительно устанавливаем камеру как включенную независимо от реального состояния
-        let effectiveState = true;
+        // При первом подключении всегда устанавливаем камеру как включенную
+        let effectiveState = isFirstConnection ? true : apiCameraEnabled;
         
-        // Принудительно устанавливаем камеру как включенную при первой загрузке
-        if (isFirstConnection && !hasActiveVideoTracks && effectiveState === false) {
-          effectiveState = true;
+        // Отмечаем, что инициализация прошла
+        if (isFirstConnection) {
           window.sessionStorage.setItem('camera-state-initialized', 'true');
         }
         
         console.log('Состояние камеры обновлено:', 
                     'треки:', hasActiveVideoTracks, 
-                    'API:', room.localParticipant.isCameraEnabled,
+                    'API:', apiCameraEnabled,
                     'итоговое:', effectiveState,
                     'первое подключение:', isFirstConnection);
         
         setCameraEnabled(effectiveState);
         
         // Этот вызов только обновляет список доступных камер и определяет текущую активную
-        getCameras();
+        // Вызываем только если камера включена, чтобы избежать сброса на другую камеру
+        if (effectiveState) {
+          getCameras();
+        }
       }
     };
     
@@ -230,16 +232,11 @@ const ControlDrawer = ({ room }: { room: Room }) => {
   // Функция переключения камеры с надежной проверкой переключения
   const toggleCamera = async () => {
     if (room && room.localParticipant) {
-      // Проверяем текущее реальное состояние камеры через треки
-      const hasActiveVideoTracks = room.localParticipant
-        .getTrackPublications()
-        .some(track => track.kind === 'video' && !track.isMuted && track.track);
+      // Инвертируем текущее состояние UI
+      const newCameraState = !cameraEnabled;
+      console.log('Переключаем камеру из UI состояния:', cameraEnabled, 'в', newCameraState);
       
-      const newCameraState = !hasActiveVideoTracks;
-      console.log('Переключаем камеру из', hasActiveVideoTracks, 'в', newCameraState, 
-                  '(UI состояние:', cameraEnabled, ')');
-      
-      // Обновляем UI состояние согласно реальному состоянию
+      // Обновляем UI состояние немедленно
       setCameraEnabled(newCameraState);
       
       try {
@@ -250,11 +247,21 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         await room.localParticipant.setCameraEnabled(newCameraState);
         console.log('Камера переключена успешно');
         
+        // При выключении камеры НЕ изменяем текущую выбранную камеру
+        if (!newCameraState) {
+          // Сохраняем текущую камеру для возможного будущего включения
+          const currentCamera = selectedCamera || '';
+          localStorage.setItem('last-active-camera', currentCamera);
+          console.log('Сохранили последнюю активную камеру:', currentCamera);
+        }
+        
         // Проверяем еще раз реальное состояние после переключения
         setTimeout(() => {
-          const realCameraState = room.localParticipant
-            .getTrackPublications()
-            .some(track => track.kind === 'video' && !track.isMuted && track.track);
+          // Проверяем физические треки и статус API
+          const realCameraState = room.localParticipant.isCameraEnabled || 
+            room.localParticipant
+              .getTrackPublications()
+              .some(track => track.kind === 'video' && !track.isMuted && track.track);
           
           // Если состояние в UI и реальное состояние не совпадают, исправляем UI
           if (realCameraState !== newCameraState) {
@@ -262,14 +269,17 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                         'реальное:', realCameraState, 'UI:', newCameraState);
             setCameraEnabled(realCameraState);
           }
+          
+          // Обновляем список камер, но не переключаем на другую при выключении
+          if (newCameraState) {
+            getCameras(); 
+          }
         }, 500); // Проверяем через полсекунды
       } catch (err) {
         console.error('Ошибка переключения камеры:', err);
         // Восстанавливаем состояние UI в случае ошибки на основе реального состояния
         setTimeout(() => {
-          const realState = room.localParticipant
-            .getTrackPublications()
-            .some(track => track.kind === 'video' && !track.isMuted && track.track);
+          const realState = room.localParticipant.isCameraEnabled;
           setCameraEnabled(realState);
         }, 300);
       }
