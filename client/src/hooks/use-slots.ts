@@ -92,15 +92,40 @@ export function useSlots(userId: string) {
         console.log('WebSocket соединение установлено');
         setState(prev => ({ ...prev, connected: true, loading: false }));
 
-        // Используем глобальный идентификатор из window, если доступен
+        // Определяем эффективный идентификатор пользователя
+        // Приоритет: 1) глобальный в window 2) переданный в хук 3) из localStorage
         let effectiveUserId = userIdRef.current;
+        
+        // Проверяем, есть ли глобальный идентификатор
         if (window.currentUserIdentity && window.currentUserIdentity !== 'undefined') {
           effectiveUserId = window.currentUserIdentity;
           console.log('Использую глобальный идентификатор:', effectiveUserId);
+        } 
+        // Если нет, пробуем использовать переданный в хук
+        else if (userId && userId !== 'unknown-user') {
+          effectiveUserId = userId;
+          console.log('Использую переданный в хук идентификатор:', effectiveUserId);
+          // Синхронизируем с глобальной переменной
+          window.currentUserIdentity = effectiveUserId;
+        }
+        // В крайнем случае проверяем localStorage
+        else {
+          const storedId = window.localStorage.getItem('user-identity');
+          if (storedId) {
+            effectiveUserId = storedId;
+            console.log('Использую идентификатор из localStorage:', effectiveUserId);
+            window.currentUserIdentity = effectiveUserId;
+          } else {
+            // Генерация нового ID в крайнем случае
+            effectiveUserId = `User-${Math.floor(Math.random() * 10000)}-${Math.floor(Math.random() * 10000)}`;
+            console.log('Сгенерирован новый идентификатор:', effectiveUserId);
+            window.localStorage.setItem('user-identity', effectiveUserId);
+            window.currentUserIdentity = effectiveUserId;
+          }
         }
 
-        // Регистрируем пользователя на сервере
-        console.log('Регистрируем пользователя:', effectiveUserId);
+        // Регистрируем пользователя на сервере с эффективным ID
+        console.log('Регистрируем пользователя на сервере:', effectiveUserId);
         sendMessage({
           type: 'register',
           userId: effectiveUserId

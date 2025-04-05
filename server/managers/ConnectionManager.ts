@@ -78,6 +78,28 @@ export class ConnectionManager {
     this.setupActivityChecker(userId, ws);
     
     console.log(`Зарегистрировано новое соединение для ${userId} (всего соединений: ${connections.length})`);
+    
+    // Сразу после подключения отправляем клиенту текущее состояние слотов и камер
+    try {
+      const currentSlots = slotManager.getAllSlotAssignments();
+      const currentCameraStates = cameraManager.getAllCameraStates();
+      
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'slots_update',
+          slots: currentSlots
+        }));
+        
+        ws.send(JSON.stringify({
+          type: 'camera_states_update',
+          cameraStates: currentCameraStates
+        }));
+        
+        console.log(`Отправлено первоначальное состояние клиенту ${userId}: ${currentSlots.length} слотов`);
+      }
+    } catch (error) {
+      console.error(`Ошибка отправки начального состояния пользователю ${userId}:`, error);
+    }
   }
   
   /**
@@ -242,12 +264,58 @@ export class ConnectionManager {
     
     // Обработка различных типов сообщений
     switch (data.type) {
+      case 'register':
+        // Пользователь переопределяет свой идентификатор
+        if (data.userId && data.userId !== userId) {
+          console.log(`Обновлен идентификатор пользователя с ${userId} на ${data.userId}`);
+          
+          // Переносим данные на новый идентификатор
+          const currentSlot = slotManager.getUserSlot(userId);
+          const cameraState = cameraManager.getCameraState(userId);
+          
+          if (currentSlot) {
+            // Освобождаем слот для старого ID и назначаем для нового
+            console.log(`Переназначение слота ${currentSlot} с ${userId} на ${data.userId}`);
+            slotManager.releaseUserSlot(userId);
+            slotManager.assignSlot(data.userId, currentSlot);
+          } else {
+            // Если не было слота, пытаемся назначить новый
+            console.log(`Назначение нового слота для ${data.userId}`);
+            slotManager.assignFirstAvailableSlot(data.userId);
+          }
+          
+          // Переносим состояние камеры
+          if (cameraState !== undefined) {
+            console.log(`Перенос состояния камеры для ${data.userId}: ${cameraState}`);
+            cameraManager.setCameraState(data.userId, cameraState);
+          } else {
+            // Инициализируем новое состояние камеры
+            cameraManager.initializeUserCamera(data.userId);
+          }
+          
+          // Отправляем обновленное состояние всем пользователям
+          const currentSlots = slotManager.getAllSlotAssignments();
+          const currentCameraStates = cameraManager.getAllCameraStates();
+          
+          this.broadcastToAll({
+            type: 'slots_update',
+            slots: currentSlots
+          });
+          
+          this.broadcastToAll({
+            type: 'camera_states_update',
+            cameraStates: currentCameraStates
+          });
+        }
+        break;
+        
       case 'select_slot':
         // Пользователь выбирает слот
         if (data.slotNumber !== undefined) {
           const slotNumber = Number(data.slotNumber);
           const success = slotManager.assignSlot(userId, slotNumber);
           
+          // Отправляем уведомление только если слот занят
           if (!success) {
             this.sendToUser(userId, {
               type: 'slot_busy',

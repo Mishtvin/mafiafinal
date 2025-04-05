@@ -445,32 +445,6 @@ export function VideoConferenceClient(props: {
 }) {
   // Состояние для уникальной идентификации пользователя
   
-  // Генерируем случайный идентификатор пользователя при первой загрузке
-  const userId = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      // Использовать сохраненный идентификатор или сгенерировать новый
-      const storedId = window.localStorage.getItem('user-identity');
-      if (storedId) return storedId;
-      
-      // Генерация уникального ID
-      const newId = `User-${Math.floor(Math.random() * 10000)}-${Math.floor(Math.random() * 10000)}`;
-      window.localStorage.setItem('user-identity', newId);
-      return newId;
-    }
-    return 'unknown-user';
-  }, []);
-  
-  // Используем хук для слотов
-  const slotsState = useSlots(userId);
-  
-  // Автоматически регистрируем пользователя при подключении
-  useEffect(() => {
-    if (slotsState.connected) {
-      // При необходимости можно добавить дополнительную логику
-    }
-  }, [slotsState.connected]);
-  
-  
   // Создаем Worker для E2EE
   const worker =
     typeof window !== 'undefined' &&
@@ -509,6 +483,67 @@ export function VideoConferenceClient(props: {
     keyProvider.setKey(e2eePassphrase);
     room.setE2EEEnabled(true);
   }
+  
+  // Генерируем и инициализируем идентификатор пользователя
+  const userId = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      // Проверка на существование глобальной переменной
+      if (!window.currentUserIdentity) {
+        // Проверяем, есть ли идентификатор в localStorage
+        const storedId = window.localStorage.getItem('user-identity');
+        
+        if (storedId) {
+          // Используем сохранённый ID
+          console.log(`Используем сохранённый идентификатор: ${storedId}`);
+          window.currentUserIdentity = storedId;
+        } else {
+          // Генерация нового уникального ID
+          const newId = `User-${Math.floor(Math.random() * 10000)}-${Math.floor(Math.random() * 10000)}`;
+          console.log(`Сгенерирован новый идентификатор: ${newId}`);
+          window.localStorage.setItem('user-identity', newId);
+          window.currentUserIdentity = newId;
+        }
+      }
+      
+      // Теперь у нас точно есть идентификатор в window.currentUserIdentity
+      return window.currentUserIdentity;
+    }
+    return 'unknown-user';
+  }, []);
+  
+  // Используем хук для слотов
+  const slotsState = useSlots(userId);
+  
+  // Отслеживаем идентификатор LiveKit после подключения к комнате
+  useEffect(() => {
+    if (room && room.localParticipant) {
+      const livekitId = room.localParticipant.identity;
+      
+      if (livekitId && livekitId !== 'undefined') {
+        console.log(`Обнаружен идентификатор LiveKit: ${livekitId}`);
+        
+        // Если идентификаторы отличаются, обновляем глобальную переменную и localStorage
+        if (livekitId !== window.currentUserIdentity) {
+          console.log(`Синхронизирую идентификаторы: LiveKit=${livekitId}, текущий=${window.currentUserIdentity}`);
+          window.localStorage.setItem('user-identity', livekitId);
+          window.currentUserIdentity = livekitId;
+          
+          // Заново регистрируем пользователя с новым ID через WebSocket
+          if (slotsState.connected && slotsState.registerUser) {
+            console.log('Переопределяем регистрацию с новым идентификатором LiveKit');
+            slotsState.registerUser();
+          }
+        }
+      }
+    }
+  }, [room?.localParticipant, slotsState]);
+  
+  // Автоматически регистрируем пользователя при подключении
+  useEffect(() => {
+    if (slotsState.connected) {
+      // При необходимости можно добавить дополнительную логику
+    }
+  }, [slotsState.connected]);
   
   // Параметры подключения к комнате
   const connectOptions = useMemo((): RoomConnectOptions => {
