@@ -12,10 +12,9 @@ export const CameraController: React.FC<{ userId: string }> = ({ userId }) => {
   useEffect(() => {
     console.log(`[CameraController] Состояние камеры изменено: ${cameraEnabled ? 'включена' : 'выключена'}`);
     
-    // Синхронизация с WebSocket происходит в CameraToggle через useSlots
-    console.log(`[CameraController] Пользователь ${userId} ${cameraEnabled ? 'включил' : 'выключил'} камеру`);
+    // Здесь будет логика работы с WebRTC API когда локальный участник будет доступен
     
-  }, [cameraEnabled, userId]);
+  }, [cameraEnabled]);
   
   // Этот компонент не рендерит никакого UI
   return null;
