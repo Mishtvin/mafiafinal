@@ -256,20 +256,25 @@ export function useSlots(userId: string) {
                   
                   // Всегда проверяем сохраненное состояние в sessionStorage
                   const savedState = window.sessionStorage.getItem('camera-state');
-                  console.log(`Но используем сохраненное состояние:`, savedState);
+                  console.log(`Сохраненное состояние камеры:`, savedState);
                   
+                  // ВАЖНОЕ ИЗМЕНЕНИЕ: Полностью игнорируем обновления своей камеры с сервера
+                  // Свое состояние клиент контролирует сам
+                  console.log(`ИГНОРИРУЕМ обновление своей камеры с сервера`);
+                  
+                  // Для своей камеры используем только локальное значение
                   if (savedState !== null) {
-                    // Используем ТОЛЬКО сохраненное состояние вместо полученного
+                    // Используем ТОЛЬКО сохраненное состояние вместо полученного с сервера
                     const savedEnabled = savedState === 'true';
-                    console.log(`Устанавливаем свою камеру в сохраненное состояние: ${savedEnabled}`);
+                    console.log(`Инициализация состояния камеры:`, savedEnabled, `на основе сохраненного значения:`, savedState);
                     newCameraStates[userId] = savedEnabled;
                   } else if (userId in newCameraStates) {
                     // Не меняем уже установленное состояние
                     console.log(`Сохраняем текущее состояние своей камеры: ${userId} -> ${newCameraStates[userId]}`);
                   } else {
                     // Если нет данных, то по умолчанию камера ВЫКЛЮЧЕНА
-                    newCameraStates[userId] = false;
                     console.log(`Устанавливаем начальное состояние своей камеры в выключено`);
+                    newCameraStates[userId] = false;
                     
                     // Сохраняем это состояние
                     window.sessionStorage.setItem('camera-state', 'false');
