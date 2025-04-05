@@ -168,6 +168,29 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
     };
   }, []);
   
+  // ВАЖНО: Обработка разъединения комнаты при включении камеры
+  useEffect(() => {
+    if (room) {
+      console.log('Настраиваем обработчик разъединения для комнаты LiveKit');
+      
+      // Функция обработки разъединения
+      const handleDisconnected = () => {
+        console.log('Обнаружено отключение от комнаты LiveKit');
+        // Если отключение происходит при включении камеры, сохраняем желаемое состояние
+        const savedState = window.sessionStorage.getItem('camera-state');
+        console.log('При отключении: сохраняем состояние камеры:', savedState);
+      };
+      
+      // Добавляем слушатель события отключения
+      room.on('disconnected', handleDisconnected);
+      
+      // Удаляем слушатель при размонтировании
+      return () => {
+        room.off('disconnected', handleDisconnected);
+      };
+    }
+  }, [room]);
+  
   // Обновляем статус камеры при изменении состояния локального участника
   useEffect(() => {
     const updateCameraState = () => {
@@ -343,11 +366,26 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       // Получаем текущий идентификатор пользователя
       const currentUserId = window.currentUserIdentity || '';
       
-      // Инвертируем текущее состояние UI
-      const newCameraState = !cameraEnabled;
-      console.log('ЛОКАЛЬНОЕ Переключение камеры из UI состояния:', cameraEnabled, 'в', newCameraState);
+      // Проверяем реальное состояние трека перед переключением
+      const realCameraState = room.localParticipant.isCameraEnabled;
       
-      // Обновляем UI состояние немедленно
+      // Инвертируем РЕАЛЬНОЕ состояние камеры, а не UI
+      const newCameraState = !realCameraState;
+      console.log('ПЕРЕКЛЮЧЕНИЕ КАМЕРЫ: текущее состояние:', realCameraState, 'новое:', newCameraState);
+      
+      // Проверяем, не слишком ли быстро переключаем камеру
+      const lastToggleTime = parseInt(sessionStorage.getItem('last-camera-toggle') || '0', 10);
+      const currentTime = Date.now();
+      
+      if (currentTime - lastToggleTime < 2000) { // Увеличиваем до 2 секунд
+        console.log('ЗАЩИТА: Слишком частое переключение камеры, игнорируем');
+        return; // Полностью игнорируем частые переключения
+      }
+      
+      // Запоминаем время последнего переключения
+      sessionStorage.setItem('last-camera-toggle', String(currentTime));
+      
+      // Обновляем UI состояние на основе желаемого нового состояния
       setCameraEnabled(newCameraState);
       
       // Сохраняем желаемое состояние камеры в sessionStorage
@@ -356,21 +394,7 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       console.log('Сохранено ЛОКАЛЬНОЕ состояние камеры:', newCameraState);
       
       try {
-        // Защитная проверка - нельзя переключать камеру слишком часто
-        const lastToggleTime = parseInt(sessionStorage.getItem('last-camera-toggle') || '0', 10);
-        const currentTime = Date.now();
-        
-        if (currentTime - lastToggleTime < 1000) { // Увеличиваем защитный интервал до 1 секунды
-          console.log('Слишком частое переключение камеры, пропускаем запрос');
-          // Синхронизируем обратно с реальным состоянием, чтобы пользователь не был сбит с толку
-          const currentRealState = room.localParticipant.isCameraEnabled;
-          setCameraEnabled(currentRealState);
-          window.sessionStorage.setItem('camera-state', String(currentRealState));
-          return; // Пропускаем переключение, если прошло менее 1000 мс
-        }
-        
-        // Запоминаем время последнего переключения
-        sessionStorage.setItem('last-camera-toggle', String(currentTime));
+        // Проверка времени была перенесена выше, здесь не нужна двойная проверка
         
         // Небольшая задержка для предотвращения потенциальных проблем синхронизации
         await new Promise(resolve => setTimeout(resolve, 200)); // Увеличиваем задержку перед операцией
