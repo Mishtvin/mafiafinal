@@ -27,3 +27,20 @@
   min-height: 150px;
   aspect-ratio: 16/9;
 }
+
+/* Фиксированная высота футера */
+.control-bar-container {
+  height: 60px;
+  max-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Горизонтальное расположение элементов управления */
+.lk-control-bar {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 12px;
+}

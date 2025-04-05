@@ -112,8 +112,8 @@ export function VideoConferenceClient(props: {
         </main>
         
         {/* Footer with controls */}
-        <footer className="bg-slate-800 px-4 py-4 border-t border-slate-700">
-          <div className="flex justify-center items-center">
+        <footer className="bg-slate-800 px-4 border-t border-slate-700">
+          <div className="control-bar-container">
             <ControlBar
               controls={{
                 microphone: false,
