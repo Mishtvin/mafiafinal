@@ -2,11 +2,23 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { AccessToken, VideoGrant } from "livekit-server-sdk";
+import { WebSocketServer } from "ws";
+import { WebSocket } from "ws";
 
 // LiveKit настройки
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = 'wss://livekit.nyavkin.site/'; // URL сервера LiveKit со слешем в конце
+
+// Структура данных для хранения информации о слотах
+interface SlotInfo {
+  userId: string;
+  slotNumber: number;
+}
+
+// Хранилище данных о слотах
+const slotAssignments = new Map<number, string>(); // slotNumber -> userId
+const userSlots = new Map<string, number>(); // userId -> slotNumber
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API endpoints
@@ -129,6 +141,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+
+  // Создаем WebSocket сервер на отдельном пути
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+
+  // Коллекция подключений для отслеживания клиентов
+  const connections = new Map<string, WebSocket>();
+
+  // Обработчик подключений WebSocket
+  wss.on('connection', (ws: WebSocket) => {
+    let userId: string | null = null;
+
+    // Обработка входящих сообщений
+    ws.on('message', (message: Buffer | string) => {
+      try {
+        const messageStr = message.toString();
+        const data = JSON.parse(messageStr);
+        
+        // Обработка разных типов сообщений
+        switch(data.type) {
+          case 'register':
+            // Регистрация пользователя
+            userId = data.userId;
+            if (userId) {
+              connections.set(userId, ws);
+            }
+            console.log(`Пользователь зарегистрирован: ${userId}`);
+            
+            // Отправляем текущее состояние слотов
+            const currentSlots: SlotInfo[] = [];
+            slotAssignments.forEach((userId, slotNumber) => {
+              currentSlots.push({ userId, slotNumber });
+            });
+            
+            ws.send(JSON.stringify({
+              type: 'slots_update',
+              slots: currentSlots
+            }));
+            break;
+            
+          case 'select_slot':
+            // Пользователь выбирает слот
+            if (!userId) break;
+            
+            const selectedSlot = data.slotNumber;
+            const previousSlot = userSlots.get(userId);
+            
+            // Освобождаем предыдущий слот, если был
+            if (previousSlot !== undefined) {
+              slotAssignments.delete(previousSlot);
+            }
+            
+            // Проверяем, не занят ли выбранный слот
+            const currentOccupant = slotAssignments.get(selectedSlot);
+            if (currentOccupant && currentOccupant !== userId) {
+              // Слот занят другим пользователем
+              ws.send(JSON.stringify({
+                type: 'slot_busy',
+                slotNumber: selectedSlot
+              }));
+              return;
+            }
+            
+            // Занимаем новый слот
+            slotAssignments.set(selectedSlot, userId);
+            userSlots.set(userId, selectedSlot);
+            
+            console.log(`Пользователь ${userId} выбрал слот ${selectedSlot}`);
+            
+            // Отправляем обновление всем подключенным клиентам
+            broadcastSlotUpdate();
+            break;
+            
+          case 'release_slot':
+            // Пользователь освобождает слот
+            if (!userId) break;
+            
+            const slotToRelease = userSlots.get(userId);
+            if (slotToRelease !== undefined) {
+              slotAssignments.delete(slotToRelease);
+              userSlots.delete(userId);
+              
+              console.log(`Пользователь ${userId} освободил слот ${slotToRelease}`);
+              
+              // Отправляем обновление всем подключенным клиентам
+              broadcastSlotUpdate();
+            }
+            break;
+        }
+      } catch (error) {
+        console.error('Ошибка обработки сообщения WebSocket:', error);
+      }
+    });
+    
+    // Обработка отключения
+    ws.on('close', () => {
+      if (userId) {
+        // Освобождаем слот при отключении пользователя
+        const slotToRelease = userSlots.get(userId);
+        if (slotToRelease !== undefined) {
+          slotAssignments.delete(slotToRelease);
+          userSlots.delete(userId);
+        }
+        
+        connections.delete(userId);
+        console.log(`Пользователь отключился: ${userId}`);
+        
+        // Отправляем обновление всем подключенным клиентам
+        broadcastSlotUpdate();
+      }
+    });
+  });
+  
+  // Функция для отправки обновления слотов всем подключенным клиентам
+  function broadcastSlotUpdate() {
+    const currentSlots: SlotInfo[] = [];
+    slotAssignments.forEach((userId, slotNumber) => {
+      currentSlots.push({ userId, slotNumber });
+    });
+    
+    const updateMessage = JSON.stringify({
+      type: 'slots_update',
+      slots: currentSlots
+    });
+    
+    connections.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(updateMessage);
+      }
+    });
+  }
 
   return httpServer;
 }

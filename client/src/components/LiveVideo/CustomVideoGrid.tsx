@@ -4,52 +4,80 @@ import {
   useTracks,
   VideoTrack
 } from '@livekit/components-react';
-import { Track, Participant } from 'livekit-client';
+import { Track, Participant, Room } from 'livekit-client';
 import React, { useEffect, useState } from 'react';
+import { useSlots } from '../../hooks/use-slots';
 
 /**
  * Компонент сетки видео 4x3 для отображения до 12 участников
  */
 export function CustomVideoGrid() {
   const participants = useParticipants();
-  const [slots, setSlots] = useState<React.ReactNode[]>([]);
+  const [currentLocalParticipant] = participants.filter(p => p.isLocal);
   
-  // Максимальное количество слотов в сетке
-  const MAX_SLOTS = 12;
+  // Используем хук для синхронизации слотов
+  const slotsManager = useSlots(currentLocalParticipant?.identity || 'unknown');
   
-  // Обновляем слоты при изменении количества участников
+  // Обработчик клика по пустому слоту
+  const handleSlotClick = (slotNumber: number) => {
+    if (slotsManager.connected) {
+      slotsManager.selectSlot(slotNumber);
+    }
+  };
+  
+  // Автоматически выбираем слот для локального участника при подключении
   useEffect(() => {
-    // Генерируем набор из 12 слотов
-    const newSlots = [];
-    
-    // Заполняем слоты доступными участниками
-    for (let i = 0; i < MAX_SLOTS; i++) {
-      const participant = participants[i];
-      
-      if (participant) {
-        // Создаем слот с участником
-        newSlots.push(
-          <ParticipantSlot 
-            key={participant.identity} 
-            participant={participant} 
-            slotNumber={i + 1}
-          />
-        );
-      } else {
-        // Создаем пустой слот
-        newSlots.push(
-          <EmptySlot key={`empty-${i}`} index={i} />
-        );
+    if (currentLocalParticipant && slotsManager.connected && !slotsManager.userSlot) {
+      // Находим первый свободный слот
+      for (let i = 0; i < 12; i++) {
+        if (!slotsManager.slots.has(i + 1)) {
+          slotsManager.selectSlot(i + 1);
+          break;
+        }
       }
     }
-    
-    setSlots(newSlots);
-  }, [participants]);
+  }, [currentLocalParticipant, slotsManager.connected, slotsManager.userSlot]);
+  
+  // Создаем сетку из 12 слотов
+  const slotNumbers = Array.from({ length: 12 }, (_, i) => i + 1);
+  
+  // Создаем мапу для участников в нужных слотах
+  const participantsMap = new Map<string, Participant>();
+  participants.forEach(p => {
+    participantsMap.set(p.identity, p);
+  });
+  
+  // Debug
+  useEffect(() => {
+    if (slotsManager.connected) {
+      console.log('Slots state:', Array.from(slotsManager.slots.entries()));
+      console.log('User slot:', slotsManager.userSlot);
+    }
+  }, [slotsManager.slots, slotsManager.userSlot, slotsManager.connected]);
 
   return (
     <div className="h-full w-full p-4">
       <div className="video-grid">
-        {slots}
+        {slotNumbers.map(slotNumber => {
+          // Получаем ID пользователя, занимающего слот
+          const userId = slotsManager.slots.get(slotNumber);
+          // Получаем объект участника по ID
+          const participant = userId ? participantsMap.get(userId) : undefined;
+          
+          return participant ? (
+            <ParticipantSlot 
+              key={`slot-${slotNumber}`}
+              participant={participant}
+              slotNumber={slotNumber}
+            />
+          ) : (
+            <EmptySlot 
+              key={`empty-${slotNumber}`} 
+              index={slotNumber - 1}
+              onClick={() => handleSlotClick(slotNumber)}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -112,9 +140,12 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
 /**
  * Компонент для отображения пустого слота
  */
-function EmptySlot({ index }: { index: number }) {
+function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) {
   return (
-    <div className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30">
+    <div 
+      className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 cursor-pointer"
+      onClick={onClick}
+    >
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center">
           <div className="bg-slate-800/40 p-2 rounded-full mb-1">
