@@ -93,116 +93,186 @@ export function CustomVideoGrid() {
  * Этот компонент перерисовывается только при изменении слотов или участников,
  * но не при изменении состояния камер
  */
-const MemoizedVideoGrid = React.memo(function VideoGrid({
-  slots,
-  userSlot,
-  participantsMap,
-  currentLocalParticipant,
-  onSlotClick
-}: {
-  slots: Record<number, string>;
-  userSlot: number | null;
-  participantsMap: Map<string, Participant>;
-  currentLocalParticipant: Participant | undefined;
-  onSlotClick: (slotNumber: number) => void;
-}) {
-  // Создаем сетку из 12 слотов
-  const slotNumbers = useMemo(() => {
-    return Array.from({ length: 12 }, (_, i) => i + 1);
-  }, []);
+const MemoizedVideoGrid = React.memo(
+  function VideoGrid({
+    slots,
+    userSlot,
+    participantsMap,
+    currentLocalParticipant,
+    onSlotClick
+  }: {
+    slots: Record<number, string>;
+    userSlot: number | null;
+    participantsMap: Map<string, Participant>;
+    currentLocalParticipant: Participant | undefined;
+    onSlotClick: (slotNumber: number) => void;
+  }) {
+    // Создаем сетку из 12 слотов
+    const slotNumbers = useMemo(() => {
+      return Array.from({ length: 12 }, (_, i) => i + 1);
+    }, []);
 
-  console.log('[RENDER] MemoizedVideoGrid - должен перерисовываться ТОЛЬКО при изменении слотов или участников');
+    console.log('[RENDER] MemoizedVideoGrid - должен перерисовываться ТОЛЬКО при изменении слотов или участников');
 
-  return (
-    <div className="video-grid">
-      {slotNumbers.map((slotNumber: number) => {
-        // Получаем ID пользователя, занимающего слот
-        const userId = slots[slotNumber];
-        // Проверяем, является ли этот слот слотом текущего локального участника
-        const isCurrentUserSlot = userSlot === slotNumber && currentLocalParticipant;
-        // Получаем объект участника по ID или локального участника для его слота
-        const participant = isCurrentUserSlot 
-          ? currentLocalParticipant 
-          : (userId ? participantsMap.get(userId) : undefined);
-        
-        return participant ? (
-          <ParticipantSlot 
-            key={`slot-${slotNumber}`}
-            participant={participant}
-            slotNumber={slotNumber}
+    return (
+      <div className="video-grid">
+        {slotNumbers.map((slotNumber: number) => {
+          // Получаем ID пользователя, занимающего слот
+          const userId = slots[slotNumber];
+          // Проверяем, является ли этот слот слотом текущего локального участника
+          const isCurrentUserSlot = userSlot === slotNumber && currentLocalParticipant;
+          // Получаем объект участника по ID или локального участника для его слота
+          const participant = isCurrentUserSlot 
+            ? currentLocalParticipant 
+            : (userId ? participantsMap.get(userId) : undefined);
+          
+          return participant ? (
+            <ParticipantSlot 
+              key={`slot-${slotNumber}`}
+              participant={participant}
+              slotNumber={slotNumber}
+            />
+          ) : (
+            <EmptySlot 
+              key={`empty-${slotNumber}`} 
+              index={slotNumber - 1}
+              onClick={() => onSlotClick(slotNumber)}
+            />
+          );
+        })}
+      </div>
+    );
+  },
+  // Строгий компаратор для MemoizedVideoGrid
+  (prevProps, nextProps) => {
+    // Проверяем основные изменения, влияющие на расположение слотов
+    
+    // Проверка изменения слотов (поверхностное сравнение объектов)
+    const slotsEqual = Object.keys(prevProps.slots).length === Object.keys(nextProps.slots).length &&
+      Object.keys(prevProps.slots).every(key => prevProps.slots[key] === nextProps.slots[key]);
+    
+    // Проверка изменения userSlot
+    const userSlotEqual = prevProps.userSlot === nextProps.userSlot;
+    
+    // Проверка изменения размера карты участников
+    const participantsMapSizeEqual = prevProps.participantsMap.size === nextProps.participantsMap.size;
+    
+    // Проверка изменения локального участника
+    const localParticipantEqual = 
+      (!prevProps.currentLocalParticipant && !nextProps.currentLocalParticipant) ||
+      (prevProps.currentLocalParticipant && nextProps.currentLocalParticipant &&
+       prevProps.currentLocalParticipant.identity === nextProps.currentLocalParticipant.identity);
+    
+    // Если все ключевые значения равны, то не перерисовываем
+    const shouldNotUpdate = slotsEqual && userSlotEqual && participantsMapSizeEqual && localParticipantEqual;
+    
+    if (!shouldNotUpdate) {
+      console.log('[GRID CHANGE] Причина перерисовки сетки:', 
+        !slotsEqual ? 'изменились слоты' : 
+        !userSlotEqual ? 'изменился userSlot' : 
+        !participantsMapSizeEqual ? 'изменилось количество участников' : 
+        !localParticipantEqual ? 'изменился локальный участник' : 'неизвестная причина');
+    }
+    
+    return shouldNotUpdate;
+  }
+);
+
+/**
+ * Компонент для отображения видеотрека
+ * Отдельный компонент для минимизации перерисовок
+ * Использует строгий компаратор для максимальной изоляции
+ */
+const StableVideoTrack = React.memo(
+  ({ participant }: { participant: Participant }) => {
+    // Сохраняем идентификатор для логов
+    const identity = participant.identity;
+    
+    // Получаем список видеотреков
+    const videoTracks = useTracks(
+      [Track.Source.Camera],
+      { onlySubscribed: true }
+    ).filter(track => track.participant.identity === identity);
+    
+    const hasVideo = videoTracks.length > 0;
+    console.log(`[TRACK] Статус видео для ${identity}: ${hasVideo ? 'включено' : 'выключено'}`);
+    
+    return hasVideo ? (
+      <div className="h-full w-full relative flex items-center justify-center">
+        <VideoTrack 
+          trackRef={videoTracks[0]}
+          className="h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 ring-1 ring-white/10"></div>
+      </div>
+    ) : (
+      <div className="flex items-center justify-center h-full">
+        <svg 
+          xmlns="http://www.w3.org/2000/svg" 
+          className="h-12 w-12 text-slate-500" 
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+        >
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={1} 
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
           />
-        ) : (
-          <EmptySlot 
-            key={`empty-${slotNumber}`} 
-            index={slotNumber - 1}
-            onClick={() => onSlotClick(slotNumber)}
-          />
-        );
-      })}
-    </div>
-  );
-});
+        </svg>
+      </div>
+    );
+  },
+  // Компаратор для сравнения только идентификаторов участников
+  (prevProps, nextProps) => {
+    return prevProps.participant.identity === nextProps.participant.identity;
+  }
+);
 
 /**
  * Компонент для отображения одного участника 
  * Обернут в React.memo для предотвращения лишних перерисовок
+ * Используем сильный компаратор, чтобы предотвратить лишние перерисовки
  */
-const ParticipantSlot = React.memo(({ participant, slotNumber }: { participant: Participant; slotNumber: number }) => {
-  // Отслеживаем перерисовки
-  console.log(`[RENDER] ParticipantSlot ${slotNumber} для ${participant.identity}`);
-  
-  // Получаем список видеотреков
-  const videoTracks = useTracks(
-    [Track.Source.Camera],
-    { onlySubscribed: true }
-  ).filter(track => track.participant.identity === participant.identity);
-  
-  const hasVideo = videoTracks.length > 0;
-  
-  return (
-    <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
-      {hasVideo ? (
-        <div className="h-full w-full relative flex items-center justify-center">
-          {/* Здесь мы используем первый найденный трек */}
-          <VideoTrack 
-            trackRef={videoTracks[0]}
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 ring-1 ring-white/10"></div>
+const ParticipantSlot = React.memo(
+  ({ participant, slotNumber }: { participant: Participant; slotNumber: number }) => {
+    // Отслеживаем перерисовки
+    console.log(`[RENDER] ParticipantSlot ${slotNumber} для ${participant.identity}`);
+    
+    // Получаем только неизменяемые иммутабельные пропсы для стабильности рендеринга
+    const isLocal = participant.isLocal;
+    const identity = participant.identity;
+    
+    return (
+      <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
+        <StableVideoTrack participant={participant} />
+        
+        {/* Номер слота в левом нижнем углу */}
+        <div 
+          className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
+            ${isLocal ? 'bg-purple-700/90' : 'bg-slate-900/80'}`}
+        >
+          {slotNumber === 12 ? "Ведучий" : slotNumber}
         </div>
-      ) : (
-        <div className="flex items-center justify-center h-full">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            className="h-12 w-12 text-slate-500" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={1} 
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
-            />
-          </svg>
+        
+        {/* Имя пользователя рядом с номером слота */}
+        <div className="absolute bottom-2 left-8 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
+          {identity}
         </div>
-      )}
-      {/* Номер слота в левом нижнем углу */}
-      <div 
-        className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
-          ${participant.isLocal ? 'bg-purple-700/90' : 'bg-slate-900/80'}`}
-      >
-        {slotNumber === 12 ? "Ведучий" : slotNumber}
       </div>
-      
-      {/* Имя пользователя рядом с номером слота */}
-      <div className="absolute bottom-2 left-8 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
-        {participant.identity}
-      </div>
-    </div>
-  );
-});
+    );
+  },
+  // Строгий компаратор для сравнения пропсов
+  (prevProps, nextProps) => {
+    // Сравниваем только идентификатор и номер слота, игнорируем изменения в самом объекте участника
+    return (
+      prevProps.slotNumber === nextProps.slotNumber &&
+      prevProps.participant.identity === nextProps.participant.identity &&
+      prevProps.participant.isLocal === nextProps.participant.isLocal
+    );
+  }
+);
 
 /**
  * Компонент для отображения пустого слота
