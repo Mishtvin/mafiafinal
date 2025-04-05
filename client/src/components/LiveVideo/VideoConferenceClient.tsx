@@ -112,8 +112,17 @@ export function VideoConferenceClient(props: {
         </main>
         
         {/* Footer with controls */}
-        <footer className="bg-slate-800 px-4 py-3 border-t border-slate-700">
-          <ControlBar />
+        <footer className="bg-slate-800 px-4 py-4 border-t border-slate-700">
+          <div className="flex justify-center items-center">
+            <ControlBar
+              controls={{
+                microphone: false,
+                camera: true,
+                screenShare: false,
+                leave: true
+              }}
+            />
+          </div>
         </footer>
       </div>
     </LiveKitRoom>
