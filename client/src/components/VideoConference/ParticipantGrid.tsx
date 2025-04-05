@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useState } from "react";
-import ParticipantTile from "./ParticipantTileV2";
+import ParticipantTile from "./ParticipantTileV3";
 import { Participant, Track, ConnectionState } from "livekit-client";
 // Используем наш кастомный хук контекста
 import { useRoomContext } from "./CustomLiveKitRoom";
