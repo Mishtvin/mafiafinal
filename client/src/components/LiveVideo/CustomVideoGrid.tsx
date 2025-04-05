@@ -23,11 +23,11 @@ export function CustomVideoGrid() {
   // Принудительное обновление компонента при изменении слотов
   const [forceUpdate, setForceUpdate] = useState<number>(0);
   
-  // Пересоздаем функцию обновления при изменении слотов
+  // Пересоздаем функцию обновления при изменении слотов или списка участников
   useEffect(() => {
     console.log('Сработал эффект принудительного обновления', Object.keys(slotsManager.slots).length);
     setForceUpdate(prev => prev + 1);
-  }, [slotsManager.slots, slotsManager.userSlot]);
+  }, [slotsManager.slots, slotsManager.userSlot, participants.length]);
   
   // Обработчик клика по пустому слоту
   const handleSlotClick = (slotNumber: number) => {
@@ -90,23 +90,17 @@ export function CustomVideoGrid() {
       if (currentAssignedId !== localUserId) {
         console.log(`Фиксируем несоответствие ID в слоте ${localUserSlot}: сейчас=${currentAssignedId}, должен быть=${localUserId}`);
         
-        // Регистрируем пользователя на сервере повторно для обновления ID
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          try {
-            socketRef.current.send(JSON.stringify({
-              type: 'register',
-              userId: localUserId
-            }));
-            console.log(`Переотправлена регистрация для синхронизации ID: ${localUserId}`);
-          } catch (e) {
-            console.error('Ошибка отправки синхронизации:', e);
-          }
-        }
+        // Отправляем запрос на повторную регистрацию через API хука
+        slotsManager.releaseSlot(); // Сначала освобождаем слот
+        setTimeout(() => {
+          slotsManager.selectSlot(localUserSlot); // Затем выбираем тот же слот снова
+          console.log(`Переотправлена регистрация для синхронизации ID: ${localUserId}`);
+        }, 100);
       }
       
       console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
     }
-  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected, slotsManager.slots]);
+  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected, slotsManager.slots, slotsManager]);
 
   return (
     <div className="h-full w-full p-4">
