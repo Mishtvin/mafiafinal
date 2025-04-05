@@ -38,8 +38,26 @@ export function useSlots(userId: string) {
     return false;
   }, []);
   
-  // Функция для обновления состояния камеры
+  // Функция для обновления состояния камеры с защитой от слишком частых обновлений
+  const lastCameraToggleTime = useRef<number>(0);
   const setCameraState = useCallback((enabled: boolean) => {
+    // Защита от слишком частых переключений (минимум 1000 мс между изменениями)
+    const now = Date.now();
+    const timeSinceLastToggle = now - lastCameraToggleTime.current;
+    
+    if (timeSinceLastToggle < 1000) {
+      console.log(`Слишком быстрое переключение камеры, игнорируется (прошло ${timeSinceLastToggle}ms)`);
+      return false;
+    }
+    
+    // Сохраняем состояние камеры в sessionStorage для устойчивости к сбросам
+    window.sessionStorage.setItem('camera-state', String(enabled));
+    console.log(`Сохраняем состояние камеры в sessionStorage: ${enabled}`);
+    
+    // Обновляем время последнего переключения
+    lastCameraToggleTime.current = now;
+    
+    // Отправляем обновление на сервер
     return sendMessage({
       type: 'camera_state_change',
       enabled
@@ -192,11 +210,16 @@ export function useSlots(userId: string) {
                           'текущий userSlot =', userSlot, 
                           'всего слотов =', Object.keys(slots).length);
               
+              // Используем функциональное обновление для предотвращения потери состояния
+              // при одновременном обновлении из разных источников
               setState(prev => {
+                // Сохраняем текущее состояние камер без изменений
                 const newState = { 
                   ...prev, 
                   slots,
-                  userSlot
+                  userSlot,
+                  // Не трогаем состояние камер при обновлении слотов!
+                  // cameraStates остаются прежними
                 };
                 console.log('Новое состояние:', newState);
                 return newState;

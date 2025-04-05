@@ -20,13 +20,15 @@ export function CustomVideoGrid() {
   console.log('Local participant identity:', userIdentity);
   const slotsManager = useSlots(userIdentity);
   
-  // Принудительное обновление компонента при изменении слотов
-  const [forceUpdate, setForceUpdate] = useState<number>(0);
+  // Оптимизация: не используем forceUpdate, потому что это вызывает ненужные перерисовки
+  // и может ломать состояние других компонентов
+  const [lastSlotUpdate, setLastSlotUpdate] = useState<number>(Date.now());
   
-  // Пересоздаем функцию обновления при изменении слотов
+  // Вместо принудительной перерисовки, просто обновляем время последнего изменения слотов
+  // для стабильности рендеринга слотов без лишних перерисовок
   useEffect(() => {
-    console.log('Сработал эффект принудительного обновления', Object.keys(slotsManager.slots).length);
-    setForceUpdate(prev => prev + 1);
+    console.log('Слоты изменились, обновляем timestamp:', Object.keys(slotsManager.slots).length);
+    setLastSlotUpdate(Date.now());
   }, [slotsManager.slots, slotsManager.userSlot]);
   
   // Обработчик клика по пустому слоту
@@ -119,9 +121,10 @@ export function CustomVideoGrid() {
 }
 
 /**
- * Компонент для отображения одного участника
+ * Компонент для отображения одного участника 
+ * Обернут в React.memo для предотвращения лишних перерисовок
  */
-function ParticipantSlot({ participant, slotNumber }: { participant: Participant, slotNumber: number }) {
+const ParticipantSlot = React.memo(({ participant, slotNumber }: { participant: Participant; slotNumber: number }) => {
   // Получаем список видеотреков
   const videoTracks = useTracks(
     [Track.Source.Camera],
@@ -173,12 +176,12 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
       </div>
     </div>
   );
-}
+});
 
 /**
  * Компонент для отображения пустого слота
  */
-function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) {
+const EmptySlot = React.memo(({ index, onClick }: { index: number; onClick?: () => void }) => {
   return (
     <div 
       className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 cursor-pointer"
@@ -202,7 +205,6 @@ function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) 
               />
             </svg>
           </div>
-
         </div>
       </div>
       {/* Только номер слота для пустого слота */}
@@ -211,4 +213,4 @@ function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) 
       </div>
     </div>
   );
-}
+});

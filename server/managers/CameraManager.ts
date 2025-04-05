@@ -31,8 +31,12 @@ export class CameraManager {
     return this.cameraStates.get(userId);
   }
 
+  // Оптимизация: добавляем защиту от слишком частых обновлений
+  private lastCameraUpdates = new Map<string, number>();
+  private readonly updateThreshold = 500; // ms
+  
   /**
-   * Установить состояние камеры пользователя
+   * Установить состояние камеры пользователя с защитой от слишком частых обновлений
    * @param userId Идентификатор пользователя
    * @param isEnabled Новое состояние камеры
    */
@@ -44,7 +48,19 @@ export class CameraManager {
       return;
     }
     
+    // Проверяем, не было ли недавно обновления для этого пользователя
+    const now = Date.now();
+    const lastUpdate = this.lastCameraUpdates.get(userId) || 0;
+    
+    if (now - lastUpdate < this.updateThreshold) {
+      console.log(`Слишком частое обновление камеры для ${userId}, пропускаем (прошло ${now - lastUpdate}ms)`);
+      return;
+    }
+    
+    // Обновляем состояние и время последнего обновления
     this.cameraStates.set(userId, isEnabled);
+    this.lastCameraUpdates.set(userId, now);
+    
     console.log(`Камера пользователя ${userId} ${isEnabled ? 'включена' : 'выключена'}`);
     
     // Отправляем ТОЛЬКО событие об индивидуальном изменении состояния камеры
@@ -72,14 +88,17 @@ export class CameraManager {
    */
   removeCameraState(userId: string): void {
     if (this.cameraStates.has(userId)) {
-      const wasEnabled = this.cameraStates.get(userId);
       this.cameraStates.delete(userId);
+      this.lastCameraUpdates.delete(userId); // Очищаем историю обновлений
       console.log(`Удалена информация о камере пользователя ${userId}`);
       
       // Отправляем событие об изменении состояния только для этого пользователя
       // Устанавливаем false, так как камера больше не используется
-      // Используем новый подход с индивидуальными обновлениями
-      globalEvents.emit("camera_state_changed", userId, false);
+      // Используем новый подход с индивидуальными обновлениями с задержкой
+      // чтобы избежать состояния гонки с другими обновлениями
+      setTimeout(() => {
+        globalEvents.emit("camera_state_changed", userId, false);
+      }, 200);
       
       // Логируем состояние для отладки
       console.log('Текущие состояния камер после удаления:', JSON.stringify(this.getAllCameraStates()));
@@ -94,11 +113,15 @@ export class CameraManager {
     if (!this.cameraStates.has(userId)) {
       // По умолчанию камера выключена
       this.cameraStates.set(userId, false);
+      
+      // Устанавливаем метку времени начальной инициализации
+      this.lastCameraUpdates.set(userId, Date.now());
+      
       console.log(`Инициализировано состояние камеры для нового пользователя ${userId} (выключена)`);
       
-      // Отправляем индивидуальное обновление через событие
-      // только для конкретного пользователя
-      globalEvents.emit("camera_state_changed", userId, false);
+      // При инициализации НЕ отправляем уведомление о состоянии камеры всем клиентам
+      // Только сохраняем локальное значение. Обновления для других клиентов будут 
+      // отправлены в registerConnection, когда всем клиентам отправляются текущие состояния
       
       // Логируем состояние для отладки
       console.log('Текущие состояния камер после инициализации:', JSON.stringify(this.getAllCameraStates()));
