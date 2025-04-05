@@ -96,6 +96,13 @@ export class SlotManager {
       return false;
     }
     
+    // Проверяем, что слот действительно занят этим пользователем
+    const currentUserInSlot = this.slotAssignments.get(slotNumber);
+    if (currentUserInSlot !== userId) {
+      console.log(`Попытка освободить слот ${slotNumber}, но он занят другим пользователем: ${currentUserInSlot}`);
+      return false;
+    }
+    
     // Освобождаем слот
     this.slotAssignments.delete(slotNumber);
     this.userSlots.delete(userId);

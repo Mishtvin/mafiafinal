@@ -2,6 +2,7 @@ import { WebSocket } from 'ws';
 import { globalEvents } from './EventEmitter';
 import { slotManager } from './SlotManager';
 import { cameraManager } from './CameraManager';
+import { SlotInfo } from '../../shared/schema';
 
 /**
  * Тип сообщения WebSocket
@@ -15,8 +16,8 @@ export interface WebSocketMessage {
  * Менеджер WebSocket подключений
  */
 export class ConnectionManager {
-  // Карта подключений (userId -> WebSocket)
-  private connections = new Map<string, WebSocket>();
+  // Карта подключений (userId -> массив WebSocket)
+  private connections = new Map<string, WebSocket[]>();
   
   // Таймеры проверки активности для каждого пользователя
   private activityCheckers = new Map<string, NodeJS.Timeout>();
@@ -40,7 +41,7 @@ export class ConnectionManager {
     
     // Настраиваем периодические проверки целостности
     setInterval(() => {
-      console.log(`Активные соединения: ${this.connections.size}, активные слоты: ${slotManager.getOccupiedSlotsCount()}`);
+      console.log(`Активные пользователи: ${this.getUserCount()}, соединения: ${this.getConnectionCount()}, активные слоты: ${slotManager.getOccupiedSlotsCount()}`);
     }, 10000);
   }
   
@@ -50,23 +51,22 @@ export class ConnectionManager {
    * @param ws WebSocket соединение
    */
   registerConnection(userId: string, ws: WebSocket): void {
-    // Удаляем предыдущее соединение если есть
-    if (this.connections.has(userId)) {
-      const oldWs = this.connections.get(userId);
-      if (oldWs) {
-        try {
-          oldWs.close();
-        } catch (error) {
-          console.error(`Ошибка закрытия предыдущего соединения для ${userId}:`, error);
-        }
-      }
+    // Проверка на уже существующие соединения этого пользователя
+    const isFirstConnection = !this.connections.has(userId);
+    
+    // Получаем текущий массив соединений или создаем новый
+    const connections = this.connections.get(userId) || [];
+    
+    // Добавляем новое соединение
+    connections.push(ws);
+    
+    // Сохраняем обновленный массив
+    this.connections.set(userId, connections);
+    
+    // Если это первое соединение пользователя, инициализируем состояние камеры
+    if (isFirstConnection) {
+      cameraManager.initializeUserCamera(userId);
     }
-    
-    // Регистрируем новое соединение
-    this.connections.set(userId, ws);
-    
-    // Инициализируем состояние камеры
-    cameraManager.initializeUserCamera(userId);
     
     // Отмечаем активность пользователя
     this.markUserActivity(userId);
@@ -77,7 +77,7 @@ export class ConnectionManager {
     // Настраиваем проверку активности
     this.setupActivityChecker(userId, ws);
     
-    console.log(`Зарегистрировано новое соединение для ${userId}`);
+    console.log(`Зарегистрировано новое соединение для ${userId} (всего соединений: ${connections.length})`);
   }
   
   /**
@@ -86,19 +86,28 @@ export class ConnectionManager {
    * @param message Сообщение для отправки
    */
   sendToUser(userId: string, message: WebSocketMessage): boolean {
-    const ws = this.connections.get(userId);
+    const connections = this.connections.get(userId);
     
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.send(JSON.stringify(message));
-        return true;
-      } catch (error) {
-        console.error(`Ошибка отправки сообщения пользователю ${userId}:`, error);
-        return false;
+    if (!connections || connections.length === 0) {
+      return false;
+    }
+    
+    const messageStr = JSON.stringify(message);
+    let success = false;
+    
+    // Отправляем сообщение на все соединения пользователя
+    for (const ws of connections) {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(messageStr);
+          success = true; // Если хотя бы одно соединение получило сообщение, считаем успешным
+        } catch (error) {
+          console.error(`Ошибка отправки сообщения пользователю ${userId}:`, error);
+        }
       }
     }
     
-    return false;
+    return success;
   }
   
   /**
@@ -108,12 +117,14 @@ export class ConnectionManager {
   broadcastToAll(message: WebSocketMessage): void {
     const messageStr = JSON.stringify(message);
     
-    this.connections.forEach((ws, userId) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.send(messageStr);
-        } catch (error) {
-          console.error(`Ошибка отправки сообщения пользователю ${userId}:`, error);
+    this.connections.forEach((connections, userId) => {
+      for (const ws of connections) {
+        if (ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.send(messageStr);
+          } catch (error) {
+            console.error(`Ошибка отправки сообщения пользователю ${userId}:`, error);
+          }
         }
       }
     });
@@ -144,37 +155,80 @@ export class ConnectionManager {
    * Отключить пользователя (закрыть соединение и освободить ресурсы)
    * @param userId Идентификатор пользователя
    */
-  disconnectUser(userId: string): void {
-    const ws = this.connections.get(userId);
+  disconnectUser(userId: string, ws?: WebSocket): void {
+    const connections = this.connections.get(userId);
     
-    // Удаляем таймер проверки активности
-    const checker = this.activityCheckers.get(userId);
-    if (checker) {
-      clearInterval(checker);
-      this.activityCheckers.delete(userId);
+    if (!connections || connections.length === 0) {
+      return;
     }
     
-    // Удаляем информацию об активности
-    this.lastActivityTime.delete(userId);
-    
-    // Закрываем соединение
+    // Если передан конкретный WebSocket, удаляем только его
     if (ws) {
-      try {
-        ws.close();
-      } catch (error) {
-        console.error(`Ошибка закрытия соединения для ${userId}:`, error);
+      const index = connections.indexOf(ws);
+      if (index !== -1) {
+        // Закрываем соединение если оно еще не закрыто
+        try {
+          if (ws.readyState !== WebSocket.CLOSED) {
+            ws.close();
+          }
+        } catch (error) {
+          console.error(`Ошибка закрытия соединения для ${userId}:`, error);
+        }
+        
+        // Удаляем из массива соединений
+        connections.splice(index, 1);
+        
+        console.log(`Закрыто одно из соединений пользователя ${userId}, осталось: ${connections.length}`);
+        
+        // Обновляем массив соединений
+        if (connections.length > 0) {
+          this.connections.set(userId, connections);
+        } else {
+          this.connections.delete(userId);
+        }
+      }
+    } else {
+      // Если WebSocket не передан, закрываем все соединения
+      for (const connection of connections) {
+        try {
+          if (connection.readyState !== WebSocket.CLOSED) {
+            connection.close();
+          }
+        } catch (error) {
+          console.error(`Ошибка закрытия соединения для ${userId}:`, error);
+        }
       }
       
+      // Удаляем все соединения
       this.connections.delete(userId);
     }
     
-    // Удаляем информацию о состоянии камеры
-    cameraManager.removeCameraState(userId);
+    // Проверяем, остались ли соединения для этого пользователя
+    const remainingConnections = this.connections.get(userId);
     
-    // Освобождаем слот
-    slotManager.releaseUserSlot(userId);
-    
-    console.log(`Отключен пользователь ${userId}`);
+    // Если соединений больше нет, освобождаем ресурсы
+    if (!remainingConnections || remainingConnections.length === 0) {
+      // Удаляем таймер проверки активности
+      const checker = this.activityCheckers.get(userId);
+      if (checker) {
+        clearInterval(checker);
+        this.activityCheckers.delete(userId);
+      }
+      
+      // Удаляем информацию об активности
+      this.lastActivityTime.delete(userId);
+      
+      // Удаляем информацию о состоянии камеры
+      cameraManager.removeCameraState(userId);
+      
+      // Освобождаем слот
+      slotManager.releaseUserSlot(userId);
+      
+      console.log(`Полностью отключен пользователь ${userId}`);
+      
+      // Удаляем запись о пользователе
+      this.connections.delete(userId);
+    }
   }
   
   /**
@@ -232,20 +286,30 @@ export class ConnectionManager {
    * @param ws WebSocket соединение
    */
   private setupEventHandlers(userId: string, ws: WebSocket): void {
+    // Обработчик входящих сообщений
+    ws.on('message', (message: string) => {
+      try {
+        const data = JSON.parse(message.toString()) as WebSocketMessage;
+        this.handleMessage(userId, data);
+      } catch (error) {
+        console.error(`Ошибка обработки сообщения от ${userId}:`, error);
+      }
+    });
+    
     // Обработчик закрытия соединения
     ws.on('close', () => {
       console.log(`Соединение закрыто для ${userId}`);
-      this.disconnectUser(userId);
+      this.disconnectUser(userId, ws);
     });
     
     // Обработчик ошибок
     ws.on('error', (error) => {
       console.error(`Ошибка в соединении для ${userId}:`, error);
-      this.disconnectUser(userId);
+      this.disconnectUser(userId, ws);
     });
     
     // Подписываемся на события изменения слотов
-    globalEvents.on("slots_updated", (slots) => {
+    const slotsListener = (slots: SlotInfo[]) => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
           ws.send(JSON.stringify({
@@ -256,10 +320,10 @@ export class ConnectionManager {
           console.error(`Ошибка отправки обновления слотов пользователю ${userId}:`, error);
         }
       }
-    });
+    };
     
     // Подписываемся на события изменения состояний камер
-    globalEvents.on("camera_states_updated", (cameraStates) => {
+    const cameraStatesListener = (cameraStates: Record<string, boolean>) => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
           ws.send(JSON.stringify({
@@ -270,6 +334,16 @@ export class ConnectionManager {
           console.error(`Ошибка отправки обновления состояний камер пользователю ${userId}:`, error);
         }
       }
+    };
+    
+    // Регистрируем обработчики событий
+    globalEvents.on("slots_updated", slotsListener);
+    globalEvents.on("camera_states_updated", cameraStatesListener);
+    
+    // При закрытии соединения отписываемся от событий
+    ws.on('close', () => {
+      globalEvents.off("slots_updated", slotsListener);
+      globalEvents.off("camera_states_updated", cameraStatesListener);
     });
   }
   
@@ -313,6 +387,17 @@ export class ConnectionManager {
    * Получить количество активных соединений
    */
   getConnectionCount(): number {
+    let count = 0;
+    this.connections.forEach(connections => {
+      count += connections.length;
+    });
+    return count;
+  }
+  
+  /**
+   * Получить количество уникальных пользователей
+   */
+  getUserCount(): number {
     return this.connections.size;
   }
 }

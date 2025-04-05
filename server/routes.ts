@@ -19,7 +19,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         configured: tokenManager.isConfigured(),
         url: tokenManager.getLiveKitUrl()
       },
-      connections: connectionManager.getConnectionCount(),
+      connections: {
+        total: connectionManager.getConnectionCount(),
+        users: connectionManager.getUserCount()
+      },
       slots: slotManager.getOccupiedSlotsCount()
     });
   });
@@ -122,13 +125,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
-    // Обработка закрытия соединения обрабатывается в ConnectionManager
+    // Обработка закрытия соединения теперь обрабатывается внутри ConnectionManager
+    // через setupEventHandlers
     
     // Обработка ошибок
     ws.on('error', (error) => {
       console.error('WebSocket ошибка:', error);
       if (userId) {
-        connectionManager.disconnectUser(userId);
+        connectionManager.disconnectUser(userId, ws);
       }
     });
   });
