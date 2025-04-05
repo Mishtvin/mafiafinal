@@ -11,7 +11,6 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/conference" component={VideoConference} />
-      <Route path="/direct" component={DirectConnection} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -59,17 +58,7 @@ function Home() {
                 <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <span>Стандартная конференция</span>
-              </div>
-            </div>
-          </Link>
-          <Link href="/direct">
-            <div className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-colors block cursor-pointer">
-              <div className="flex items-center justify-center">
-                <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <span>Шифрованная конференция</span>
+                <span>Начать видеоконференцию</span>
               </div>
             </div>
           </Link>
