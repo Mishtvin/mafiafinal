@@ -39,7 +39,22 @@ export function useSlots(userId: string) {
   }, []);
   
   // Функция для обновления состояния камеры
-  const setCameraState = useCallback((enabled: boolean) => {
+  // userId - опциональный параметр, если не указан - используется текущий пользователь
+  const setCameraState = useCallback((enabledOrUserId: boolean | string, enabledParam?: boolean) => {
+    // Проверяем формат аргументов
+    let enabled: boolean;
+    
+    if (typeof enabledOrUserId === 'boolean') {
+      // Вызов в старом формате setCameraState(enabled)
+      enabled = enabledOrUserId;
+    } else if (typeof enabledOrUserId === 'string' && typeof enabledParam === 'boolean') {
+      // Вызов в новом формате setCameraState(userId, enabled)
+      enabled = enabledParam;
+    } else {
+      console.error('Неверный формат аргументов setCameraState');
+      return false;
+    }
+    
     return sendMessage({
       type: 'camera_state_change',
       enabled
@@ -121,6 +136,14 @@ export function useSlots(userId: string) {
           loading: false,
           connected: false 
         }));
+        
+        // Немедленно пытаемся переподключиться при ошибке
+        setTimeout(() => {
+          if (socketRef.current === socket) {
+            console.log('Немедленное переподключение после ошибки WebSocket');
+            connectWebSocket();
+          }
+        }, 500);
       };
 
       // Обработчик закрытия соединения

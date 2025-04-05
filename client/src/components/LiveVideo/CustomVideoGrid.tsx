@@ -78,6 +78,7 @@ export function CustomVideoGrid() {
 
   // Принудительно отображаем локального участника в его слоте
   // даже если в мапе слотов не совпадают идентификаторы
+  // и проверяем соответствие всех участников
   useEffect(() => {
     if (currentLocalParticipant && slotsManager.userSlot && slotsManager.connected) {
       // Синхронизируем отображаемый идентификатор участника в слоте
@@ -85,6 +86,37 @@ export function CustomVideoGrid() {
       const localUserSlot = slotsManager.userSlot;
       const localUserId = currentLocalParticipant.identity;
       const currentAssignedId = slotsManager.slots[localUserSlot];
+      
+      // Проверяем соответствие LiveKit участников и слотов
+      const livekitIds = new Set(participants.map(p => p.identity));
+      const slotIds = new Set(Object.values(slotsManager.slots));
+      
+      // Проверка на несоответствие: участники есть в LiveKit, но нет в слотах
+      let missingParticipants = 0;
+      participants.forEach(p => {
+        if (!slotIds.has(p.identity)) {
+          console.log(`Участник ${p.identity} виден в LiveKit, но не виден в слотах`);
+          missingParticipants++;
+        }
+      });
+      
+      // Проверка на несоответствие: участники есть в слотах, но нет в LiveKit
+      let invalidSlots = 0;
+      Object.values(slotsManager.slots).forEach(userId => {
+        if (!livekitIds.has(userId)) {
+          console.log(`Пользователь ${userId} виден в слотах, но не виден в LiveKit`);
+          invalidSlots++;
+        }
+      });
+      
+      // Если есть несоответствия, принудительно обновляем камеру для синхронизации
+      if (missingParticipants > 0 || invalidSlots > 0) {
+        console.log(`Несоответствие: ${missingParticipants} участников нет в слотах, ${invalidSlots} слотов с неактивными участниками`);
+        // Запрашиваем принудительное обновление слотов
+        const isEnabled = currentLocalParticipant.isCameraEnabled || false;
+        console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${localUserId}`);
+        slotsManager.setCameraState(isEnabled);
+      }
       
       // Проверяем, нужно ли обновление
       if (currentAssignedId !== localUserId) {
@@ -100,7 +132,7 @@ export function CustomVideoGrid() {
       
       console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
     }
-  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected, slotsManager.slots, slotsManager]);
+  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected, slotsManager.slots, slotsManager, participants]);
 
   return (
     <div className="h-full w-full p-4">
