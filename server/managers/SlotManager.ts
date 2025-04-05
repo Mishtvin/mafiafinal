@@ -74,6 +74,19 @@ export class SlotManager {
       return false;
     }
     
+    // Проверяем особые правила для слота ведущего
+    if (slotNumber === HOST_SLOT && !this.isUserHost(userId)) {
+      console.error(`Слот ${HOST_SLOT} зарезервирован только для ведущего`);
+      return false;
+    }
+    
+    // Проверяем ограничение: ведущий не может уйти с 12 слота
+    const previousSlot = this.userSlots.get(userId);
+    if (this.isUserHost(userId) && previousSlot === HOST_SLOT && slotNumber !== HOST_SLOT) {
+      console.error(`Ведущий ${userId} не может покинуть слот ${HOST_SLOT}`);
+      return false;
+    }
+    
     // Проверка занятости слота
     const currentUser = this.slotAssignments.get(slotNumber);
     if (currentUser && currentUser !== userId) {
@@ -82,7 +95,6 @@ export class SlotManager {
     }
     
     // Освобождаем предыдущий слот пользователя, если был
-    const previousSlot = this.userSlots.get(userId);
     if (previousSlot !== undefined && previousSlot !== slotNumber) {
       this.slotAssignments.delete(previousSlot);
       console.log(`Освобожден предыдущий слот ${previousSlot} пользователя ${userId}`);
@@ -114,6 +126,12 @@ export class SlotManager {
     const currentUserInSlot = this.slotAssignments.get(slotNumber);
     if (currentUserInSlot !== userId) {
       console.log(`Попытка освободить слот ${slotNumber}, но он занят другим пользователем: ${currentUserInSlot}`);
+      return false;
+    }
+    
+    // Запрещаем ведущему освобождать свой слот 12
+    if (this.isUserHost(userId) && slotNumber === HOST_SLOT) {
+      console.error(`Ведущий ${userId} не может освободить слот ${HOST_SLOT}`);
       return false;
     }
     
@@ -248,6 +266,12 @@ export class SlotManager {
     const userId = this.slotAssignments.get(slotNumber);
     if (!userId) {
       return false; // Слот и так свободен
+    }
+    
+    // Запрещаем освобождать слот ведущего (12)
+    if (slotNumber === HOST_SLOT && this.isUserHost(userId)) {
+      console.error(`Нельзя освободить слот ведущего ${HOST_SLOT} для ${userId}`);
+      return false;
     }
     
     // Удаляем слот из обеих карт

@@ -290,7 +290,7 @@ function ParticipantSlot({
         className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
           ${participant.isLocal ? 'bg-purple-700/90' : 'bg-slate-900/80'}`}
       >
-        {slotNumber === 12 ? "Ведучий" : slotNumber}
+        {slotNumber === 12 ? "Ведущий" : slotNumber}
       </div>
       
       {/* Имя пользователя рядом с номером слота */}
@@ -368,7 +368,7 @@ function EmptySlot({ index, onClick, onDragOver, onDrop, isDragTarget = false }:
       
       {/* Только номер слота для пустого слота */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
-        {index + 1 === 12 ? "Ведучий" : index + 1}
+        {index + 1 === 12 ? "Ведущий" : index + 1}
       </div>
     </div>
   );
