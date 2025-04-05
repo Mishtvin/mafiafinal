@@ -5,11 +5,12 @@ import {
   VideoTrack
 } from '@livekit/components-react';
 import { Track, Participant, Room } from 'livekit-client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useSlots } from '../../hooks/use-slots';
 
 /**
- * Компонент сетки видео 4x3 для отображения до 12 участников
+ * Основной контейнер сетки видео
+ * Разделяем логику на контейнер и сам грид для оптимизации перерисовок
  */
 export function CustomVideoGrid() {
   const participants = useParticipants();
@@ -19,24 +20,6 @@ export function CustomVideoGrid() {
   const userIdentity = currentLocalParticipant?.identity || 'unknown-user';
   console.log('Local participant identity:', userIdentity);
   const slotsManager = useSlots(userIdentity);
-  
-  // Оптимизация: не используем forceUpdate, потому что это вызывает ненужные перерисовки
-  // и может ломать состояние других компонентов
-  const [lastSlotUpdate, setLastSlotUpdate] = useState<number>(Date.now());
-  
-  // Вместо принудительной перерисовки, просто обновляем время последнего изменения слотов
-  // для стабильности рендеринга слотов без лишних перерисовок
-  useEffect(() => {
-    console.log('Слоты изменились, обновляем timestamp:', Object.keys(slotsManager.slots).length);
-    setLastSlotUpdate(Date.now());
-  }, [slotsManager.slots, slotsManager.userSlot]);
-  
-  // Обработчик клика по пустому слоту
-  const handleSlotClick = (slotNumber: number) => {
-    if (slotsManager.connected) {
-      slotsManager.selectSlot(slotNumber);
-    }
-  };
   
   // Автоматически выбираем слот для локального участника при подключении
   useEffect(() => {
@@ -52,23 +35,15 @@ export function CustomVideoGrid() {
     }
   }, [currentLocalParticipant, slotsManager.connected, slotsManager.userSlot]);
   
-  // Создаем сетку из 12 слотов
-  const slotNumbers = Array.from({ length: 12 }, (_, i) => i + 1);
-  
-  // Создаем мапу для участников в нужных слотах
-  // Создаем мапу для всех участников
-  const participantsMap = new Map<string, Participant>();
-  participants.forEach(p => {
-    participantsMap.set(p.identity, p);
-    console.log(`Найден участник: ${p.identity}, isLocal: ${p.isLocal}`);
-  });
-  
-  // Добавляем текущего локального участника в мапу слотов
-  if (currentLocalParticipant && slotsManager.connected && slotsManager.userSlot) {
-    console.log(
-      `Принудительно добавляем локального участника в слот ${slotsManager.userSlot}: ${currentLocalParticipant.identity}`
-    );
-  }
+  // Создаем мапу для участников
+  const participantsMap = useMemo(() => {
+    const map = new Map<string, Participant>();
+    participants.forEach(p => {
+      map.set(p.identity, p);
+      console.log(`Найден участник: ${p.identity}, isLocal: ${p.isLocal}`);
+    });
+    return map;
+  }, [participants]);
   
   // Debug
   useEffect(() => {
@@ -87,44 +62,95 @@ export function CustomVideoGrid() {
       console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
     }
   }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected]);
+  
+  // Обработчик клика по пустому слоту
+  const handleSlotClick = useCallback((slotNumber: number) => {
+    if (slotsManager.connected) {
+      slotsManager.selectSlot(slotNumber);
+    }
+  }, [slotsManager]);
 
+  // Логируем рендер контейнера
+  console.log('[RENDER] CustomVideoGrid контейнер - перерисовывается при любых изменениях состояния');
+  
+  // Рендерим мемоизированный grid для предотвращения перерисовки
+  // при изменении только состояния камеры
   return (
     <div className="h-full w-full p-4">
-      <div className="video-grid">
-        {slotNumbers.map(slotNumber => {
-          // Получаем ID пользователя, занимающего слот
-          const userId = slotsManager.slots[slotNumber];
-          // Проверяем, является ли этот слот слотом текущего локального участника
-          const isCurrentUserSlot = slotsManager.userSlot === slotNumber && currentLocalParticipant;
-          // Получаем объект участника по ID или локального участника для его слота
-          const participant = isCurrentUserSlot 
-            ? currentLocalParticipant 
-            : (userId ? participantsMap.get(userId) : undefined);
-          
-          return participant ? (
-            <ParticipantSlot 
-              key={`slot-${slotNumber}`}
-              participant={participant}
-              slotNumber={slotNumber}
-            />
-          ) : (
-            <EmptySlot 
-              key={`empty-${slotNumber}`} 
-              index={slotNumber - 1}
-              onClick={() => handleSlotClick(slotNumber)}
-            />
-          );
-        })}
-      </div>
+      <MemoizedVideoGrid 
+        slots={slotsManager.slots}
+        userSlot={slotsManager.userSlot}
+        participantsMap={participantsMap}
+        currentLocalParticipant={currentLocalParticipant}
+        onSlotClick={handleSlotClick}
+      />
     </div>
   );
 }
+
+/**
+ * Мемоизированный компонент самой сетки - изолирует перерисовки
+ * Этот компонент перерисовывается только при изменении слотов или участников,
+ * но не при изменении состояния камер
+ */
+const MemoizedVideoGrid = React.memo(function VideoGrid({
+  slots,
+  userSlot,
+  participantsMap,
+  currentLocalParticipant,
+  onSlotClick
+}: {
+  slots: Record<number, string>;
+  userSlot: number | null;
+  participantsMap: Map<string, Participant>;
+  currentLocalParticipant: Participant | undefined;
+  onSlotClick: (slotNumber: number) => void;
+}) {
+  // Создаем сетку из 12 слотов
+  const slotNumbers = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => i + 1);
+  }, []);
+
+  console.log('[RENDER] MemoizedVideoGrid - должен перерисовываться ТОЛЬКО при изменении слотов или участников');
+
+  return (
+    <div className="video-grid">
+      {slotNumbers.map((slotNumber: number) => {
+        // Получаем ID пользователя, занимающего слот
+        const userId = slots[slotNumber];
+        // Проверяем, является ли этот слот слотом текущего локального участника
+        const isCurrentUserSlot = userSlot === slotNumber && currentLocalParticipant;
+        // Получаем объект участника по ID или локального участника для его слота
+        const participant = isCurrentUserSlot 
+          ? currentLocalParticipant 
+          : (userId ? participantsMap.get(userId) : undefined);
+        
+        return participant ? (
+          <ParticipantSlot 
+            key={`slot-${slotNumber}`}
+            participant={participant}
+            slotNumber={slotNumber}
+          />
+        ) : (
+          <EmptySlot 
+            key={`empty-${slotNumber}`} 
+            index={slotNumber - 1}
+            onClick={() => onSlotClick(slotNumber)}
+          />
+        );
+      })}
+    </div>
+  );
+});
 
 /**
  * Компонент для отображения одного участника 
  * Обернут в React.memo для предотвращения лишних перерисовок
  */
 const ParticipantSlot = React.memo(({ participant, slotNumber }: { participant: Participant; slotNumber: number }) => {
+  // Отслеживаем перерисовки
+  console.log(`[RENDER] ParticipantSlot ${slotNumber} для ${participant.identity}`);
+  
   // Получаем список видеотреков
   const videoTracks = useTracks(
     [Track.Source.Camera],
@@ -182,6 +208,7 @@ const ParticipantSlot = React.memo(({ participant, slotNumber }: { participant: 
  * Компонент для отображения пустого слота
  */
 const EmptySlot = React.memo(({ index, onClick }: { index: number; onClick?: () => void }) => {
+  console.log(`[RENDER] EmptySlot ${index + 1}`);
   return (
     <div 
       className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 cursor-pointer"
