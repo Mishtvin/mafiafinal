@@ -194,8 +194,12 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
     
     // Перемещаем пользователя на новый слот
     if (draggedUserId && draggedUserId !== participant.identity) {
-      console.log(`Перемещаем пользователя ${draggedUserId} в слот ${slotNumber}`);
+      console.log(`[DRAG-DROP] Перемещаем пользователя ${draggedUserId} в слот ${slotNumber}, занятый ${participant.identity}`);
       slotsManager.moveUserToSlot(slotNumber, draggedUserId);
+    } else if (draggedUserId === participant.identity) {
+      console.log(`[DRAG-DROP] Предотвращена попытка перемещения пользователя ${draggedUserId} в собственный слот ${slotNumber}`);
+    } else {
+      console.log(`[DRAG-DROP] Получен пустой draggedUserId при перетаскивании в слот ${slotNumber}`);
     }
   };
   
@@ -286,8 +290,10 @@ function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) 
     
     // Если получен идентификатор пользователя, перемещаем его в этот пустой слот
     if (draggedUserId) {
-      console.log(`Перемещаем пользователя ${draggedUserId} в слот ${slotNumber}`);
+      console.log(`[DRAG-DROP] Перемещаем пользователя ${draggedUserId} в пустой слот ${slotNumber}`);
       slotsManager.moveUserToSlot(slotNumber, draggedUserId);
+    } else {
+      console.log(`[DRAG-DROP] Получен пустой draggedUserId при перетаскивании в пустой слот ${slotNumber}`);
     }
   };
   

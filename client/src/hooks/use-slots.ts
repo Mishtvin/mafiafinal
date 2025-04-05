@@ -31,7 +31,12 @@ export function useSlots(userId: string) {
   
   // Добавляем поддержку для операции обмена слотами
   const moveUserToSlot = useCallback((targetSlot: number, userId: string) => {
-    if (targetSlot < 1 || targetSlot > 12) return false;
+    if (targetSlot < 1 || targetSlot > 12) {
+      console.log(`[MOVE USER] Ошибка: некорректный номер слота ${targetSlot}`);
+      return false;
+    }
+    
+    console.log(`[MOVE USER] Отправляем запрос на перемещение пользователя ${userId} в слот ${targetSlot}`);
     
     return sendMessage({
       type: 'move_user',
