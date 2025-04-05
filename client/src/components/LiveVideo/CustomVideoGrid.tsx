@@ -74,253 +74,134 @@ export function CustomVideoGrid() {
   // Логируем рендер контейнера
   console.log('[RENDER] CustomVideoGrid контейнер - перерисовывается при любых изменениях состояния');
   
-  // Рендерим сетку слотов
+  // Рендерим мемоизированный grid для предотвращения перерисовки
+  // при изменении только состояния камеры
   return (
     <div className="h-full w-full p-4">
-      <VideoGrid 
+      <MemoizedVideoGrid 
         slots={slotsManager.slots}
         userSlot={slotsManager.userSlot}
         participantsMap={participantsMap}
         currentLocalParticipant={currentLocalParticipant}
         onSlotClick={handleSlotClick}
+        cameraStates={slotsManager.cameraStates}
+        lastUpdatedCamera={slotsManager.lastUpdatedCamera}
+        cameraUpdateTimestamp={slotsManager.cameraUpdateTimestamp}
       />
     </div>
   );
 }
 
 /**
- * Отдельный компонент для сетки, использующий индивидуальные ячейки
+ * Мемоизированный компонент самой сетки - изолирует перерисовки
+ * Этот компонент перерисовывается только при изменении слотов или участников,
+ * но не при изменении состояния камер
  */
-function VideoGrid({
-  slots,
-  userSlot,
-  participantsMap,
-  currentLocalParticipant,
-  onSlotClick
-}: {
-  slots: Record<number, string>;
-  userSlot: number | null;
-  participantsMap: Map<string, Participant>;
-  currentLocalParticipant: Participant | undefined;
-  onSlotClick: (slotNumber: number) => void;
-}) {
-  // Создаем сетку из 12 слотов
-  const slotNumbers = useMemo(() => {
-    return Array.from({ length: 12 }, (_, i) => i + 1);
-  }, []);
+const MemoizedVideoGrid = React.memo(
+  function VideoGrid({
+    slots,
+    userSlot,
+    participantsMap,
+    currentLocalParticipant,
+    onSlotClick,
+    cameraStates,
+    lastUpdatedCamera,
+    cameraUpdateTimestamp
+  }: {
+    slots: Record<number, string>;
+    userSlot: number | null;
+    participantsMap: Map<string, Participant>;
+    currentLocalParticipant: Participant | undefined;
+    onSlotClick: (slotNumber: number) => void;
+    cameraStates: Record<string, boolean>;
+    lastUpdatedCamera?: string;
+    cameraUpdateTimestamp?: number;
+  }) {
+    // Создаем сетку из 12 слотов
+    const slotNumbers = useMemo(() => {
+      return Array.from({ length: 12 }, (_, i) => i + 1);
+    }, []);
 
-  console.log('[RENDER] VideoGrid - основная сетка');
+    console.log('[RENDER] MemoizedVideoGrid - должен перерисовываться ТОЛЬКО при изменении слотов или участников');
 
-  return (
-    <div className="video-grid">
-      {slotNumbers.map((slotNumber: number) => (
-        <GridSlot
-          key={`grid-slot-${slotNumber}`}
-          slotNumber={slotNumber}
-          slots={slots}
-          userSlot={userSlot}
-          participantsMap={participantsMap}
-          currentLocalParticipant={currentLocalParticipant}
-          onSlotClick={onSlotClick}
-        />
-      ))}
-    </div>
-  );
-}
-
-/**
- * Изолированная ячейка сетки, которая самостоятельно отслеживает 
- * изменения состояний и обновляется только когда нужно
- */
-const GridSlot = React.memo(function GridSlot({
-  slotNumber,
-  slots,
-  userSlot,
-  participantsMap,
-  currentLocalParticipant,
-  onSlotClick
-}: {
-  slotNumber: number;
-  slots: Record<number, string>;
-  userSlot: number | null;
-  participantsMap: Map<string, Participant>;
-  currentLocalParticipant: Participant | undefined;
-  onSlotClick: (slotNumber: number) => void;
-}) {
-  // Получаем ID пользователя в этом слоте
-  const userId = slots[slotNumber];
-  
-  // Определяем, является ли этот слот слотом текущего пользователя
-  const isCurrentUserSlot = userSlot === slotNumber && currentLocalParticipant;
-  
-  // Получаем объект участника
-  const participant = isCurrentUserSlot 
-    ? currentLocalParticipant 
-    : (userId ? participantsMap.get(userId) : undefined);
-  
-  // Получаем доступ к состоянию камер для данного участника
-  const slotsContext = useSlots(currentLocalParticipant?.identity || 'unknown-user');
-  
-  // Локальное состояние для отслеживания изменений камеры
-  const [cameraUpdateCounter, setCameraUpdateCounter] = useState<number>(0);
-  
-  // Эффект для отслеживания изменений камеры этого конкретного участника
-  useEffect(() => {
-    // Проверяем, изменилась ли камера этого участника
-    if (
-      userId && 
-      slotsContext.lastUpdatedCamera === userId && 
-      slotsContext.cameraUpdateTimestamp
-    ) {
-      // Увеличиваем счетчик обновлений камеры, что вызовет перерисовку только этого слота
-      setCameraUpdateCounter(prev => prev + 1);
-      console.log(`[SLOT ${slotNumber}] Обнаружено изменение камеры для ${userId}`);
-    }
-  }, [userId, slotsContext.lastUpdatedCamera, slotsContext.cameraUpdateTimestamp, slotNumber]);
-  
-  // Если нет участника, отображаем пустой слот
-  if (!participant) {
     return (
-      <EmptySlot 
-        index={slotNumber - 1}
-        onClick={() => onSlotClick(slotNumber)}
-      />
-    );
-  }
-
-  // Отображаем слот с участником
-  return (
-    <ParticipantSlot 
-      participant={participant} 
-      slotNumber={slotNumber}
-      cameraUpdateCounter={cameraUpdateCounter}
-    />
-  );
-}, (prevProps, nextProps) => {
-  // Сравниваем пользователя в слоте
-  const prevUserId = prevProps.slots[prevProps.slotNumber];
-  const nextUserId = nextProps.slots[nextProps.slotNumber];
-  
-  // Если изменился пользователь в слоте - перерисовываем
-  if (prevUserId !== nextUserId) {
-    return false;
-  }
-  
-  // Проверяем изменение флага текущего пользователя
-  const prevIsCurrentUserSlot = prevProps.userSlot === prevProps.slotNumber && prevProps.currentLocalParticipant;
-  const nextIsCurrentUserSlot = nextProps.userSlot === nextProps.slotNumber && nextProps.currentLocalParticipant;
-  
-  if (prevIsCurrentUserSlot !== nextIsCurrentUserSlot) {
-    return false;
-  }
-  
-  // Проверяем изменение ссылки на currentLocalParticipant, если это слот текущего пользователя
-  if (prevIsCurrentUserSlot && 
-      prevProps.currentLocalParticipant?.identity !== nextProps.currentLocalParticipant?.identity) {
-    return false;
-  }
-  
-  // Во всех остальных случаях не перерисовываем
-  return true;
-});
-
-/**
- * Props для компонента StableVideoTrack
- */
-interface StableVideoTrackProps {
-  participant: Participant;
-  cameraUpdateCounter: number;
-}
-
-/**
- * Стабильный компонент для отображения видеотрека участника
- * Оптимизирован для минимизации перерисовок
- */
-const StableVideoTrack = React.memo(
-  ({ participant, cameraUpdateCounter }: StableVideoTrackProps) => {
-    // Сохраняем идентификатор для логов
-    const identity = participant.identity;
-    
-    // Логируем счетчик обновлений
-    console.log(`[VIDEO] Обновление трека для ${identity}, счетчик: ${cameraUpdateCounter}`);
-    
-    // Получаем список видеотреков
-    const videoTracks = useTracks(
-      [Track.Source.Camera],
-      { onlySubscribed: true }
-    ).filter(track => track.participant.identity === identity);
-    
-    const hasVideo = videoTracks.length > 0;
-    
-    // Используем useRef для предотвращения перерисовки при изменении
-    // состояния трека, но сохраняем последнее состояние для отладки
-    const lastTrackState = React.useRef<{hasVideo: boolean, trackId: string}>({
-      hasVideo: false,
-      trackId: '',
-    });
-    
-    // Логируем изменения состояния трека, но только если оно изменилось
-    const currentTrackId = hasVideo ? videoTracks[0].trackSid : '';
-    if (lastTrackState.current.hasVideo !== hasVideo || 
-        lastTrackState.current.trackId !== currentTrackId) {
-      console.log(`[TRACK] Изменение статуса видео для ${identity}: ${hasVideo ? 'включено' : 'выключено'} (trackId: ${currentTrackId})`);
-      
-      lastTrackState.current = {
-        hasVideo,
-        trackId: currentTrackId
-      };
-    }
-    
-    if (hasVideo) {
-      return (
-        <div className="h-full w-full relative flex items-center justify-center">
-          <VideoTrack 
-            trackRef={videoTracks[0]}
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 ring-1 ring-white/10"></div>
-        </div>
-      );
-    } else {
-      return (
-        <div className="flex items-center justify-center h-full">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            className="h-12 w-12 text-slate-500" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={1} 
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+      <div className="video-grid">
+        {slotNumbers.map((slotNumber: number) => {
+          // Получаем ID пользователя, занимающего слот
+          const userId = slots[slotNumber];
+          // Проверяем, является ли этот слот слотом текущего локального участника
+          const isCurrentUserSlot = userSlot === slotNumber && currentLocalParticipant;
+          // Получаем объект участника по ID или локального участника для его слота
+          const participant = isCurrentUserSlot 
+            ? currentLocalParticipant 
+            : (userId ? participantsMap.get(userId) : undefined);
+            
+          // Проверяем, требуется ли обновление этой камеры
+          const needsUpdate = userId && lastUpdatedCamera === userId && cameraUpdateTimestamp;
+          const updateKey = needsUpdate ? `update-${cameraUpdateTimestamp}` : '';
+          
+          return participant ? (
+            <ParticipantSlot 
+              key={`slot-${slotNumber}-${updateKey}`}
+              participant={participant}
+              slotNumber={slotNumber}
+              cameraOn={cameraStates[userId] || false}
             />
-          </svg>
-        </div>
-      );
-    }
+          ) : (
+            <EmptySlot 
+              key={`empty-${slotNumber}`} 
+              index={slotNumber - 1}
+              onClick={() => onSlotClick(slotNumber)}
+            />
+          );
+        })}
+      </div>
+    );
   },
-  // Строгий компаратор для предотвращения перерисовки
+  // Специальный компаратор, который игнорирует изменения только в cameraStates
   (prevProps, nextProps) => {
-    // Проверяем изменение счетчика обновлений
-    if (prevProps.cameraUpdateCounter !== nextProps.cameraUpdateCounter) {
-      return false; // Если счетчик изменился, разрешаем перерисовку
+    // Проверяем изменения в слотах
+    const slotsEqual = Object.keys(prevProps.slots).length === Object.keys(nextProps.slots).length &&
+      Object.keys(prevProps.slots).every(k => {
+        const key = Number(k);
+        return prevProps.slots[key] === nextProps.slots[key];
+      });
+    
+    // Проверяем изменение userSlot
+    const userSlotEqual = prevProps.userSlot === nextProps.userSlot;
+    
+    // Проверяем изменение размера карты участников
+    const participantsMapSizeEqual = prevProps.participantsMap.size === nextProps.participantsMap.size;
+    
+    // Проверяем изменение локального участника
+    const localParticipantEqual = 
+      (!prevProps.currentLocalParticipant && !nextProps.currentLocalParticipant) ||
+      (prevProps.currentLocalParticipant && nextProps.currentLocalParticipant &&
+       prevProps.currentLocalParticipant.identity === nextProps.currentLocalParticipant.identity);
+    
+    // Если все ключевые значения равны, то не перерисовываем
+    const shouldNotUpdate = slotsEqual && userSlotEqual && participantsMapSizeEqual && localParticipantEqual;
+    
+    if (!shouldNotUpdate) {
+      console.log('[GRID CHANGE] Причина перерисовки сетки:', 
+        !slotsEqual ? 'изменились слоты' : 
+        !userSlotEqual ? 'изменился userSlot' : 
+        !participantsMapSizeEqual ? 'изменилось количество участников' : 
+        !localParticipantEqual ? 'изменился локальный участник' : 'неизвестная причина');
     }
     
-    // Сравниваем идентификаторы участников
-    return prevProps.participant.identity === nextProps.participant.identity;
+    // Перерисовываем, если изменилось базовое расположение участников
+    return shouldNotUpdate === true;
   }
 );
 
 /**
- * Prop для компонента ParticipantSlot с счетчиком обновлений камеры
+ * Интерфейс для пропсов слота участника
  */
 interface ParticipantSlotProps {
   participant: Participant;
   slotNumber: number;
-  cameraUpdateCounter: number;
+  cameraOn: boolean;
 }
 
 /**
@@ -328,20 +209,51 @@ interface ParticipantSlotProps {
  * Обернут в React.memo для предотвращения лишних перерисовок
  */
 const ParticipantSlot = React.memo(
-  ({ participant, slotNumber, cameraUpdateCounter }: ParticipantSlotProps) => {
+  ({ participant, slotNumber, cameraOn }: ParticipantSlotProps) => {
     // Отслеживаем перерисовки
-    console.log(`[RENDER] ParticipantSlot ${slotNumber} для ${participant.identity}`);
+    console.log(`[RENDER] ParticipantSlot ${slotNumber} для ${participant.identity} с камерой ${cameraOn ? 'ON' : 'OFF'}`);
     
     // Получаем только неизменяемые иммутабельные пропсы для стабильности рендеринга
     const isLocal = participant.isLocal;
     const identity = participant.identity;
     
+    // Получаем видеотреки участника
+    const videoTracks = useTracks(
+      [Track.Source.Camera],
+      { onlySubscribed: true }
+    ).filter(track => track.participant.identity === identity);
+    
+    const hasVideo = videoTracks.length > 0 && cameraOn;
+
     return (
       <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
-        <StableVideoTrack 
-          participant={participant}
-          cameraUpdateCounter={cameraUpdateCounter}
-        />
+        {/* Отображаем видео, только если оно есть */}
+        {hasVideo ? (
+          <div className="h-full w-full relative flex items-center justify-center">
+            <VideoTrack 
+              trackRef={videoTracks[0]}
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 ring-1 ring-white/10"></div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-12 w-12 text-slate-500" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={1} 
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+              />
+            </svg>
+          </div>
+        )}
         
         {/* Номер слота в левом нижнем углу */}
         <div 
@@ -358,18 +270,13 @@ const ParticipantSlot = React.memo(
       </div>
     );
   },
-  // Строгий компаратор для сравнения пропсов
+  // Сравниваем только необходимые пропсы
   (prevProps, nextProps) => {
-    // Сравниваем счетчик обновлений камеры
-    if (prevProps.cameraUpdateCounter !== nextProps.cameraUpdateCounter) {
-      return false; // Если счетчик изменился, разрешаем перерисовку
-    }
-    
-    // Сравниваем идентификатор и номер слота
     return (
       prevProps.slotNumber === nextProps.slotNumber &&
       prevProps.participant.identity === nextProps.participant.identity &&
-      prevProps.participant.isLocal === nextProps.participant.isLocal
+      prevProps.participant.isLocal === nextProps.participant.isLocal &&
+      prevProps.cameraOn === nextProps.cameraOn
     );
   }
 );
