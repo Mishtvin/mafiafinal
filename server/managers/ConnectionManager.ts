@@ -303,8 +303,8 @@ export class ConnectionManager {
             // Напрямую устанавливаем значение в маппинге CameraManager
             cameraManager['cameraStates'].set(data.userId, cameraState);
             
-            // Явно уведомляем только об одном обновлении
-            globalEvents.emit("camera_state_changed", data.userId, cameraState);
+            // Используем новые изолированные события для пользователя
+            globalEvents.emit("camera_state_changed_for_" + data.userId, data.userId, cameraState);
           } else {
             // Инициализируем новое состояние камеры
             cameraManager.initializeUserCamera(data.userId);
@@ -411,23 +411,20 @@ export class ConnectionManager {
     };
     
     // Слушатель для обновления состояния конкретной камеры
-    const cameraStateChangedListener = (changedUserId: string, isEnabled: boolean) => {
+    // В новой архитектуре мы подписываемся ТОЛЬКО на обновления для собственного пользователя
+    const ownCameraStateChangedListener = (changedUserId: string, isEnabled: boolean) => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
-          // Не отправляем обновление состояния собственной камеры пользователю
-          // Это предотвращает переопределение своего состояния камеры при подключении другого клиента
-          // и исключает бесконечный цикл обновлений при изменении состояния сервером
-          if (changedUserId !== userId) {
-            // Отправляем специальное событие individual_camera_update только для чужих камер
+          // В этот обработчик попадают только события для текущего пользователя,
+          // но для безопасности все равно проверяем, что это именно его событие
+          if (changedUserId === userId) {
             ws.send(JSON.stringify({
               type: 'individual_camera_update',
               userId: changedUserId,
               enabled: isEnabled
             }));
             
-            console.log(`Отправлено индивидуальное обновление состояния ЧУЖОЙ камеры для ${changedUserId} (${isEnabled}) клиенту ${userId}`);
-          } else {
-            console.log(`Пропускаем отправку обновления СОБСТВЕННОЙ камеры для ${changedUserId} клиенту ${userId}`);
+            console.log(`Отправлено индивидуальное обновление состояния СВОЕЙ камеры для ${changedUserId} (${isEnabled}) клиенту ${userId}`);
           }
         } catch (error) {
           console.error(`Ошибка отправки обновления состояния камеры ${changedUserId} пользователю ${userId}:`, error);
@@ -438,13 +435,14 @@ export class ConnectionManager {
     // Регистрируем обработчики событий
     globalEvents.on("slots_updated", slotsListener);
     globalEvents.on("camera_states_updated", cameraStatesListener);
-    globalEvents.on("camera_state_changed", cameraStateChangedListener);
+    // Подписываемся только на специфичный эвент для конкретного пользователя
+    globalEvents.on("camera_state_changed_for_" + userId, ownCameraStateChangedListener);
     
     // При закрытии соединения отписываемся от событий
     ws.on('close', () => {
       globalEvents.off("slots_updated", slotsListener);
       globalEvents.off("camera_states_updated", cameraStatesListener);
-      globalEvents.off("camera_state_changed", cameraStateChangedListener);
+      globalEvents.off("camera_state_changed_for_" + userId, ownCameraStateChangedListener);
     });
   }
   
