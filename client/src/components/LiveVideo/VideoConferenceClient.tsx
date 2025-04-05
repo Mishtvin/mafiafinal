@@ -198,24 +198,52 @@ const ControlDrawer = ({ room }: { room: Room }) => {
     }
   }, [room]);
   
-  // Функция переключения камеры с задержкой для избежания моргания
-  const toggleCamera = () => {
+  // Функция переключения камеры с надежной проверкой переключения
+  const toggleCamera = async () => {
     if (room && room.localParticipant) {
-      console.log('Переключаем камеру из', cameraEnabled, 'в', !cameraEnabled);
+      // Проверяем текущее реальное состояние камеры через треки
+      const hasActiveVideoTracks = room.localParticipant
+        .getTrackPublications()
+        .some(track => track.kind === 'video' && !track.isMuted && track.track);
       
-      // Обновляем UI состояние немедленно
-      setCameraEnabled(!cameraEnabled);
+      const newCameraState = !hasActiveVideoTracks;
+      console.log('Переключаем камеру из', hasActiveVideoTracks, 'в', newCameraState, 
+                  '(UI состояние:', cameraEnabled, ')');
       
-      // Затем отправляем команду LiveKit с небольшой задержкой
-      setTimeout(() => {
-        room.localParticipant.setCameraEnabled(!cameraEnabled)
-          .then(() => console.log('Камера переключена успешно'))
-          .catch(err => {
-            console.error('Ошибка переключения камеры:', err);
-            // Восстанавливаем состояние UI в случае ошибки
-            setCameraEnabled(cameraEnabled);
-          });
-      }, 10); // Минимальная задержка
+      // Обновляем UI состояние согласно реальному состоянию
+      setCameraEnabled(newCameraState);
+      
+      try {
+        // Небольшая задержка для предотвращения потенциальных проблем синхронизации
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Переключаем камеру через LiveKit API
+        await room.localParticipant.setCameraEnabled(newCameraState);
+        console.log('Камера переключена успешно');
+        
+        // Проверяем еще раз реальное состояние после переключения
+        setTimeout(() => {
+          const realCameraState = room.localParticipant
+            .getTrackPublications()
+            .some(track => track.kind === 'video' && !track.isMuted && track.track);
+          
+          // Если состояние в UI и реальное состояние не совпадают, исправляем UI
+          if (realCameraState !== newCameraState) {
+            console.log('Состояние камеры и UI рассинхронизированы, исправляем:', 
+                        'реальное:', realCameraState, 'UI:', newCameraState);
+            setCameraEnabled(realCameraState);
+          }
+        }, 500); // Проверяем через полсекунды
+      } catch (err) {
+        console.error('Ошибка переключения камеры:', err);
+        // Восстанавливаем состояние UI в случае ошибки на основе реального состояния
+        setTimeout(() => {
+          const realState = room.localParticipant
+            .getTrackPublications()
+            .some(track => track.kind === 'video' && !track.isMuted && track.track);
+          setCameraEnabled(realState);
+        }, 300);
+      }
     }
   };
   
