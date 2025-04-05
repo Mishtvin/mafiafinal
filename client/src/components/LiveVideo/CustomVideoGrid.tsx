@@ -56,13 +56,20 @@ export function CustomVideoGrid() {
 
   // Принудительно отображаем локального участника в его слоте
   // даже если в мапе слотов не совпадают идентификаторы
+  // ВНИМАНИЕ: Не используем метод напрямую для предотвращения циклов
   useEffect(() => {
     if (currentLocalParticipant && slotsManager.userSlot && slotsManager.connected) {
-      // Добавляем текущего участника принудительно в его слот
-      slotsManager.slots[slotsManager.userSlot] = currentLocalParticipant.identity;
-      console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
+      // Проверяем, нужно ли обновление
+      const needsUpdate = slotsManager.slots[slotsManager.userSlot] !== currentLocalParticipant.identity;
+      
+      if (needsUpdate) {
+        console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
+        // Не модифицируем slotsManager.slots напрямую!
+        // Вместо этого явно регистрируем пользователя
+        slotsManager.registerUser();
+      }
     }
-  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected]);
+  }, [currentLocalParticipant, slotsManager]);
   
   // Обработчик клика по пустому слоту
   const handleSlotClick = useCallback((slotNumber: number) => {
@@ -84,13 +91,18 @@ export function CustomVideoGrid() {
   const localCameraEnabled = localVideoTracks.length > 0 && localVideoTracks[0].publication.isEnabled;
   
   // Принудительно синхронизируем локальную камеру в cameraStates
+  // НО! Только когда мы точно знаем состояние камеры (она включена)
+  // Если камера выключена, мы не обновляем состояние, чтобы избежать моргания
   useEffect(() => {
     if (currentLocalParticipant) {
       const localUserId = currentLocalParticipant.identity;
       const currentSavedState = slotsManager.cameraStates[localUserId];
       
-      if (localCameraEnabled !== currentSavedState) {
-        console.log(`Синхронизируем локальное состояние камеры: ${localCameraEnabled ? 'включена' : 'выключена'}`);
+      // Синхронизируем ТОЛЬКО если камера реально ВКЛЮЧЕНА
+      // Если камера выключена по LiveKit API, но была включена в нашем состоянии,
+      // мы не меняем наше состояние - это может быть временная задержка публикации
+      if (localCameraEnabled && localCameraEnabled !== currentSavedState) {
+        console.log(`Синхронизируем включенную локальную камеру: ${localCameraEnabled ? 'включена' : 'выключена'}`);
         // Синхронизируем состояние без отправки WebSocket сообщений
         slotsManager.setCameraEnabled(localCameraEnabled);
       }
@@ -148,10 +160,21 @@ const MemoizedSlot = React.memo(
     const participant = isCurrentUserSlot 
       ? currentLocalParticipant 
       : (userId ? participantsMap.get(userId) : undefined);
+      
+    // Проверка наличия участника - нужна для типизации
+    if (!participant) {
+      return (
+        <EmptySlot 
+          key={`empty-${slotNumber}`}
+          index={slotNumber - 1}
+          onClick={() => onSlotClick(slotNumber)}
+        />
+      );
+    }
 
     // Определяем, включена ли камера
     // Особый случай для локального участника: используем локальное состояние
-    const cameraOn = isCurrentUserSlot 
+    const cameraOn: boolean = isCurrentUserSlot 
       ? localCameraEnabled 
       : (userId ? cameraStates[userId] || false : false);
           
@@ -246,7 +269,7 @@ const MemoizedVideoGrid = React.memo(
           // Получаем ID пользователя, занимающего слот
           const userId = slots[slotNumber];
           // Проверяем, является ли этот слот слотом текущего локального участника
-          const isCurrentUserSlot = userSlot === slotNumber && currentLocalParticipant;
+          const isCurrentUserSlot = userSlot === slotNumber && Boolean(currentLocalParticipant);
           
           return (
             <MemoizedSlot

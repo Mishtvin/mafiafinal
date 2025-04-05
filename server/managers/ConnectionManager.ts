@@ -63,9 +63,18 @@ export class ConnectionManager {
     // Сохраняем обновленный массив
     this.connections.set(userId, connections);
     
-    // Если это первое соединение пользователя, инициализируем состояние камеры
+    // Если это первое соединение пользователя, проверяем наличие состояния камеры
     if (isFirstConnection) {
-      cameraManager.initializeUserCamera(userId);
+      // Проверяем, есть ли уже состояние камеры для этого пользователя
+      const currentCameraState = cameraManager.getCameraState(userId);
+      
+      // Инициализируем состояние камеры только если его еще нет
+      if (currentCameraState === undefined) {
+        console.log(`Инициализируем новое состояние камеры для пользователя ${userId}`);
+        cameraManager.initializeUserCamera(userId);
+      } else {
+        console.log(`Сохраняем существующее состояние камеры для ${userId}: ${currentCameraState}`);
+      }
     }
     
     // Отмечаем активность пользователя
@@ -306,8 +315,15 @@ export class ConnectionManager {
             // Используем новые изолированные события для пользователя
             globalEvents.emit("camera_state_changed_for_" + data.userId, data.userId, cameraState);
           } else {
-            // Инициализируем новое состояние камеры
-            cameraManager.initializeUserCamera(data.userId);
+            // Проверяем, есть ли уже состояние камеры для нового идентификатора
+            const existingNewState = cameraManager.getCameraState(data.userId);
+            
+            if (existingNewState === undefined) {
+              console.log(`Инициализируем новое состояние камеры для пользователя ${data.userId}`);
+              cameraManager.initializeUserCamera(data.userId);
+            } else {
+              console.log(`Сохраняем существующее состояние камеры для ${data.userId}: ${existingNewState}`);
+            }
           }
           
           // Отправляем обновленное состояние всем пользователям - только слоты
