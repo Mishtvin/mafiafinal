@@ -46,8 +46,8 @@ export function CustomVideoGrid() {
   }, [participants]);
 
   return (
-    <div className="h-full p-5">
-      <div className="grid grid-cols-4 grid-rows-3 gap-5 h-full">
+    <div className="h-full w-full p-4">
+      <div className="video-grid">
         {slots}
       </div>
     </div>
@@ -67,7 +67,7 @@ function ParticipantSlot({ participant }: { participant: Participant }) {
   const hasVideo = videoTracks.length > 0;
   
   return (
-    <div className="relative overflow-hidden rounded-xl shadow-md bg-slate-800 h-full border border-slate-700">
+    <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
       {hasVideo ? (
         <div className="h-full w-full relative">
           {/* Здесь мы используем первый найденный трек */}
@@ -107,7 +107,7 @@ function ParticipantSlot({ participant }: { participant: Participant }) {
  */
 function EmptySlot({ index }: { index: number }) {
   return (
-    <div className="relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 h-full">
+    <div className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30">
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center">
           <div className="bg-slate-800/40 p-3 rounded-full mb-2">

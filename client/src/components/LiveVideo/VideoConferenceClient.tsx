@@ -82,15 +82,15 @@ export function VideoConferenceClient(props: {
     >
       <div className="flex flex-col h-screen bg-slate-900">
         {/* Header for room info */}
-        <header className="bg-slate-800 px-4 py-3 flex justify-between items-center border-b border-gray-800">
-          <div className="flex items-center space-x-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
+        <header className="bg-slate-800 px-4 py-3 flex justify-between items-center border-b border-slate-700">
+          <div className="flex items-center space-x-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
               <circle cx="9" cy="7" r="4"></circle>
               <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
               <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
             </svg>
-            <h1 className="text-xl font-semibold">MafiaLive</h1>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-500 to-blue-400 bg-clip-text text-transparent">MafiaLive</h1>
 
             {e2eeEnabled && (
               <div className="flex items-center ml-2">
@@ -112,7 +112,7 @@ export function VideoConferenceClient(props: {
         </main>
         
         {/* Footer with controls */}
-        <footer className="bg-slate-800 px-4 py-3 border-t border-gray-800">
+        <footer className="bg-slate-800 px-4 py-3 border-t border-slate-700">
           <ControlBar />
         </footer>
       </div>

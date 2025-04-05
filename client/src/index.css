@@ -11,3 +11,19 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
+
+/* Дополнительные стили для сетки */
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 50vh;
+  width: 100%;
+}
+
+.video-slot {
+  min-height: 150px;
+  aspect-ratio: 16/9;
+}
