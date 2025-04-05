@@ -360,8 +360,8 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
     }
   }, [room, slotsState]);
   
-  // Функция переключения камеры с использованием прямого управления треками
-  // (рекомендованный подход без использования setCameraEnabled)
+  // РАДИКАЛЬНО НОВЫЙ ПОДХОД: Используем ручное управление без LiveKit API, 
+  // которое вызывает проблемы с отключением
   const toggleCamera = async () => {
     if (room && room.localParticipant) {
       // Получаем текущий идентификатор пользователя
@@ -374,14 +374,14 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       
       // Новое состояние - обратное текущему
       const newCameraState = !hasActiveVideoTracks;
-      console.log('ПЕРЕКЛЮЧЕНИЕ КАМЕРЫ: текущее состояние:', hasActiveVideoTracks, 'новое:', newCameraState);
+      console.log('[КАМЕРА] Переключение: текущее:', hasActiveVideoTracks, '-> новое:', newCameraState);
       
       // Проверяем, не слишком ли быстро переключаем камеру
       const lastToggleTime = parseInt(sessionStorage.getItem('last-camera-toggle') || '0', 10);
       const currentTime = Date.now();
       
       if (currentTime - lastToggleTime < 2000) { // 2 секунды защиты
-        console.log('ЗАЩИТА: Слишком частое переключение камеры, игнорируем');
+        console.log('[КАМЕРА] Защита от слишком частого переключения, игнорируем');
         return; // Игнорируем частые переключения
       }
       
@@ -393,138 +393,183 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       
       // Сохраняем состояние для восстановления при перезагрузке
       window.sessionStorage.setItem('camera-state', String(newCameraState));
-      console.log('Сохранено ЛОКАЛЬНОЕ состояние камеры:', newCameraState);
+      console.log('[КАМЕРА] Сохранено состояние камеры в sessionStorage:', newCameraState);
       
-      try {
-        // НОВЫЙ ПОДХОД: Используем прямое управление треками вместо setCameraEnabled
-        
-        if (newCameraState) {
-          // ВКЛЮЧЕНИЕ КАМЕРЫ - создаем и публикуем новый трек
+      // Обязательно отправляем состояние через WebSocket для синхронизации с другими участниками
+      if (slotsState && typeof slotsState.setCameraState === 'function') {
+        console.log('[КАМЕРА] Отправляем состояние через WebSocket:', newCameraState);
+        slotsState.setCameraState(newCameraState);
+      }
+      
+      if (newCameraState) {
+        // ВКЛЮЧЕНИЕ КАМЕРЫ
+        try {
+          console.log('[КАМЕРА] Начинаем процесс включения камеры...');
           
+          // 1. Получаем deviceId из сохраненных настроек
+          const lastActiveCamera = localStorage.getItem('last-active-camera');
+          const deviceId = selectedCamera || lastActiveCamera || undefined;
+          
+          // 2. Останавливаем все существующие треки (на всякий случай)
           try {
-            // Проверяем разрешения камеры
-            console.log('Проверяем разрешение на использование камеры...');
-            await navigator.mediaDevices.getUserMedia({ video: true })
-              .then(stream => {
-                // Освобождаем ресурсы тестового стрима
-                stream.getTracks().forEach(track => track.stop());
-                console.log('Разрешение на использование камеры получено');
-              })
-              .catch(err => {
-                console.error('Ошибка получения разрешения камеры:', err);
-                // Сбрасываем UI в случае отказа в разрешении
-                setCameraEnabled(false);
-                window.sessionStorage.setItem('camera-state', 'false');
-                throw new Error('Доступ к камере отклонен');
-              });
+            console.log('[КАМЕРА] Очищаем все существующие треки перед включением новой камеры');
+            const existingTracks = room.localParticipant.getTrackPublications();
             
-            // Создаем новый видеотрек
-            console.log('Создаем новый видеотрек...');
-            
-            // Если есть сохраненная камера, используем её
-            const lastActiveCamera = localStorage.getItem('last-active-camera');
-            const deviceId = selectedCamera || lastActiveCamera || undefined;
-            
-            // Создаем опции с выбранной камерой, если есть
-            const trackOptions: any = {};
-            if (deviceId) {
-              trackOptions.deviceId = deviceId;
-              console.log('Используем сохраненную камеру:', deviceId);
+            for (const track of existingTracks) {
+              if (track.kind === 'video' && track.track) {
+                console.log('[КАМЕРА] Остановка существующего трека:', track.trackSid);
+                if ('stop' in track.track) {
+                  track.track.stop();
+                }
+              }
             }
-            
-            // Создаем видеотрек с помощью встроенной функции LiveKit
-            console.log('Создаем видеотрек с помощью createLocalVideoTrack...');
-            const videoTrack = await createLocalVideoTrack(trackOptions);
-            
-            // Публикуем трек
-            console.log('Публикуем видеотрек...');
-            await room.localParticipant.publishTrack(videoTrack);
-            
-            console.log('Видеотрек успешно опубликован');
-            
-            // Даем немного времени на обработку
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Обновляем список камер
-            setTimeout(() => getCameras(), 200);
-            
           } catch (err) {
-            console.error('Ошибка при включении камеры:', err);
-            // Сбрасываем UI обратно при ошибке
-            setCameraEnabled(false);
-            window.sessionStorage.setItem('camera-state', 'false');
-            return;
+            console.warn('[КАМЕРА] Ошибка при очистке существующих треков:', err);
           }
           
-        } else {
-          // ВЫКЛЮЧЕНИЕ КАМЕРЫ - отписываем все видеотреки
+          // 3. Получаем новый медиатрек
+          console.log('[КАМЕРА] Создаем новый медиа-стрим...');
+          const constraints: MediaStreamConstraints = {
+            video: deviceId ? { deviceId: { exact: deviceId } } : true,
+            audio: false
+          };
           
-          console.log('Отключаем все видеотреки...');
+          const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+          const videoTrack = mediaStream.getVideoTracks()[0];
           
-          // Получаем все текущие видеотреки
-          const videoTracks = room.localParticipant
-            .getTrackPublications()
-            .filter(track => track.kind === 'video');
+          if (!videoTrack) {
+            throw new Error('[КАМЕРА] Не удалось получить видеотрек');
+          }
           
-          // Сохраняем текущую активную камеру перед отключением
+          console.log('[КАМЕРА] Получен видеотрек:', videoTrack.label);
+          
+          // 4. Теперь ВРУЧНУЮ назначаем трек для отображения в LocalParticipant
+          // Это обходное решение, которое не использует LiveKit API для публикации
+          try {
+            // @ts-ignore - Обходим ограничения типов для прямого доступа
+            const localParticipantDiv = document.querySelector('.lk-participant.local');
+            
+            if (localParticipantDiv) {
+              // Создаем видеоэлемент, если его нет
+              let videoElement = localParticipantDiv.querySelector('video');
+              
+              if (!videoElement) {
+                videoElement = document.createElement('video');
+                videoElement.autoplay = true;
+                videoElement.playsInline = true;
+                videoElement.muted = true;
+                localParticipantDiv.appendChild(videoElement);
+              }
+              
+              // Назначаем трек напрямую видеоэлементу
+              if ('srcObject' in videoElement) {
+                videoElement.srcObject = mediaStream;
+              }
+              
+              // Добавляем класс для обозначения активности камеры
+              localParticipantDiv.classList.add('video-enabled');
+              
+              console.log('[КАМЕРА] Видео трек успешно активирован напрямую в DOM');
+              
+              // Сохраняем ссылку на видеотрек для последующего использования
+              // @ts-ignore - Временное хранилище для ручного управления
+              window._manualVideoTrack = videoTrack;
+              // @ts-ignore
+              window._manualVideoStream = mediaStream;
+            } else {
+              console.warn('[КАМЕРА] Не найден DOM элемент для локального участника');
+              throw new Error('Не найден DOM элемент локального участника');
+            }
+          } catch (domErr) {
+            console.error('[КАМЕРА] Ошибка при ручном управлении DOM:', domErr);
+            
+            // Если не сработал DOM подход, пробуем публикацию через LiveKit API
+            console.log('[КАМЕРА] Попытка использовать стандартный API LiveKit...');
+            await room.localParticipant.publishTrack(videoTrack);
+          }
+          
+          // 5. Обновляем список камер
+          setTimeout(() => getCameras(), 500);
+        } catch (err) {
+          console.error('[КАМЕРА] Критическая ошибка при включении камеры:', err);
+          
+          // Сбрасываем состояние в UI
+          setCameraEnabled(false);
+          window.sessionStorage.setItem('camera-state', 'false');
+          
+          // Синхронизируем через WebSocket
+          if (slotsState && typeof slotsState.setCameraState === 'function') {
+            slotsState.setCameraState(false);
+          }
+        }
+      } else {
+        // ВЫКЛЮЧЕНИЕ КАМЕРЫ
+        try {
+          console.log('[КАМЕРА] Отключаем видеотреки...');
+          
+          // 1. Сохраняем текущую активную камеру
           if (selectedCamera) {
             localStorage.setItem('last-active-camera', selectedCamera);
-            console.log('Сохранили последнюю активную камеру:', selectedCamera);
           }
           
-          // Отписываем каждый трек
-          for (const trackPub of videoTracks) {
+          // 2. Проверяем, есть ли ручное управление
+          // @ts-ignore - Доступ к временному хранилищу
+          if (window._manualVideoTrack) {
+            console.log('[КАМЕРА] Останавливаем ручной трек...');
+            // @ts-ignore
+            window._manualVideoTrack.stop();
+            // @ts-ignore
+            delete window._manualVideoTrack;
+            
+            // Очищаем DOM
             try {
-              if (trackPub.track) {
-                console.log('Отписываем трек:', trackPub.trackSid);
-                await room.localParticipant.unpublishTrack(trackPub.track);
+              const localParticipantDiv = document.querySelector('.lk-participant.local');
+              if (localParticipantDiv) {
+                localParticipantDiv.classList.remove('video-enabled');
                 
-                // Останавливаем трек для освобождения ресурсов
+                const videoElement = localParticipantDiv.querySelector('video');
+                if (videoElement && videoElement.srcObject) {
+                  const mediaStream = videoElement.srcObject as MediaStream;
+                  if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                  }
+                  videoElement.srcObject = null;
+                }
+              }
+            } catch (domErr) {
+              console.warn('[КАМЕРА] Ошибка при очистке DOM:', domErr);
+            }
+          }
+          
+          // 3. Также останавливаем все треки через LiveKit API (для надежности)
+          try {
+            const videoTracks = room.localParticipant
+              .getTrackPublications()
+              .filter(track => track.kind === 'video');
+            
+            for (const trackPub of videoTracks) {
+              try {
+                console.log('[КАМЕРА] Останавливаем трек через LiveKit:', trackPub.trackSid);
+                
+                // Останавливаем трек, если есть
                 if (trackPub.track && 'stop' in trackPub.track) {
                   trackPub.track.stop();
                 }
+                
+                // Отключаем (mute) трек
+                trackPub.mute();
+              } catch (trackErr) {
+                console.warn('[КАМЕРА] Ошибка при остановке трека:', trackErr);
               }
-            } catch (err) {
-              console.error('Ошибка при отписке трека:', err);
             }
+          } catch (err) {
+            console.warn('[КАМЕРА] Ошибка при остановке треков через LiveKit:', err);
           }
           
-          console.log('Все видеотреки отключены');
+          console.log('[КАМЕРА] Все видеотреки отключены');
+        } catch (err) {
+          console.error('[КАМЕРА] Ошибка при выключении камеры:', err);
         }
-        
-        // После успешного переключения синхронизируем состояние через WebSocket
-        if (slotsState && typeof slotsState.setCameraState === 'function') {
-          console.log('Синхронизируем состояние камеры через WebSocket:', newCameraState);
-          
-          // Отправляем состояние другим клиентам
-          slotsState.setCameraState(newCameraState);
-        }
-        
-        // Проверяем окончательное состояние после всех операций
-        setTimeout(() => {
-          const finalActiveState = room.localParticipant
-            .getTrackPublications()
-            .some(track => track.kind === 'video' && !track.isMuted && track.track);
-          
-          if (finalActiveState !== newCameraState) {
-            console.log('Состояние камеры и UI рассинхронизированы, исправляем:', 
-                        'реальное:', finalActiveState, 'ожидаемое:', newCameraState);
-            setCameraEnabled(finalActiveState);
-            window.sessionStorage.setItem('camera-state', String(finalActiveState));
-          }
-        }, 1000);
-        
-      } catch (err) {
-        console.error('Критическая ошибка переключения камеры:', err);
-        // Восстанавливаем состояние UI при ошибке
-        setTimeout(() => {
-          const realState = room.localParticipant
-            .getTrackPublications()
-            .some(track => track.kind === 'video' && !track.isMuted && track.track);
-          
-          setCameraEnabled(realState);
-          window.sessionStorage.setItem('camera-state', String(realState));
-        }, 500);
       }
     }
   };
