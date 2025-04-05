@@ -279,16 +279,6 @@ export function useSlots(userId: string) {
                   // Всегда обновляем состояние из сети
                   console.log(`Обновляем состояние чужой камеры: ${userId} -> ${enabled}`);
                   newCameraStates[userId] = enabled;
-                  
-                  // Отправляем событие для обновления камеры в контексте
-                  // Используем CustomEvent для передачи данных между компонентами
-                  const cameraEvent = new CustomEvent('camera-state-update', {
-                    detail: {
-                      userId: userId, 
-                      enabled: enabled
-                    }
-                  });
-                  window.dispatchEvent(cameraEvent);
                 }
                 
                 return {
