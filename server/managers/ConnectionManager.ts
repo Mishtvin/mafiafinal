@@ -2,7 +2,8 @@ import { WebSocket } from 'ws';
 import { globalEvents } from './EventEmitter';
 import { slotManager } from './SlotManager';
 import { cameraManager } from './CameraManager';
-import { SlotInfo } from '../../shared/schema';
+import { playerStateManager } from './PlayerStateManager';
+import { SlotInfo, PlayerStates } from '../../shared/schema';
 
 /**
  * Тип сообщения WebSocket
@@ -119,6 +120,14 @@ export class ConnectionManager {
             console.log(`Пропускаем отправку состояния СВОЕЙ камеры для ${cameraUserId} клиенту ${userId}`);
           }
         });
+        
+        // Отправляем текущие состояния игроков (убит/жив)
+        const playerStates = playerStateManager.getPlayerStates();
+        ws.send(JSON.stringify({
+          type: 'player_states_update',
+          playerStates
+        }));
+        console.log(`Отправлено состояние игроков (убитые/живые) клиенту ${userId}`);
         
         console.log(`Отправлено первоначальное состояние клиенту ${userId}: ${currentSlots.length} слотов`);
       }
@@ -268,6 +277,9 @@ export class ConnectionManager {
       // Удаляем информацию о состоянии камеры
       cameraManager.removeCameraState(userId);
       
+      // Очищаем информацию о состоянии игрока (убит/жив)
+      playerStateManager.clearPlayerState(userId);
+      
       // Освобождаем слот
       slotManager.releaseUserSlot(userId);
       
@@ -375,6 +387,46 @@ export class ConnectionManager {
         // Пользователь отвечает на ping
         // Активность уже отмечена в начале метода
         break;
+      
+      case 'kill_player':
+        // Пользователь (ведущий) отмечает игрока как убитого
+        if (data.targetUserId) {
+          const success = playerStateManager.markPlayerAsKilled(userId, data.targetUserId);
+          if (!success) {
+            this.sendToUser(userId, {
+              type: 'operation_failed',
+              operation: 'kill_player',
+              message: 'Только ведущий может отмечать игроков как убитых'
+            });
+          }
+        }
+        break;
+        
+      case 'revive_player':
+        // Пользователь (ведущий) отмечает игрока как живого
+        if (data.targetUserId) {
+          const success = playerStateManager.markPlayerAsAlive(userId, data.targetUserId);
+          if (!success) {
+            this.sendToUser(userId, {
+              type: 'operation_failed',
+              operation: 'revive_player',
+              message: 'Только ведущий может отмечать игроков как живых'
+            });
+          }
+        }
+        break;
+        
+      case 'reset_player_states':
+        // Пользователь (ведущий) сбрасывает все состояния игроков
+        const success = playerStateManager.resetAllPlayerStates(userId);
+        if (!success) {
+          this.sendToUser(userId, {
+            type: 'operation_failed',
+            operation: 'reset_player_states',
+            message: 'Только ведущий может сбрасывать состояния игроков'
+          });
+        }
+        break;
         
       case 'shuffle_users':
         // Перемешивание пользователей по слотам (только для ведущего)
@@ -391,6 +443,13 @@ export class ConnectionManager {
             message: 'Только ведущий может перемешивать пользователей'
           });
         }
+        break;
+        
+      case 'get_player_states':
+        // Запрос текущих состояний игроков
+        console.log(`Пользователь ${userId} запросил текущие состояния игроков`);
+        // Отправляем состояния конкретному пользователю
+        playerStateManager.sendPlayerStatesToUser(userId);
         break;
         
       default:
@@ -469,17 +528,35 @@ export class ConnectionManager {
       }
     };
     
+    // Слушатель для обновления состояний игроков (убит/жив)
+    const playerStatesListener = (playerStates: PlayerStates) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({
+            type: 'player_states_update',
+            playerStates
+          }));
+          console.log(`Отправлено обновление состояний игроков пользователю ${userId}`);
+        } catch (error) {
+          console.error(`Ошибка отправки обновления состояний игроков пользователю ${userId}:`, error);
+        }
+      }
+    };
+    
     // Регистрируем обработчики событий
     globalEvents.on("slots_updated", slotsListener);
     globalEvents.on("camera_states_updated", cameraStatesListener);
     // Подписываемся только на специфичный эвент для конкретного пользователя
     globalEvents.on("camera_state_changed_for_" + userId, ownCameraStateChangedListener);
+    // Подписываемся на события обновления состояний игроков
+    globalEvents.on("player_states_updated", playerStatesListener);
     
     // При закрытии соединения отписываемся от событий
     ws.on('close', () => {
       globalEvents.off("slots_updated", slotsListener);
       globalEvents.off("camera_states_updated", cameraStatesListener);
       globalEvents.off("camera_state_changed_for_" + userId, ownCameraStateChangedListener);
+      globalEvents.off("player_states_updated", playerStatesListener);
     });
   }
   

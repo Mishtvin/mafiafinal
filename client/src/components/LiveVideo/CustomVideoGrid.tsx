@@ -7,6 +7,7 @@ import {
 import { Track, Participant, Room } from 'livekit-client';
 import React, { useEffect, useState, DragEvent } from 'react';
 import { useSlots } from '../../hooks/use-slots';
+import { usePlayerStates } from '../../hooks/use-player-states';
 
 /**
  * Компонент сетки видео 4x3 для отображения до 12 участников
@@ -22,6 +23,12 @@ export function CustomVideoGrid() {
   
   // Состояние для drag and drop
   const [draggedUser, setDraggedUser] = useState<{userId: string, slotNumber: number} | null>(null);
+  
+  // Получаем ссылку на WebSocket из хука useSlots
+  const wsRef = slotsManager.wsRef;
+  
+  // Подключаем хук usePlayerStates для работы с "убитыми" игроками
+  const playerStatesManager = usePlayerStates(wsRef, userIdentity);
   
   // Проверяем, является ли текущий пользователь ведущим
   const isHost = slotsManager.userSlot === 12;
@@ -141,7 +148,7 @@ export function CustomVideoGrid() {
   }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected]);
 
   return (
-    <div className="h-full w-full p-4">
+    <div className="h-full w-full p-4 relative">
       <div className="video-grid">
         {slotNumbers.map(slotNumber => {
           // Получаем ID пользователя, занимающего слот
@@ -164,6 +171,8 @@ export function CustomVideoGrid() {
               onDrop={slotNumber !== 12 ? (e: DragEvent<HTMLDivElement>) => handleDrop(e, slotNumber) : undefined}
               onDragEnd={handleDragEnd}
               isDraggable={isHost && slotNumber !== 12} // Запрещаем перетаскивать из слота 12
+              isKilled={playerStatesManager.isPlayerKilled(participant.identity)}
+              playerStatesManager={playerStatesManager}
             />
           ) : (
             <EmptySlot 
@@ -177,6 +186,34 @@ export function CustomVideoGrid() {
           );
         })}
       </div>
+      
+      {/* Кнопка для сброса всех состояний игроков (только для ведущего) */}
+      {isHost && (
+        <div className="absolute bottom-2 left-0 right-0 flex justify-center">
+          <button
+            className="bg-yellow-600/80 hover:bg-yellow-700/90 text-white px-3 py-2 rounded-md shadow-md text-sm font-medium flex items-center space-x-2"
+            onClick={() => playerStatesManager.resetAllPlayerStates()}
+            title="Сбросить все отметки 'убит'"
+          >
+            <span>🔄</span>
+            <span>Сбросить все состояния</span>
+          </button>
+        </div>
+      )}
+      
+      {/* Кнопка для перемешивания всех игроков (только для ведущего) */}
+      {isHost && (
+        <div className="absolute bottom-2 right-4">
+          <button
+            className="bg-blue-600/80 hover:bg-blue-700/90 text-white px-3 py-2 rounded-md shadow-md text-sm font-medium flex items-center space-x-2"
+            onClick={() => slotsManager.shuffleAllUsers()}
+            title="Случайно перемешать всех игроков"
+          >
+            <span>🎲</span>
+            <span>Перемешать</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -189,6 +226,8 @@ interface ParticipantSlotProps {
   slotNumber: number;
   isHost?: boolean;
   isDraggable?: boolean;
+  isKilled?: boolean;
+  playerStatesManager?: any;
   onDragStart?: (e: DragEvent<HTMLDivElement>) => void;
   onDragOver?: (e: DragEvent<HTMLDivElement>) => void;
   onDrop?: (e: DragEvent<HTMLDivElement>) => void;
@@ -200,6 +239,8 @@ function ParticipantSlot({
   slotNumber,
   isHost = false,
   isDraggable = false,
+  isKilled = false,
+  playerStatesManager,
   onDragStart,
   onDragOver,
   onDrop,
@@ -282,6 +323,36 @@ function ParticipantSlot({
               d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" 
             />
           </svg>
+        </div>
+      )}
+      
+      {/* Индикатор "убит" с черепом */}
+      {isKilled && (
+        <div className="absolute inset-0 bg-red-900/50 flex flex-col items-center justify-center backdrop-blur-sm">
+          <span className="text-4xl mb-2">💀</span>
+          <div className="bg-red-900/80 text-white px-3 py-1 rounded-md font-bold shadow-md">
+            УБИТ
+          </div>
+        </div>
+      )}
+      
+      {/* Кнопки управления состоянием игрока (только для ведущего) */}
+      {isHost && slotNumber !== 12 && playerStatesManager && (
+        <div className="absolute top-2 left-2 flex space-x-1">
+          <button
+            className="bg-red-600/80 hover:bg-red-700/90 text-white p-1 rounded-md shadow-md"
+            onClick={() => playerStatesManager.killPlayer(participant.identity)}
+            title="Отметить как убитого"
+          >
+            <span>💀</span>
+          </button>
+          <button
+            className="bg-green-600/80 hover:bg-green-700/90 text-white p-1 rounded-md shadow-md"
+            onClick={() => playerStatesManager.revivePlayer(participant.identity)}
+            title="Отметить как живого"
+          >
+            <span>❤️</span>
+          </button>
         </div>
       )}
       

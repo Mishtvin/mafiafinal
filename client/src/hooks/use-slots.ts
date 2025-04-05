@@ -240,6 +240,7 @@ export function useSlots(userId: string) {
     releaseSlot,
     setCameraState,
     moveUserToSlot,
-    shuffleAllUsers
+    shuffleAllUsers,
+    wsRef: socketRef // Экспортируем ссылку на WebSocket для использования в других хуках
   };
 }

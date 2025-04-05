@@ -23,3 +23,11 @@ export interface SlotInfo {
   userId: string;
   slotNumber: number;
 }
+
+/**
+ * Состояния игроков
+ */
+export interface PlayerStates {
+  // userId -> true (убит) / false (жив)
+  killedPlayers: Record<string, boolean>;
+}
