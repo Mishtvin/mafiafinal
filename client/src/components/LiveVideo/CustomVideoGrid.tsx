@@ -32,6 +32,7 @@ export function CustomVideoGrid() {
           <ParticipantSlot 
             key={participant.identity} 
             participant={participant} 
+            slotNumber={i + 1}
           />
         );
       } else {
@@ -57,7 +58,7 @@ export function CustomVideoGrid() {
 /**
  * Компонент для отображения одного участника
  */
-function ParticipantSlot({ participant }: { participant: Participant }) {
+function ParticipantSlot({ participant, slotNumber }: { participant: Participant, slotNumber: number }) {
   // Получаем список видеотреков
   const videoTracks = useTracks(
     [Track.Source.Camera],
@@ -95,6 +96,11 @@ function ParticipantSlot({ participant }: { participant: Participant }) {
           </svg>
         </div>
       )}
+      {/* Номер слота в правом верхнем углу */}
+      <div className="absolute top-2 right-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
+        #{slotNumber}
+      </div>
+      {/* Имя пользователя в левом нижнем углу */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
         {participant.identity}
       </div>
@@ -130,6 +136,10 @@ function EmptySlot({ index }: { index: number }) {
             <span className="text-xs font-medium text-slate-400">Слот {index + 1}</span>
           </div>
         </div>
+      </div>
+      {/* Номер слота в правом верхнем углу */}
+      <div className="absolute top-2 right-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
+        #{index + 1}
       </div>
     </div>
   );
