@@ -11,6 +11,7 @@ export interface SlotsState {
   loading: boolean;
   connected: boolean;
   error: string | null;
+  cameraStates: Record<string, boolean>; // userId -> cameraOn
 }
 
 export function useSlots(userId: string) {
@@ -21,7 +22,8 @@ export function useSlots(userId: string) {
     userSlot: null,
     loading: true,
     connected: false,
-    error: null
+    error: null,
+    cameraStates: {}
   });
 
   const socketRef = useRef<WebSocket | null>(null);
@@ -35,6 +37,14 @@ export function useSlots(userId: string) {
     }
     return false;
   }, []);
+  
+  // Функция для обновления состояния камеры
+  const setCameraState = useCallback((enabled: boolean) => {
+    return sendMessage({
+      type: 'camera_state_change',
+      enabled
+    });
+  }, [sendMessage]);
 
   // Выбор слота
   const selectSlot = useCallback((slotNumber: number) => {
@@ -160,9 +170,27 @@ export function useSlots(userId: string) {
               break;
             }
             
+            case 'camera_states_update': {
+              // Обновление информации о состоянии камер
+              const cameraStates = data.cameraStates || {};
+              console.log('Получены обновления состояния камер:', cameraStates);
+              
+              setState(prev => ({
+                ...prev,
+                cameraStates
+              }));
+              break;
+            }
+            
             case 'slot_busy': {
               // Уведомление, что слот занят
               console.log(`Слот ${data.slotNumber} уже занят другим пользователем`);
+              break;
+            }
+            
+            case 'ping': {
+              // Ответ на пинг от сервера
+              sendMessage({ type: 'pong' });
               break;
             }
             
@@ -192,6 +220,7 @@ export function useSlots(userId: string) {
   return {
     ...state,
     selectSlot,
-    releaseSlot
+    releaseSlot,
+    setCameraState
   };
 }

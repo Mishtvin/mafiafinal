@@ -149,15 +149,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Коллекция подключений для отслеживания клиентов
   const connections = new Map<string, WebSocket>();
 
+  // Создаем хранилище для состояния камер
+  const cameraStates = new Map<string, boolean>(); // userId -> камера включена
+  
+  // Интервал для проверки соединений (pings)
+  const pingInterval = 10000; // 10 секунд
+  const pingIntervalId = setInterval(() => {
+    connections.forEach((ws, userId) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        } catch (e) {
+          console.error(`Ошибка отправки ping для ${userId}:`, e);
+        }
+      }
+    });
+  }, pingInterval);
+  
   // Обработчик подключений WebSocket
   wss.on('connection', (ws: WebSocket) => {
     let userId: string | null = null;
+    let lastPongTime = Date.now();
+    
+    // Функция для отправки сообщения клиенту
+    const sendToClient = (data: any) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify(data));
+        } catch (e) {
+          console.error('Ошибка отправки данных клиенту:', e);
+        }
+      }
+    };
 
     // Обработка входящих сообщений
     ws.on('message', (message: Buffer | string) => {
       try {
         const messageStr = message.toString();
         const data = JSON.parse(messageStr);
+        
+        // Обновляем время последнего pong для отслеживания активности
+        lastPongTime = Date.now();
         
         // Обработка разных типов сообщений
         switch(data.type) {
@@ -167,6 +199,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (userId) {
               connections.set(userId, ws);
               console.log(`Пользователь зарегистрирован: ${userId}`);
+              
+              // Устанавливаем начальное состояние камеры (выключена по умолчанию)
+              if (!cameraStates.has(userId)) {
+                cameraStates.set(userId, false);
+              }
               
               // Если пользователь не занял слот, назначаем свободный
               if (!userSlots.has(userId)) {
@@ -190,10 +227,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
               currentSlots.push({ userId, slotNumber });
             });
             
-            ws.send(JSON.stringify({
+            // Отправляем состояние слотов
+            sendToClient({
               type: 'slots_update',
               slots: currentSlots
-            }));
+            });
+            
+            // Отправляем состояние камер
+            const currentCameraStates: Record<string, boolean> = {};
+            cameraStates.forEach((enabled, userId) => {
+              currentCameraStates[userId] = enabled;
+            });
+            
+            sendToClient({
+              type: 'camera_states_update',
+              cameraStates: currentCameraStates
+            });
             break;
             
           case 'select_slot':
@@ -212,10 +261,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const currentOccupant = slotAssignments.get(selectedSlot);
             if (currentOccupant && currentOccupant !== userId) {
               // Слот занят другим пользователем
-              ws.send(JSON.stringify({
+              sendToClient({
                 type: 'slot_busy',
                 slotNumber: selectedSlot
-              }));
+              });
               return;
             }
             
@@ -244,14 +293,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
               broadcastSlotUpdate();
             }
             break;
+            
+          case 'camera_state_change':
+            // Обработка изменения состояния камеры
+            if (!userId) break;
+            
+            const isEnabled = Boolean(data.enabled);
+            cameraStates.set(userId, isEnabled);
+            
+            console.log(`Пользователь ${userId} ${isEnabled ? 'включил' : 'выключил'} камеру`);
+            
+            // Отправляем обновление состояния камер всем клиентам
+            broadcastCameraStates();
+            break;
+            
+          case 'pong':
+            // Клиент отвечает на ping
+            lastPongTime = Date.now();
+            break;
         }
       } catch (error) {
         console.error('Ошибка обработки сообщения WebSocket:', error);
       }
     });
     
+    // Проверка активности соединения
+    const connectionCheckInterval = setInterval(() => {
+      const now = Date.now();
+      if (now - lastPongTime > 30000) { // 30 секунд без ответа
+        console.log(`Соединение неактивно более 30 секунд для ${userId || 'неизвестного пользователя'}`);
+        ws.terminate(); // Принудительно закрываем соединение
+        clearInterval(connectionCheckInterval);
+      }
+    }, 10000);
+    
     // Обработка отключения
     ws.on('close', () => {
+      clearInterval(connectionCheckInterval);
+      
       if (userId) {
         // Освобождаем слот при отключении пользователя
         const slotToRelease = userSlots.get(userId);
@@ -260,12 +339,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userSlots.delete(userId);
         }
         
+        // Удаляем информацию о состоянии камеры
+        cameraStates.delete(userId);
+        
         connections.delete(userId);
         console.log(`Пользователь отключился: ${userId}`);
         
         // Отправляем обновление всем подключенным клиентам
         broadcastSlotUpdate();
+        broadcastCameraStates();
       }
+    });
+    
+    // Обработка ошибок
+    ws.on('error', (error) => {
+      console.error('WebSocket ошибка:', error);
+      clearInterval(connectionCheckInterval);
     });
   });
   
@@ -283,7 +372,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     connections.forEach((ws) => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(updateMessage);
+        try {
+          ws.send(updateMessage);
+        } catch (e) {
+          console.error('Ошибка отправки обновления слотов:', e);
+        }
+      }
+    });
+  }
+  
+  // Функция для отправки обновления состояния камер всем клиентам
+  function broadcastCameraStates() {
+    const currentCameraStates: Record<string, boolean> = {};
+    cameraStates.forEach((enabled, userId) => {
+      currentCameraStates[userId] = enabled;
+    });
+    
+    const updateMessage = JSON.stringify({
+      type: 'camera_states_update',
+      cameraStates: currentCameraStates
+    });
+    
+    connections.forEach((ws) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(updateMessage);
+        } catch (e) {
+          console.error('Ошибка отправки обновления состояния камер:', e);
+        }
       }
     });
   }
