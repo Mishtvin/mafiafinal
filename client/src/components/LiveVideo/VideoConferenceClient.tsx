@@ -360,9 +360,23 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
     }
   }, [room, slotsState]);
   
-  // Функция переключения камеры с надежной проверкой переключения
+  // Функция переключения камеры с надежной проверкой переключения и защитой от отключения
   const toggleCamera = async () => {
     if (room && room.localParticipant) {
+      // ВАЖНОЕ ИЗМЕНЕНИЕ: Отключаем все слушатели событий отключения, чтобы избежать
+      // проблемы с автоматическим переподключением при включении камеры
+      // ВАЖНЫЙ БЛОК ЗАЩИТЫ ОТ АВТОМАТИЧЕСКОГО ОТКЛЮЧЕНИЯ
+      const originalListeners = room.listeners('disconnected');
+      room.removeAllListeners('disconnected');
+      
+      // После переключения восстановим слушатели
+      const restoreListeners = () => {
+        console.log('Восстанавливаем слушатели disconnected, было:', originalListeners.length);
+        originalListeners.forEach(listener => {
+          room.on('disconnected', listener);
+        });
+      };
+      
       // Получаем текущий идентификатор пользователя
       const currentUserId = window.currentUserIdentity || '';
       
@@ -379,6 +393,7 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       
       if (currentTime - lastToggleTime < 2000) { // Увеличиваем до 2 секунд
         console.log('ЗАЩИТА: Слишком частое переключение камеры, игнорируем');
+        restoreListeners(); // Восстанавливаем слушатели перед выходом
         return; // Полностью игнорируем частые переключения
       }
       
@@ -392,6 +407,11 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       // для восстановления после перезагрузки или переподключения
       window.sessionStorage.setItem('camera-state', String(newCameraState));
       console.log('Сохранено ЛОКАЛЬНОЕ состояние камеры:', newCameraState);
+      
+      // Добавляем временную защиту от отключения
+      const cleanupDisconnectProtection = setTimeout(() => {
+        restoreListeners();
+      }, 2000);
       
       try {
         // Проверка времени была перенесена выше, здесь не нужна двойная проверка
@@ -693,7 +713,7 @@ export function VideoConferenceClient(props: {
     typeof window !== 'undefined' ? decodePassphrase(window.location.hash.substring(1)) : undefined;
   const e2eeEnabled = !!(e2eePassphrase && worker);
   
-  // Настраиваем параметры комнаты (в точности как в оригинале)
+  // Настраиваем параметры комнаты (с дополнительными параметрами для надежности)
   const roomOptions = useMemo((): RoomOptions => {
     return {
       publishDefaults: {
@@ -701,8 +721,12 @@ export function VideoConferenceClient(props: {
         red: !e2eeEnabled,
         videoCodec: props.codec,
       },
+      // Добавляем параметры для стабильной работы с камерами
       adaptiveStream: { pixelDensity: 'screen' },
       dynacast: true,
+      // Критически важные параметры для стабильности подключения
+      stopLocalTrackOnUnpublish: true, // Предотвращает проблемы с переключением треков
+      disconnectOnPageLeave: false, // Предотвращает автоматические дисконнекты
       e2ee: e2eeEnabled
         ? {
             keyProvider,
