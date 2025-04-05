@@ -31,25 +31,51 @@ const ControlDrawer = ({ room }: { room: Room }) => {
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
   
-  // Получаем список доступных камер
-  useEffect(() => {
-    async function getCameras() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        setCameras(videoDevices);
-        
-        // Устанавливаем выбранную камеру, если есть хотя бы одна
-        if (videoDevices.length > 0 && !selectedCamera) {
-          setSelectedCamera(videoDevices[0].deviceId);
-        }
-      } catch (err) {
-        console.error('Ошибка при получении списка камер:', err);
+  // Функция для получения списка доступных камер
+  async function getCameras() {
+    try {
+      // Запрашиваем разрешение на использование камеры, если его еще нет
+      await navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          // Закрываем потоки после получения разрешения
+          stream.getTracks().forEach(track => track.stop());
+        })
+        .catch(err => {
+          console.error('Пользователь отклонил доступ к камере:', err);
+        });
+      
+      // Теперь получаем список устройств
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      console.log('Доступные камеры:', videoDevices);
+      
+      setCameras(videoDevices);
+      
+      // Устанавливаем выбранную камеру, если есть хотя бы одна
+      if (videoDevices.length > 0 && !selectedCamera) {
+        setSelectedCamera(videoDevices[0].deviceId);
+        console.log('Выбрана камера по умолчанию:', videoDevices[0].deviceId);
       }
+      
+      return videoDevices;
+    } catch (err) {
+      console.error('Ошибка при получении списка камер:', err);
+      return [];
     }
-    
+  }
+  
+  // Получаем список доступных камер при монтировании и когда обновляется разрешение на доступ
+  useEffect(() => {
+    // Первый запрос при загрузке
     getCameras();
-  }, [selectedCamera]);
+    
+    // Повторный запрос через 2 секунды (для случаев, когда пользователь только что дал разрешение)
+    const delayedRequest = setTimeout(() => {
+      getCameras();
+    }, 2000);
+    
+    return () => clearTimeout(delayedRequest);
+  }, []);
   
   // Обновляем статус камеры при изменении состояния локального участника
   useEffect(() => {
@@ -81,12 +107,19 @@ const ControlDrawer = ({ room }: { room: Room }) => {
     if (room && room.localParticipant) {
       console.log('Переключаем камеру из', cameraEnabled, 'в', !cameraEnabled);
       
-      // Используем setTimeout для разделения событий UI и LiveKit
+      // Обновляем UI состояние немедленно
+      setCameraEnabled(!cameraEnabled);
+      
+      // Затем отправляем команду LiveKit с небольшой задержкой
       setTimeout(() => {
         room.localParticipant.setCameraEnabled(!cameraEnabled)
           .then(() => console.log('Камера переключена успешно'))
-          .catch(err => console.error('Ошибка переключения камеры:', err));
-      }, 50); // Небольшая задержка
+          .catch(err => {
+            console.error('Ошибка переключения камеры:', err);
+            // Восстанавливаем состояние UI в случае ошибки
+            setCameraEnabled(cameraEnabled);
+          });
+      }, 10); // Минимальная задержка
     }
   };
   
