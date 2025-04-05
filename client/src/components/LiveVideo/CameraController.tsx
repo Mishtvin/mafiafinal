@@ -2,21 +2,42 @@ import React, { useEffect } from 'react';
 import { useCameraContext } from '../../contexts/CameraContext';
 
 /**
- * Невидимый компонент для управления WebRTC-камерой в зависимости от состояния в контексте
+ * Компонент для обработки входящих событий камеры и обновления контекста
+ * Изолирует логику обработки событий камеры от компонентов отображения
  */
-export const CameraController: React.FC<{ userId: string }> = ({ userId }) => {
-  // Получаем состояние камеры из контекста
-  const { cameraEnabled } = useCameraContext();
+export const CameraController: React.FC<{
+  userId: string;
+}> = ({ userId }) => {
+  const { updateRemoteCameraState } = useCameraContext();
   
-  // Просто выводим логи состояния
+  // Обрабатываем события изменения состояния камеры
   useEffect(() => {
-    console.log(`[CameraController] Состояние камеры изменено: ${cameraEnabled ? 'включена' : 'выключена'}`);
+    const handleCameraUpdate = (event: Event) => {
+      // Приводим к типу CustomEvent с ожидаемыми полями
+      const customEvent = event as CustomEvent<{
+        userId: string;
+        enabled: boolean;
+      }>;
+      
+      const { userId: remoteUserId, enabled } = customEvent.detail;
+      
+      // Проверяем, что это не наша собственная камера
+      if (remoteUserId !== userId) {
+        console.log(`[CameraController] Обновление состояния удаленной камеры: ${remoteUserId} -> ${enabled}`);
+        updateRemoteCameraState(remoteUserId, enabled);
+      } else {
+        console.log(`[CameraController] Игнорирую обновление своей камеры из события: ${remoteUserId}`);
+      }
+    };
     
-    // Синхронизация с WebSocket происходит в CameraToggle через useSlots
-    console.log(`[CameraController] Пользователь ${userId} ${cameraEnabled ? 'включил' : 'выключил'} камеру`);
+    // Слушаем событие camera-state-update
+    window.addEventListener('camera-state-update', handleCameraUpdate);
     
-  }, [cameraEnabled, userId]);
+    return () => {
+      window.removeEventListener('camera-state-update', handleCameraUpdate);
+    };
+  }, [userId, updateRemoteCameraState]);
   
-  // Этот компонент не рендерит никакого UI
+  // Этот компонент не рендерит ничего видимого
   return null;
 };

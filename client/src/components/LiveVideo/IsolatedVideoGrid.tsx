@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import { Participant } from 'livekit-client';
 import { useParticipants } from '@livekit/components-react';
 import { useSlots } from '../../hooks/use-slots';
@@ -6,7 +6,6 @@ import { IsolatedParticipantSlot } from './IsolatedParticipantSlot';
 import { CameraProvider } from '../../contexts/CameraContext';
 import { CameraController } from './CameraController';
 import { CameraToggle } from './CameraToggle';
-import { ConnectionIndicator } from './ConnectionIndicator';
 
 /**
  * Компонент для пустого слота
@@ -48,7 +47,7 @@ const EmptySlot = React.memo(({ index, onClick }: { index: number; onClick?: () 
 /**
  * Основной компонент сетки видео с изолированным состоянием камер
  */
-export const IsolatedVideoGrid = React.memo(() => {
+export function IsolatedVideoGrid() {
   const participants = useParticipants();
   const [currentLocalParticipant] = participants.filter(p => p.isLocal);
   
@@ -56,11 +55,8 @@ export const IsolatedVideoGrid = React.memo(() => {
   const userIdentity = currentLocalParticipant?.identity || 'unknown-user';
   const slotsManager = useSlots(userIdentity);
   
-  console.log('[ISOLATED_GRID] Рендер основной сетки, всего участников:', participants.length);
-  
   // Создаем мапу участников для быстрого доступа
   const participantsMap = useMemo(() => {
-    console.log('[ISOLATED_GRID] Создание новой мапы участников');
     const map = new Map<string, Participant>();
     participants.forEach(p => {
       map.set(p.identity, p);
@@ -69,11 +65,11 @@ export const IsolatedVideoGrid = React.memo(() => {
   }, [participants]);
   
   // Обработчик клика по пустому слоту
-  const handleSlotClick = useCallback((slotNumber: number) => {
+  const handleSlotClick = (slotNumber: number) => {
     if (slotsManager.connected) {
       slotsManager.selectSlot(slotNumber);
     }
-  }, [slotsManager]);
+  };
   
   // Создаем массив слотов для сетки 4x3
   const slotNumbers = useMemo(() => {
@@ -84,9 +80,6 @@ export const IsolatedVideoGrid = React.memo(() => {
     <CameraProvider localParticipantId={userIdentity}>
       {/* Контроллер камеры для обработки событий */}
       <CameraController userId={userIdentity} />
-      
-      {/* Индикатор соединения */}
-      <ConnectionIndicator />
       
       {/* Кнопка переключения камеры */}
       <div className="absolute bottom-4 right-4 z-20">
@@ -108,27 +101,23 @@ export const IsolatedVideoGrid = React.memo(() => {
               ? currentLocalParticipant 
               : (userId ? participantsMap.get(userId) : undefined);
             
-            // Мемоизируем каждый отдельный рендер слота для оптимизации
-            return useMemo(() => {
-              console.log(`[ISOLATED_GRID] Создание слота ${slotNumber}, есть ли участник:`, !!participant);
-              
-              return participant ? (
-                <IsolatedParticipantSlot 
-                  key={`slot-${slotNumber}`}
-                  participant={participant}
-                  slotNumber={slotNumber}
-                />
-              ) : (
-                <EmptySlot 
-                  key={`empty-${slotNumber}`} 
-                  index={slotNumber - 1}
-                  onClick={() => handleSlotClick(slotNumber)}
-                />
-              );
-            }, [participant, slotNumber, handleSlotClick]);
+            // Рендерим слот с участником или пустой слот
+            return participant ? (
+              <IsolatedParticipantSlot 
+                key={`slot-${slotNumber}`}
+                participant={participant}
+                slotNumber={slotNumber}
+              />
+            ) : (
+              <EmptySlot 
+                key={`empty-${slotNumber}`} 
+                index={slotNumber - 1}
+                onClick={() => handleSlotClick(slotNumber)}
+              />
+            );
           })}
         </div>
       </div>
     </CameraProvider>
   );
-});
+}
