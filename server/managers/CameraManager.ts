@@ -87,8 +87,18 @@ export class CameraManager {
       this.cameraStates.set(userId, false);
       console.log(`Инициализировано состояние камеры для нового пользователя ${userId} (выключена)`);
       
-      // Отправляем событие об обновлении состояний камер
-      globalEvents.emit("camera_states_updated", this.getAllCameraStates());
+      // Отправляем обновление только для этого пользователя, не трогая остальных
+      // Создаем объект только с обновлением для нового пользователя
+      const updateForUser: Record<string, boolean> = {};
+      updateForUser[userId] = false;
+      
+      // Отправляем индивидуальное обновление через событие
+      globalEvents.emit("camera_state_changed", userId, false);
+      
+      // Для поддержки совместимости с существующими подписчиками
+      // отправляем полное состояние, но не обновляем всех
+      const allStates = this.getAllCameraStates();
+      globalEvents.emit("camera_states_updated", allStates);
     }
   }
 }

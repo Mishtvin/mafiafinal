@@ -284,28 +284,29 @@ export class ConnectionManager {
             slotManager.assignFirstAvailableSlot(data.userId);
           }
           
-          // Переносим состояние камеры
+          // Переносим состояние камеры, но не меняем состояние других камер
           if (cameraState !== undefined) {
             console.log(`Перенос состояния камеры для ${data.userId}: ${cameraState}`);
-            cameraManager.setCameraState(data.userId, cameraState);
+            // Избегаем глобального обновления при установке состояния камеры
+            // Напрямую устанавливаем значение в маппинге CameraManager
+            cameraManager['cameraStates'].set(data.userId, cameraState);
+            
+            // Явно уведомляем только об одном обновлении
+            globalEvents.emit("camera_state_changed", data.userId, cameraState);
           } else {
             // Инициализируем новое состояние камеры
             cameraManager.initializeUserCamera(data.userId);
           }
           
-          // Отправляем обновленное состояние всем пользователям
+          // Отправляем обновленное состояние всем пользователям - только слоты
           const currentSlots = slotManager.getAllSlotAssignments();
-          const currentCameraStates = cameraManager.getAllCameraStates();
           
           this.broadcastToAll({
             type: 'slots_update',
             slots: currentSlots
           });
           
-          this.broadcastToAll({
-            type: 'camera_states_update',
-            cameraStates: currentCameraStates
-          });
+          // Отправляем состояние камер только если жестко необходимо (не здесь)
         }
         break;
         
@@ -404,14 +405,36 @@ export class ConnectionManager {
       }
     };
     
+    // Слушатель для обновления состояния конкретной камеры
+    const cameraStateChangedListener = (changedUserId: string, isEnabled: boolean) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          // Создаем объект с одним обновлением
+          const updateData: Record<string, boolean> = {};
+          updateData[changedUserId] = isEnabled;
+          
+          ws.send(JSON.stringify({
+            type: 'camera_states_update',
+            cameraStates: updateData
+          }));
+          
+          console.log(`Отправлено обновление состояния камеры для ${changedUserId} (${isEnabled}) клиенту ${userId}`);
+        } catch (error) {
+          console.error(`Ошибка отправки обновления состояния камеры ${changedUserId} пользователю ${userId}:`, error);
+        }
+      }
+    };
+    
     // Регистрируем обработчики событий
     globalEvents.on("slots_updated", slotsListener);
     globalEvents.on("camera_states_updated", cameraStatesListener);
+    globalEvents.on("camera_state_changed", cameraStateChangedListener);
     
     // При закрытии соединения отписываемся от событий
     ws.on('close', () => {
       globalEvents.off("slots_updated", slotsListener);
       globalEvents.off("camera_states_updated", cameraStatesListener);
+      globalEvents.off("camera_state_changed", cameraStateChangedListener);
     });
   }
   
