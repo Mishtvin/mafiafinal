@@ -96,9 +96,13 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
           </svg>
         </div>
       )}
-      {/* Имя пользователя в левом нижнем углу */}
-      <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
-        <span className="mr-1">{slotNumber}</span>
+      {/* Номер слота в левом нижнем углу */}
+      <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
+        {slotNumber}
+      </div>
+      
+      {/* Имя пользователя рядом с номером слота */}
+      <div className="absolute bottom-2 left-10 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
         {participant.identity}
       </div>
     </div>
@@ -134,9 +138,13 @@ function EmptySlot({ index }: { index: number }) {
           </div>
         </div>
       </div>
-      {/* Информация о слоте */}
+      {/* Номер слота */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
-        <span className="mr-1">{index + 1}</span>
+        {index + 1}
+      </div>
+      
+      {/* Статус слота */}
+      <div className="absolute bottom-2 left-10 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
         Пусто
       </div>
     </div>
