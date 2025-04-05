@@ -7,6 +7,7 @@ export interface CameraContextType {
   disableCamera: () => void;
   toggleCamera: () => void;
   setCameraEnabled: (enabled: boolean) => void;
+  getVideoEnabled: (userId: string, isLocal: boolean) => boolean;
 }
 
 // Создаем контекст с дефолтными значениями
@@ -16,6 +17,7 @@ const CameraContext = createContext<CameraContextType>({
   disableCamera: () => {},
   toggleCamera: () => {},
   setCameraEnabled: () => {},
+  getVideoEnabled: () => false,
 });
 
 // Провайдер контекста камеры
@@ -97,6 +99,20 @@ export const CameraProvider = ({
     window.sessionStorage.setItem('camera-state', String(newState));
   };
   
+  // Функция для получения состояния камеры
+  const getVideoEnabled = (userId: string, isLocal: boolean) => {
+    // Если это локальный пользователь, возвращаем состояние из контекста
+    if (isLocal || userId === localParticipantId) {
+      console.log(`[CameraContext] Запрос на состояние локальной камеры: ${cameraEnabled}`);
+      return cameraEnabled;
+    }
+    
+    // Для удаленных пользователей возвращаем состояние из sessionStorage
+    // В реальном приложении здесь будет запрос к WebSocket или другому источнику данных
+    console.log(`[CameraContext] Запрос на состояние удаленной камеры ${userId}`);
+    return false; // По умолчанию выключено для удаленных пользователей
+  };
+  
   // Предоставляем состояние и функции через контекст
   const value = {
     cameraEnabled,
@@ -104,6 +120,7 @@ export const CameraProvider = ({
     disableCamera,
     toggleCamera,
     setCameraEnabled,
+    getVideoEnabled,
   };
   
   return <CameraContext.Provider value={value}>{children}</CameraContext.Provider>;
