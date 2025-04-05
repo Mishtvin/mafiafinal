@@ -69,11 +69,34 @@
 .left-controls {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 .right-controls {
   display: flex;
   align-items: center;
+}
+
+/* Селектор камеры */
+.camera-selector {
+  position: relative;
+}
+
+.select-camera {
+  background-color: rgba(30, 41, 59, 0.6);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 14px;
+  min-width: 140px;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.2s;
+}
+
+.select-camera:hover {
+  background-color: rgba(51, 65, 85, 0.8);
 }
 
 /* Обертка для кнопки-триггер */

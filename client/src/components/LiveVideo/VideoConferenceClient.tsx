@@ -12,6 +12,7 @@ import {
   RoomOptions,
   VideoPresets,
   type VideoCodec,
+  createLocalVideoTrack,
 } from 'livekit-client';
 import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
@@ -25,6 +26,30 @@ const ControlDrawer = ({ room }: { room: Room }) => {
   
   // Следим за состоянием камеры
   const [cameraEnabled, setCameraEnabled] = useState(true);
+  
+  // Состояние для выбора камеры
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
+  
+  // Получаем список доступных камер
+  useEffect(() => {
+    async function getCameras() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        setCameras(videoDevices);
+        
+        // Устанавливаем выбранную камеру, если есть хотя бы одна
+        if (videoDevices.length > 0 && !selectedCamera) {
+          setSelectedCamera(videoDevices[0].deviceId);
+        }
+      } catch (err) {
+        console.error('Ошибка при получении списка камер:', err);
+      }
+    }
+    
+    getCameras();
+  }, [selectedCamera]);
   
   // Обновляем статус камеры при изменении состояния локального участника
   useEffect(() => {
@@ -54,10 +79,47 @@ const ControlDrawer = ({ room }: { room: Room }) => {
   // Функция переключения камеры с задержкой для избежания моргания
   const toggleCamera = () => {
     if (room && room.localParticipant) {
+      console.log('Переключаем камеру из', cameraEnabled, 'в', !cameraEnabled);
+      
       // Используем setTimeout для разделения событий UI и LiveKit
       setTimeout(() => {
-        room.localParticipant.setCameraEnabled(!cameraEnabled);
+        room.localParticipant.setCameraEnabled(!cameraEnabled)
+          .then(() => console.log('Камера переключена успешно'))
+          .catch(err => console.error('Ошибка переключения камеры:', err));
       }, 50); // Небольшая задержка
+    }
+  };
+  
+  // Функция для смены используемой камеры
+  const switchCamera = async (deviceId: string) => {
+    if (room && room.localParticipant) {
+      try {
+        console.log('Переключаем на камеру с ID:', deviceId);
+        
+        // Сначала отключаем камеру
+        await room.localParticipant.setCameraEnabled(false);
+        
+        // Небольшая задержка перед сменой трека
+        setTimeout(async () => {
+          try {
+            // Создаем новый трек с указанным deviceId
+            const { localTrack: videoTrack } = await createLocalVideoTrack({
+              deviceId: { exact: deviceId },
+            });
+            
+            // Публикуем новый трек
+            await room.localParticipant.publishTrack(videoTrack);
+            setSelectedCamera(deviceId);
+            console.log('Камера успешно переключена');
+          } catch (err) {
+            console.error('Ошибка при публикации нового трека:', err);
+            // В случае ошибки пробуем восстановить камеру
+            room.localParticipant.setCameraEnabled(true);
+          }
+        }, 200);
+      } catch (err) {
+        console.error('Ошибка при переключении камеры:', err);
+      }
     }
   };
   
@@ -105,6 +167,23 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                 </>
               )}
             </button>
+            
+            {/* Селектор камеры */}
+            {cameras.length > 1 && (
+              <div className="camera-selector">
+                <select
+                  className="select-camera"
+                  value={selectedCamera || ''}
+                  onChange={(e) => switchCamera(e.target.value)}
+                >
+                  {cameras.map(camera => (
+                    <option key={camera.deviceId} value={camera.deviceId}>
+                      {camera.label || `Камера ${cameras.indexOf(camera) + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           
           <div className="right-controls">
@@ -113,7 +192,17 @@ const ControlDrawer = ({ room }: { room: Room }) => {
               aria-label="Leave Room"
               onClick={() => {
                 if (room) {
+                  // Создаем и диспатчим событие для оповещения о выходе из комнаты
+                  const event = new Event('roomDisconnected');
+                  window.dispatchEvent(event);
+                  
+                  // Отключаемся от комнаты
                   room.disconnect();
+                  
+                  // Редирект на главную (на случай, если слушатель событий не сработает)
+                  setTimeout(() => {
+                    window.location.href = '/';
+                  }, 300);
                 }
               }}
             >
