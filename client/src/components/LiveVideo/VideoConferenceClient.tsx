@@ -634,30 +634,33 @@ export function VideoConferenceClient(props: {
       const newRoom = new Room(roomOptions);
       
       // Регистрируем дополнительные обработчики для отладки и предотвращения ошибок
-      newRoom.on(RoomEvent.SignalConnected, () => {
+      // Основные события из LiveKit - используем строковый литерал для всех событий
+      // для обеспечения единообразия и избежания проблем с типизацией
+      newRoom.on('signalConnected', () => {
         console.log('СОБЫТИЕ: Сигнальное соединение установлено');
       });
       
-      newRoom.on(RoomEvent.Disconnected, () => {
+      newRoom.on('disconnected', () => {
         console.log('СОБЫТИЕ: Комната отключена');
       });
       
-      newRoom.on(RoomEvent.Reconnecting, () => {
+      newRoom.on('reconnecting', () => {
         console.log('СОБЫТИЕ: Переподключение к комнате...');
       });
       
-      newRoom.on(RoomEvent.Reconnected, () => {
+      newRoom.on('reconnected', () => {
         console.log('СОБЫТИЕ: Переподключение завершено успешно');
       });
       
       // Важный обработчик для трассировки ошибки "cannot send signal request"
-      // Используем строки вместо перечисления RoomEvent для нестандартных событий
-      newRoom.on('leave', (reason: any) => {
+      // Используем приведение типа к any для обхода проверки типов
+      (newRoom as any).on('leave', (reason: any) => {
         console.log('СОБЫТИЕ: Операция отключения (leave), причина:', reason);
       });
       
       // Обработчик ошибок сигнального соединения для отладки
-      newRoom.on('signalError', (err: any) => {
+      // Используем приведение типа к any для обхода проверки типов
+      (newRoom as any).on('signalError', (err: any) => {
         console.error('ОШИБКА СИГНАЛЬНОГО СОЕДИНЕНИЯ:', err);
       });
       
