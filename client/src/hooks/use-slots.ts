@@ -74,6 +74,7 @@ export function useSlots(userId: string) {
         setState(prev => ({ ...prev, connected: true, loading: false }));
 
         // Регистрируем пользователя на сервере
+        console.log('Регистрируем пользователя:', userIdRef.current);
         sendMessage({
           type: 'register',
           userId: userIdRef.current

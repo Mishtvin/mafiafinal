@@ -166,8 +166,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId = data.userId;
             if (userId) {
               connections.set(userId, ws);
+              console.log(`Пользователь зарегистрирован: ${userId}`);
+              
+              // Если пользователь не занял слот, назначаем свободный
+              if (!userSlots.has(userId)) {
+                // Находим первый свободный слот
+                for (let i = 1; i <= 12; i++) {
+                  if (!slotAssignments.has(i)) {
+                    slotAssignments.set(i, userId);
+                    userSlots.set(userId, i);
+                    console.log(`Автоматически назначен слот ${i} для ${userId}`);
+                    break;
+                  }
+                }
+              }
+            } else {
+              console.error('Ошибка: получен пустой userId при регистрации');
             }
-            console.log(`Пользователь зарегистрирован: ${userId}`);
             
             // Отправляем текущее состояние слотов
             const currentSlots: SlotInfo[] = [];
