@@ -171,8 +171,8 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         // Проверяем первое ли это подключение
         const isFirstConnection = !window.sessionStorage.getItem('camera-state-initialized');
         
-        // При первом подключении всегда устанавливаем камеру как включенную
-        let effectiveState = isFirstConnection ? true : apiCameraEnabled;
+        // При первом подключении устанавливаем камеру как выключенную
+        let effectiveState = isFirstConnection ? false : apiCameraEnabled;
         
         // Отмечаем, что инициализация прошла
         if (isFirstConnection) {
@@ -202,19 +202,21 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       room.localParticipant.on('trackPublished', updateCameraState);
       room.localParticipant.on('trackUnpublished', updateCameraState);
       
-      // ПРИНУДИТЕЛЬНО устанавливаем камеру как включенную при инициализации
-      setCameraEnabled(true);
+      // ПРИНУДИТЕЛЬНО устанавливаем камеру как выключенную при инициализации
+      setCameraEnabled(false);
       
       // Вызываем немедленно для обновления состояния селекта
       updateCameraState();
       
       // Дополнительно проверяем состояние иконки после небольшой задержки
       setTimeout(() => {
-        // Если после всех автоматических обновлений иконка все еще показывает выключенную камеру,
-        // но реально камера включена - принудительно исправляем
-        if (!cameraEnabled && room.localParticipant.isCameraEnabled) {
-          console.log('Обнаружено рассогласование - принудительно показываем камеру как включенную');
-          setCameraEnabled(true);
+        // Проверяем на рассогласование и если есть - исправляем
+        const realCameraState = room.localParticipant.isCameraEnabled;
+        // Для выключенной камеры всегда устанавливаем значение false,
+        // даже если реально она ещё не отключилась полностью
+        if (cameraEnabled !== realCameraState) {
+          console.log('Обнаружено рассогласование - синхронизируем UI с реальным состоянием камеры');
+          setCameraEnabled(realCameraState);
         }
       }, 1500);
     }
@@ -498,7 +500,7 @@ export function VideoConferenceClient(props: {
         connectOptions={connectOptions}
         serverUrl={props.liveKitUrl}
         audio={false}
-        video={true}
+        video={false}
       >
         <div className="flex flex-col h-screen bg-slate-900">        
           {/* Main content with custom grid */}
