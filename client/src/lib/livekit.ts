@@ -13,6 +13,15 @@ function generateUniqueIdentity(baseIdentity: string): string {
 }
 
 /**
+ * Глобальный тип для window, добавляем свойство для хранения идентификатора пользователя
+ */
+declare global {
+  interface Window {
+    currentUserIdentity: string;
+  }
+}
+
+/**
  * Fetches a LiveKit token from the token service
  * 
  * @param identity The participant's identity/username
@@ -24,7 +33,11 @@ export async function fetchToken(identity: string, roomName?: string): Promise<s
     // Создаем уникальный идентификатор для каждой вкладки
     const uniqueIdentity = generateUniqueIdentity(identity);
     
+    // Сохраняем идентификатор для последующего использования в веб-сокетах
+    window.currentUserIdentity = uniqueIdentity;
+    
     console.log('Fetching token for', { identity: uniqueIdentity, roomName });
+    console.log('Сохранен глобальный идентификатор пользователя:', uniqueIdentity);
     
     // Используем POST запрос с JSON телом
     const response = await fetch(TOKEN_ENDPOINT, {

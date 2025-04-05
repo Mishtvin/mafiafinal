@@ -74,11 +74,18 @@ export function useSlots(userId: string) {
         console.log('WebSocket соединение установлено');
         setState(prev => ({ ...prev, connected: true, loading: false }));
 
+        // Используем глобальный идентификатор из window, если доступен
+        let effectiveUserId = userIdRef.current;
+        if (window.currentUserIdentity && window.currentUserIdentity !== 'undefined') {
+          effectiveUserId = window.currentUserIdentity;
+          console.log('Использую глобальный идентификатор:', effectiveUserId);
+        }
+
         // Регистрируем пользователя на сервере
-        console.log('Регистрируем пользователя:', userIdRef.current);
+        console.log('Регистрируем пользователя:', effectiveUserId);
         sendMessage({
           type: 'register',
-          userId: userIdRef.current
+          userId: effectiveUserId
         });
       };
 
@@ -123,9 +130,15 @@ export function useSlots(userId: string) {
                 slots[slot.slotNumber] = slot.userId;
                 console.log(`Слот ${slot.slotNumber} занят пользователем ${slot.userId}`);
                 
-                // Если это слот текущего пользователя
-                console.log(`Сравниваем ${slot.userId} и ${userIdRef.current}`);
-                if (slot.userId === userIdRef.current) {
+                // Возможно два идентификатора для сравнения - текущий и глобальный
+                const currentId = userIdRef.current;
+                const globalId = window.currentUserIdentity;
+                
+                console.log(`Сравниваем слот ${slot.slotNumber}: ${slot.userId} с ${currentId} и ${globalId}`);
+                
+                // Проверяем соответствие либо текущему, либо глобальному идентификатору
+                if (slot.userId === currentId || 
+                    (globalId && slot.userId === globalId)) {
                   userSlot = slot.slotNumber;
                   console.log(`Найден слот текущего пользователя: ${userSlot}`);
                 }
