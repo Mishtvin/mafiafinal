@@ -62,28 +62,54 @@ const ControlDrawer = ({ room }: { room: Room }) => {
             const mediaStreamTrack = videoTracks[0].track.mediaStreamTrack;
             const trackSettings = mediaStreamTrack.getSettings();
             
-            // Если у трека есть deviceId, используем его напрямую
+            // Попробуем определить камеру сначала по deviceId
             if (trackSettings.deviceId) {
-              console.log('Определена активная камера через трек:', trackSettings.deviceId);
-              setSelectedCamera(trackSettings.deviceId);
-              return videoDevices;
-            }
-            
-            // Пробуем найти по groupId или label (в случае, если deviceId недоступен)
-            if (trackSettings.groupId || mediaStreamTrack.label) {
-              const matchingDevice = videoDevices.find(device => 
-                (trackSettings.groupId && device.groupId === trackSettings.groupId) ||
-                (mediaStreamTrack.label && 
-                 device.label && 
-                 device.label.includes(mediaStreamTrack.label.split(' ')[0]))
-              );
-              
-              if (matchingDevice) {
-                console.log('Найдено совпадение для активной камеры:', matchingDevice.deviceId);
-                setSelectedCamera(matchingDevice.deviceId);
+              const matchingCamera = videoDevices.find(d => d.deviceId === trackSettings.deviceId);
+              if (matchingCamera) {
+                console.log('Определена активная камера:', matchingCamera.label, 'deviceId:', matchingCamera.deviceId);
+                setSelectedCamera(matchingCamera.deviceId);
                 return videoDevices;
               }
             }
+            
+            // Если не удалось по deviceId, попробуем по label
+            if (mediaStreamTrack.label) {
+              // Сначала попробуем найти точное совпадение по названию
+              const cameraLabel = mediaStreamTrack.label;
+              console.log('Поиск камеры по label:', cameraLabel);
+              
+              // Поиск по полному названию
+              const exactMatch = videoDevices.find(d => d.label === cameraLabel);
+              if (exactMatch) {
+                console.log('Найдено точное совпадение по названию:', exactMatch.label);
+                setSelectedCamera(exactMatch.deviceId);
+                return videoDevices;
+              }
+              
+              // Поиск по частичному совпадению (первое слово названия)
+              const firstWord = cameraLabel.split(' ')[0];
+              const partialMatch = videoDevices.find(d => d.label && d.label.includes(firstWord));
+              if (partialMatch) {
+                console.log('Найдено частичное совпадение по названию:', partialMatch.label);
+                setSelectedCamera(partialMatch.deviceId);
+                return videoDevices;
+              }
+            }
+            
+            // Если по label не нашли, попробуем по groupId
+            if (trackSettings.groupId) {
+              const matchByGroup = videoDevices.find(d => d.groupId === trackSettings.groupId);
+              if (matchByGroup) {
+                console.log('Найдено совпадение по groupId:', matchByGroup.label);
+                setSelectedCamera(matchByGroup.deviceId);
+                return videoDevices;
+              }
+            }
+            
+            console.log('Не удалось определить активную камеру по параметрам:', 
+                        'label:', mediaStreamTrack.label, 
+                        'deviceId:', trackSettings.deviceId, 
+                        'groupId:', trackSettings.groupId);
           } catch (err) {
             console.error('Ошибка при определении активной камеры через треки:', err);
           }
@@ -191,6 +217,9 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       try {
         console.log('Переключаем на камеру с ID:', deviceId);
         
+        // Находим камеру по deviceId для получения дополнительной информации
+        const selectedCameraInfo = cameras.find(cam => cam.deviceId === deviceId);
+        
         // Обновляем UI немедленно
         setSelectedCamera(deviceId);
         
@@ -198,7 +227,16 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         // для переключения камеры с новыми опциями
         await room.switchActiveDevice('videoinput', deviceId);
         
-        console.log('Камера успешно переключена на:', deviceId);
+        console.log('Камера успешно переключена на:', selectedCameraInfo?.label || deviceId);
+        
+        // Повторно запрашиваем списки камер сразу после переключения
+        // и снова через небольшой промежуток времени для гарантии синхронизации
+        setTimeout(() => {
+          getCameras();
+          
+          // Еще одна проверка через полсекунды для надежности
+          setTimeout(getCameras, 500);
+        }, 100);
       } catch (err) {
         console.error('Ошибка при переключении камеры:', err);
       }
@@ -251,6 +289,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                   className="select-camera"
                   value={selectedCamera || ''}
                   onChange={(e) => switchCamera(e.target.value)}
+                  key={selectedCamera || 'default-camera'}
                 >
                   {cameras.map(camera => (
                     <option key={camera.deviceId} value={camera.deviceId}>
