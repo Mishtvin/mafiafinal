@@ -288,9 +288,12 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
   // Функция переключения камеры с надежной проверкой переключения
   const toggleCamera = async () => {
     if (room && room.localParticipant) {
+      // Получаем текущий идентификатор пользователя
+      const currentUserId = window.currentUserIdentity || '';
+      
       // Инвертируем текущее состояние UI
       const newCameraState = !cameraEnabled;
-      console.log('Переключаем камеру из UI состояния:', cameraEnabled, 'в', newCameraState);
+      console.log('ЛОКАЛЬНОЕ Переключение камеры из UI состояния:', cameraEnabled, 'в', newCameraState);
       
       // Обновляем UI состояние немедленно
       setCameraEnabled(newCameraState);
@@ -298,9 +301,21 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       // Сохраняем желаемое состояние камеры в sessionStorage
       // для восстановления после перезагрузки или переподключения
       window.sessionStorage.setItem('camera-state', String(newCameraState));
-      console.log('Сохранено желаемое состояние камеры:', newCameraState);
+      console.log('Сохранено ЛОКАЛЬНОЕ состояние камеры:', newCameraState);
       
       try {
+        // Защитная проверка - нельзя переключать камеру слишком часто
+        const lastToggleTime = parseInt(sessionStorage.getItem('last-camera-toggle') || '0', 10);
+        const currentTime = Date.now();
+        
+        if (currentTime - lastToggleTime < 500) {
+          console.log('Слишком частое переключение камеры, пропускаем запрос');
+          return; // Пропускаем переключение, если прошло менее 500 мс
+        }
+        
+        // Запоминаем время последнего переключения
+        sessionStorage.setItem('last-camera-toggle', String(currentTime));
+        
         // Небольшая задержка для предотвращения потенциальных проблем синхронизации
         await new Promise(resolve => setTimeout(resolve, 100));
         
@@ -311,23 +326,31 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
         
         // Переключаем камеру через LiveKit API
         await room.localParticipant.setCameraEnabled(newCameraState);
-        console.log('Камера переключена успешно через LiveKit API');
+        console.log('Камера переключена успешно через LiveKit API:', newCameraState);
+        
+        // Проверяем реальное состояние после переключения
+        const realCameraEnabled = room.localParticipant.isCameraEnabled;
+        if (realCameraEnabled !== newCameraState) {
+          console.log('ВНИМАНИЕ: Реальное состояние камеры не соответствует запрошенному!', 
+                      'запрошено:', newCameraState, 'реальное:', realCameraEnabled);
+          // Синхронизируем состояние UI с реальным состоянием
+          setCameraEnabled(realCameraEnabled);
+          window.sessionStorage.setItem('camera-state', String(realCameraEnabled));
+          return; // Прерываем дальнейшее выполнение
+        }
         
         // После успешного переключения, вызываем slotsState для синхронизации 
         // состояния через WebSocket с другими пользователями
         if (slotsState && typeof slotsState.setCameraState === 'function') {
-          console.log('Синхронизируем состояние камеры через WebSocket:', newCameraState);
+          console.log('Синхронизируем состояние СВОЕЙ камеры через WebSocket:', newCameraState);
           
-          // Также обновляем состояние в локальном состоянии slotsState
-          // Это предотвращает перезапись нашего состояния камеры при получении обновлений с сервера
-          if (slotsState.cameraStates) {
-            const currentUserId = window.currentUserIdentity || '';
-            // Обновляем состояние в локальном объекте (это будет работать вместе с улучшенным хуком useSlots)
+          // Явно обновляем также состояние в локальном slotsState, чтобы избежать несоответствия
+          if (slotsState.cameraStates && currentUserId) {
             console.log(`Обновляем локальное состояние камеры для ID=${currentUserId}:`, newCameraState);
           }
           
-          // ВАЖНО: Сохраняем состояние в sessionStorage
-          // Это значение будет использоваться для игнорирования обновлений с сервера
+          // ВАЖНО: Обновляем сохраненное состояние ещё раз перед отправкой
+          // Это защищает от перезаписи при возможных входящих обновлениях
           window.sessionStorage.setItem('camera-state', String(newCameraState));
           
           // Отправляем обновление на сервер для всех других клиентов
