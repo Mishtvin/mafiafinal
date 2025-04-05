@@ -102,7 +102,7 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
       </div>
       
       {/* Имя пользователя рядом с номером слота */}
-      <div className="absolute bottom-2 left-10 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
+      <div className="absolute bottom-2 left-8 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
         {participant.identity}
       </div>
     </div>
@@ -129,7 +129,7 @@ function EmptySlot({ index }: { index: number }) {
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
                 strokeWidth={1} 
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+                d="M12 4v16m8-8H4" 
               />
             </svg>
           </div>
@@ -138,14 +138,9 @@ function EmptySlot({ index }: { index: number }) {
           </div>
         </div>
       </div>
-      {/* Номер слота */}
+      {/* Только номер слота для пустого слота */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
         {index + 1}
-      </div>
-      
-      {/* Статус слота */}
-      <div className="absolute bottom-2 left-10 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
-        Пусто
       </div>
     </div>
   );
