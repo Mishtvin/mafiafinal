@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { VideoCodec } from 'livekit-client';
 import { fetchToken } from '../lib/livekit';
-import { decodePassphrase, encodePassphrase, generateRoomId } from '../lib/utils';
 import { VideoConferenceClient } from '../components/LiveVideo/VideoConferenceClient';
 
 type Role = 'player' | 'host';
@@ -11,27 +10,11 @@ export default function VideoConferencePage() {
   const [roomId] = useState('mafialive-room');
   const [username, setUsername] = useState('');
   const [hasJoined, setHasJoined] = useState(false);
-  const [isE2EEEnabled, setIsE2EEEnabled] = useState(false);
   const [role, setRole] = useState<Role>('player');
   
   // LiveKit server URL и кодек
   const serverUrl = 'wss://livekit.nyavkin.site';
   const codec: VideoCodec = 'vp8';
-
-  // Отслеживаем хеш для E2EE passphrase
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash;
-      if (hash && hash.length > 1) {
-        try {
-          decodePassphrase(hash.substring(1));
-          setIsE2EEEnabled(true);
-        } catch (err) {
-          console.error('Failed to decode E2EE passphrase:', err);
-        }
-      }
-    }
-  }, []);
 
   // Получаем токен когда пользователь присоединяется
   useEffect(() => {
@@ -44,34 +27,13 @@ export default function VideoConferencePage() {
     }
   }, [hasJoined, username, roomId, role]);
 
-  // Генерируем случайное имя пользователя при входе
+  // Обработчик входа в комнату
   const handleJoin = () => {
-    setUsername(Math.floor(Math.random() * 10000).toString());
-    setHasJoined(true);
-  };
-
-  // Включение/выключение E2EE шифрования
-  const toggleE2EE = () => {
-    if (!isE2EEEnabled) {
-      // Включаем E2EE и генерируем passphrase
-      const passphrase = Math.random().toString(36).substring(2, 15) + 
-                          Math.random().toString(36).substring(2, 15);
-      
-      // Добавляем passphrase в хеш URL
-      if (typeof window !== 'undefined') {
-        window.location.hash = encodePassphrase(passphrase);
-      }
-      
-      setIsE2EEEnabled(true);
-    } else {
-      // Отключаем E2EE
-      setIsE2EEEnabled(false);
-      
-      // Удаляем хеш из URL
-      if (typeof window !== 'undefined') {
-        window.location.hash = '';
-      }
+    if (!username.trim()) {
+      // Если пользователь не ввел имя, используем случайное
+      setUsername(Math.floor(Math.random() * 10000) + '-' + Math.floor(Math.random() * 10000));
     }
+    setHasJoined(true);
   };
 
   return (
@@ -119,26 +81,20 @@ export default function VideoConferencePage() {
                 </div>
               </div>
               
-              {/* Настройка E2EE */}
-              <div className="flex items-center">
+              {/* Поле для ввода имени */}
+              <div className="bg-slate-800/70 p-4 rounded mb-2">
+                <h3 className="text-lg font-medium mb-3 text-left">Введите ваше имя:</h3>
                 <input
-                  id="e2ee"
-                  type="checkbox"
-                  checked={isE2EEEnabled}
-                  onChange={toggleE2EE}
-                  className="mr-2"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-blue-500 focus:outline-none"
+                  placeholder="Введите ваше имя"
                 />
-                <label htmlFor="e2ee">Включить E2EE шифрование</label>
+                <p className="text-xs text-gray-400 mt-2 text-left">
+                  Если поле оставить пустым, будет сгенерировано случайное имя
+                </p>
               </div>
-              
-              {isE2EEEnabled && (
-                <div className="bg-green-900/30 p-3 rounded text-left">
-                  <p className="text-green-400 font-medium mb-2">Шифрование включено</p>
-                  <p className="text-sm">
-                    Все данные будут зашифрованы от устройства к устройству
-                  </p>
-                </div>
-              )}
             </div>
             
             <button 
@@ -173,7 +129,6 @@ export default function VideoConferencePage() {
             <p className={`text-sm font-medium ${role === 'host' ? 'text-purple-400' : 'text-blue-400'}`}>
               Роль: {role === 'host' ? 'Ведущий' : 'Игрок'}
             </p>
-            {isE2EEEnabled && <p className="text-sm text-green-400">E2EE шифрование включено</p>}
           </div>
         </div>
       )}

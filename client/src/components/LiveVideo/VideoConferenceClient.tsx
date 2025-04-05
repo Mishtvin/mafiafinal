@@ -5,7 +5,6 @@ import {
   ControlBar,
 } from '@livekit/components-react';
 import {
-  ExternalE2EEKeyProvider,
   LogLevel,
   Room,
   RoomConnectOptions,
@@ -14,7 +13,6 @@ import {
   type VideoCodec,
   createLocalVideoTrack,
 } from 'livekit-client';
-import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
 import { useSlots } from '../../hooks/use-slots';
 import { usePlayerStates } from '../../hooks/use-player-states';
@@ -396,7 +394,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                 aria-label="Reset Player States"
                 onClick={() => {
                   if (resetAllPlayerStates) {
-                    console.log('Запрос на сброс состояний игроков отправлен');
+                    console.log('Выполняем сброс всех состояний игроков');
                     resetAllPlayerStates();
                   } else {
                     console.error('Функция сброса состояний игроков недоступна');
@@ -428,29 +426,33 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                   <rect x="2" y="2" width="20" height="20" rx="2" ry="2"></rect>
                   <circle cx="8" cy="8" r="1.5"></circle>
                   <circle cx="16" cy="16" r="1.5"></circle>
-                  <circle cx="8" cy="16" r="1.5"></circle>
                   <circle cx="16" cy="8" r="1.5"></circle>
-                  <circle cx="12" cy="12" r="1.5"></circle>
+                  <circle cx="8" cy="16" r="1.5"></circle>
                 </svg>
               </button>
             )}
             
+            {/* Кнопка выхода */}
             <button 
-              className="control-button danger" 
-              aria-label="Leave Room"
+              className="control-button exit-button" 
+              aria-label="Exit"
               onClick={() => {
-                if (room) {
-                  // Создаем и диспатчим событие для оповещения о выходе из комнаты
-                  const event = new Event('roomDisconnected');
-                  window.dispatchEvent(event);
-                  
-                  // Отключаемся от комнаты
-                  room.disconnect();
+                console.log('Выход из комнаты...');
+                
+                // Корректно закрываем соединение с комнатой
+                try {
+                  if (room) {
+                    room.disconnect();
+                    console.log('Соединение с LiveKit разорвано');
+                  }
                   
                   // Редирект на главную (на случай, если слушатель событий не сработает)
                   setTimeout(() => {
                     window.location.href = '/';
                   }, 300);
+                } catch (err) {
+                  console.error('Ошибка при отключении:', err);
+                  window.location.href = '/';
                 }
               }}
             >
@@ -490,7 +492,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
 };
 
 /**
- * Компонент для видеоконференции LiveKit с поддержкой E2EE
+ * Компонент для видеоконференции LiveKit
  * Основан на оригинальном коде MafiaLive
  */
 export function VideoConferenceClient(props: {
@@ -498,48 +500,21 @@ export function VideoConferenceClient(props: {
   token: string;
   codec: VideoCodec | undefined;
 }) {
-  // Удалили неиспользуемое состояние для панели
-  
-
-  
-  // Создаем Worker для E2EE
-  const worker =
-    typeof window !== 'undefined' &&
-    new Worker(new URL('livekit-client/e2ee-worker', import.meta.url));
-  const keyProvider = new ExternalE2EEKeyProvider();
-
-  // Проверяем, есть ли passphrase в хеше URL
-  const e2eePassphrase =
-    typeof window !== 'undefined' ? decodePassphrase(window.location.hash.substring(1)) : undefined;
-  const e2eeEnabled = !!(e2eePassphrase && worker);
-  
-  // Настраиваем параметры комнаты (в точности как в оригинале)
+  // Настраиваем параметры комнаты
   const roomOptions = useMemo((): RoomOptions => {
     return {
       publishDefaults: {
         videoSimulcastLayers: [VideoPresets.h540, VideoPresets.h216],
-        red: !e2eeEnabled,
+        red: true,
         videoCodec: props.codec,
       },
       adaptiveStream: { pixelDensity: 'screen' },
       dynacast: true,
-      e2ee: e2eeEnabled
-        ? {
-            keyProvider,
-            worker,
-          }
-        : undefined,
     };
-  }, [e2eeEnabled, keyProvider, worker, props.codec]);
+  }, [props.codec]);
 
   // Создаем комнату с заданными параметрами
   const room = useMemo(() => new Room(roomOptions), [roomOptions]);
-  
-  // Применяем шифрование, если оно включено
-  if (e2eeEnabled && e2eePassphrase) {
-    keyProvider.setKey(e2eePassphrase);
-    room.setE2EEEnabled(true);
-  }
   
   // Параметры подключения к комнате
   const connectOptions = useMemo((): RoomConnectOptions => {
