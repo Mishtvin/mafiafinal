@@ -300,14 +300,14 @@ function ParticipantSlot({
       
       {/* Индикатор "убит" с черепом - разное отображение для своего и чужого видео */}
       {isKilled && participant.isLocal ? (
-        // Для локального участника: небольшая метка в углу
-        <div className="absolute top-2 left-2 bg-transparent text-red-500 px-2 py-1 font-bold text-lg">
+        // Для локального участника: небольшая метка в углу на красном фоне с белым текстом
+        <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 font-bold text-lg rounded-md">
           УБИТ
         </div>
       ) : isKilled && (
         // Для остальных участников: большая диагональная надпись на черном фоне
         <div className="absolute inset-0 bg-black flex items-center justify-center">
-          <div className="transform rotate-45 border-2 border-red-500 text-red-500 text-5xl font-extrabold px-4 py-2">
+          <div className="transform -rotate-45 border-2 border-red-500 text-red-500 text-5xl font-extrabold px-4 py-2">
             УБИТ
           </div>
         </div>
