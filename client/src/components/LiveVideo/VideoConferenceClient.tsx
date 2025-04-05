@@ -174,27 +174,33 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
   useEffect(() => {
     if (!room || !room.localParticipant) return;
     
-    // Флаги для контроля подключения и инициализации камеры
-    let isConnected = false;
-    let cameraInitialized = false;
+    // Флаги для контроля инициализации камеры - используем ref для сохранения между рендерами
+    const initialized = React.useRef(false);
+    let cameraInitialized = false; // Нужно для проверок внутри функции initializeCamera
     let cameraInitializationTimer: NodeJS.Timeout | null = null;
     
     // Обработчик события подключения к комнате
     const handleConnected = () => {
       console.log('СОБЫТИЕ: Комната подключена, планируем инициализацию камеры');
-      isConnected = true;
       
-      // Задержка перед инициализацией камеры для стабильности
-      if (!cameraInitialized) {
-        // Отменяем любые предыдущие таймеры
-        if (cameraInitializationTimer) {
-          clearTimeout(cameraInitializationTimer);
-        }
-        
-        cameraInitializationTimer = setTimeout(() => {
-          initializeCamera();
-        }, 1000);
+      // Проверяем, инициализировали ли мы уже камеру для этого экземпляра
+      if (initialized.current) {
+        console.log('Камера уже была инициализирована для этого экземпляра, пропускаем');
+        return;
       }
+      
+      // Устанавливаем флаг инициализации, чтобы предотвратить повторные вызовы
+      initialized.current = true;
+      
+      // Отменяем любые предыдущие таймеры перед установкой нового
+      if (cameraInitializationTimer) {
+        clearTimeout(cameraInitializationTimer);
+      }
+      
+      // Устанавливаем единственный таймер с контролируемой задержкой
+      cameraInitializationTimer = setTimeout(() => {
+        initializeCamera();
+      }, 1000);
     };
     
     // Функция инициализации камеры (выполняется один раз после подключения)
