@@ -1,23 +1,35 @@
 import { useMemo, useEffect, useState } from "react";
 import ParticipantTile from "./ParticipantTileV2";
 import { Participant, Track, ConnectionState } from "livekit-client";
-// Импортируем хук контекста из нашей реализации
-import { useRoomContext } from "./CustomLiveKitRoom";
+// Используем стандартный хук контекста из LiveKit
+import { useRoomContext } from "@livekit/components-react";
 
 /**
  * Улучшенный компонент ParticipantGrid с дополнительной логикой стабилизации видео
  * и оптимизацией для правильной работы с треками участников
  */
 export default function ParticipantGrid() {
-  // Используем только наш кастомный контекст
+  // Используем стандартный хук для получения комнаты
   const room = useRoomContext();
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [localParticipant, setLocalParticipant] = useState<Participant | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   
-  // Отслеживаем изменения комнаты и участников
+  // Используем эффект для подключения вручную к handleRoomConnection
   useEffect(() => {
     if (!room) return;
+    
+    // Импортируем функцию из родительского компонента
+    try {
+      // Добавляем логику активации видео для локального участника
+      if (room.localParticipant && !room.localParticipant.isCameraEnabled) {
+        room.localParticipant.setCameraEnabled(true).catch(e => {
+          console.error("Error enabling camera:", e);
+        });
+      }
+    } catch (e) {
+      console.error("Error in room setup:", e);
+    }
     
     // Установка начального состояния
     console.log("Room connection state:", room.state);

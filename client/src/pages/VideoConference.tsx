@@ -370,7 +370,10 @@ export default function VideoConference() {
           options={roomOptions}
           video={initialVideo}
           audio={false}
-          onConnected={handleRoomConnection}
+          onConnected={() => {
+            // Получаем объект Room из РумКонтекста позже в компоненте
+            console.log('Room connected');
+          }}
         >
           <div className="flex flex-col h-screen">
             {/* Header section */}
