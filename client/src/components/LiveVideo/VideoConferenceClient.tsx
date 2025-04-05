@@ -483,6 +483,18 @@ export function VideoConferenceClient(props: {
     }
   };
   
+  // Создаем Worker для E2EE и инициализируем все необходимые переменные,
+  // даже если они будут использоваться только после выбора роли
+  const worker =
+    typeof window !== 'undefined' &&
+    new Worker(new URL('livekit-client/e2ee-worker', import.meta.url));
+  const keyProvider = new ExternalE2EEKeyProvider();
+
+  // Проверяем, есть ли passphrase в хеше URL
+  const e2eePassphrase =
+    typeof window !== 'undefined' ? decodePassphrase(window.location.hash.substring(1)) : undefined;
+  const e2eeEnabled = !!(e2eePassphrase && worker);
+  
   // Проверяем доступность роли хоста при изменении состояния слотов
   useEffect(() => {
     if (slotsState.hostId) {
@@ -495,31 +507,6 @@ export function VideoConferenceClient(props: {
       setHostAvailable(true);
     }
   }, [slotsState.hostId, userId]);
-  
-  // Если выбор роли еще не сделан, показываем экран выбора
-  if (isRoleSelectorVisible) {
-    return (
-      <div className="h-full">
-        <RoleSelector 
-          onRoleSelect={handleRoleSelect}
-          isLoading={isRoleSelectionLoading}
-          hostAvailable={hostAvailable}
-        />
-      </div>
-    );
-  }
-  
-  
-  // Создаем Worker для E2EE
-  const worker =
-    typeof window !== 'undefined' &&
-    new Worker(new URL('livekit-client/e2ee-worker', import.meta.url));
-  const keyProvider = new ExternalE2EEKeyProvider();
-
-  // Проверяем, есть ли passphrase в хеше URL
-  const e2eePassphrase =
-    typeof window !== 'undefined' ? decodePassphrase(window.location.hash.substring(1)) : undefined;
-  const e2eeEnabled = !!(e2eePassphrase && worker);
   
   // Настраиваем параметры комнаты (в точности как в оригинале)
   const roomOptions = useMemo((): RoomOptions => {
@@ -556,6 +543,20 @@ export function VideoConferenceClient(props: {
     };
   }, []);
 
+  // Если выбор роли еще не сделан, показываем экран выбора
+  if (isRoleSelectorVisible) {
+    return (
+      <div className="h-full">
+        <RoleSelector 
+          onRoleSelect={handleRoleSelect}
+          isLoading={isRoleSelectionLoading}
+          hostAvailable={hostAvailable}
+        />
+      </div>
+    );
+  }
+
+  // Отображаем саму видеоконференцию только после выбора роли
   return (
     <>
       <LiveKitRoom
