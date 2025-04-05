@@ -333,12 +333,24 @@ function ParticipantSlot({
           <button
             className="bg-blue-600/80 hover:bg-blue-700/90 text-white p-1 rounded-md shadow-md"
             onClick={() => {
-              // Получаем текущее имя без префикса
+              // Получаем текущее имя без префикса и суффикса
               let currentName = participant.identity;
+              
+              // Убираем префикс Player- или Host-
               if (currentName.startsWith('Player-')) {
                 currentName = currentName.substring(7);
               } else if (currentName.startsWith('Host-')) {
                 currentName = currentName.substring(5);
+              }
+              
+              // Убираем суффикс с цифрами (ID) в конце имени
+              const lastDashIndex = currentName.lastIndexOf('-');
+              if (lastDashIndex > 0) {
+                const afterDash = currentName.substring(lastDashIndex + 1);
+                // Проверяем, что после тире идут только цифры
+                if (/^\d+$/.test(afterDash)) {
+                  currentName = currentName.substring(0, lastDashIndex);
+                }
               }
               
               // Запрашиваем новое имя
@@ -373,12 +385,31 @@ function ParticipantSlot({
       </div>
       
       {/* Имя пользователя рядом с номером слота (без префикса) */}
-      <div className="absolute bottom-2 left-8 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
-        {participant.identity.startsWith('Player-') 
-          ? participant.identity.substring(7) 
-          : participant.identity.startsWith('Host-')
-            ? participant.identity.substring(5)
-            : participant.identity}
+      <div className={`absolute bottom-2 ${slotNumber === 12 ? 'right-2' : 'left-8'} bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm`}>
+        {(() => {
+          // Функция для очистки имени от всех служебных префиксов и суффиксов
+          let cleanName = participant.identity;
+          
+          // Убираем префикс Player- или Host-
+          if (cleanName.startsWith('Player-')) {
+            cleanName = cleanName.substring(7);
+          } else if (cleanName.startsWith('Host-')) {
+            cleanName = cleanName.substring(5);
+          }
+          
+          // Убираем суффикс с цифрами (ID) в конце имени
+          // Находим последнее тире и цифры после него
+          const lastDashIndex = cleanName.lastIndexOf('-');
+          if (lastDashIndex > 0) {
+            const afterDash = cleanName.substring(lastDashIndex + 1);
+            // Проверяем, что после тире идут только цифры
+            if (/^\d+$/.test(afterDash)) {
+              cleanName = cleanName.substring(0, lastDashIndex);
+            }
+          }
+          
+          return cleanName;
+        })()}
       </div>
     </div>
   );
