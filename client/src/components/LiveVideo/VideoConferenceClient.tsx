@@ -27,9 +27,18 @@ import { SlotsState } from '../../hooks/use-slots';
 const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnType<typeof useSlots> }) => {
   const [isOpen, setIsOpen] = useState(false);
   
-  // Принудительно устанавливаем начальное состояние камеры как включенное
-  // Это состояние управляет отображением иконки
-  const [cameraEnabled, setCameraEnabled] = useState(true);
+  // Проверяем сохраненное состояние для инициализации
+  const savedState = typeof window !== 'undefined' ? 
+    window.sessionStorage.getItem('camera-state') : null;
+    
+  // Инициализируем камеру как выключенную по умолчанию
+  // или используем сохраненное состояние, если оно есть
+  const initialCameraState = savedState === 'true';
+  
+  console.log('Инициализация состояния камеры:', initialCameraState, 
+              'на основе сохраненного значения:', savedState);
+  
+  const [cameraEnabled, setCameraEnabled] = useState(initialCameraState);
   
   // Состояние для выбора камеры
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
