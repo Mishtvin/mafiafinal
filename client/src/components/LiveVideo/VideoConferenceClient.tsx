@@ -16,6 +16,8 @@ import {
 } from 'livekit-client';
 import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
+import { RoleSelector } from './RoleSelector';
+import { useSlots } from '../../hooks/use-slots';
 
 /**
  * Контроллер для выдвижной панели управления, размещенный ВНЕ LiveKitRoom
@@ -442,9 +444,71 @@ export function VideoConferenceClient(props: {
   token: string;
   codec: VideoCodec | undefined;
 }) {
-  // Удалили неиспользуемое состояние для панели
+  // Состояния для выбора роли и отображения экрана выбора
+  const [userRole, setUserRole] = useState<'player' | 'host' | null>(null);
+  const [isRoleSelectorVisible, setIsRoleSelectorVisible] = useState(true);
+  const [isRoleSelectionLoading, setIsRoleSelectionLoading] = useState(false);
+  const [hostAvailable, setHostAvailable] = useState(true);
   
-
+  // Генерируем случайный идентификатор пользователя при первой загрузке
+  const userId = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      // Использовать сохраненный идентификатор или сгенерировать новый
+      const storedId = window.localStorage.getItem('user-identity');
+      if (storedId) return storedId;
+      
+      // Генерация уникального ID
+      const newId = `User-${Math.floor(Math.random() * 10000)}-${Math.floor(Math.random() * 10000)}`;
+      window.localStorage.setItem('user-identity', newId);
+      return newId;
+    }
+    return 'unknown-user';
+  }, []);
+  
+  // Используем хук для слотов
+  const slotsState = useSlots(userId);
+  
+  // Обработчик выбора роли
+  const handleRoleSelect = async (role: 'player' | 'host') => {
+    setIsRoleSelectionLoading(true);
+    try {
+      // Отправляем запрос на сервер о выборе роли
+      await slotsState.setUserRole(role);
+      setUserRole(role);
+      setIsRoleSelectorVisible(false);
+    } catch (error) {
+      console.error('Ошибка при установке роли:', error);
+    } finally {
+      setIsRoleSelectionLoading(false);
+    }
+  };
+  
+  // Проверяем доступность роли хоста при изменении состояния слотов
+  useEffect(() => {
+    if (slotsState.hostId) {
+      // Если уже есть ведущий и это не текущий пользователь,
+      // устанавливаем флаг, что роль ведущего недоступна
+      const isCurrentUserHost = slotsState.hostId === userId;
+      setHostAvailable(isCurrentUserHost || !slotsState.hostId);
+    } else {
+      // Если ведущего нет, то роль доступна
+      setHostAvailable(true);
+    }
+  }, [slotsState.hostId, userId]);
+  
+  // Если выбор роли еще не сделан, показываем экран выбора
+  if (isRoleSelectorVisible) {
+    return (
+      <div className="h-full">
+        <RoleSelector 
+          onRoleSelect={handleRoleSelect}
+          isLoading={isRoleSelectionLoading}
+          hostAvailable={hostAvailable}
+        />
+      </div>
+    );
+  }
+  
   
   // Создаем Worker для E2EE
   const worker =

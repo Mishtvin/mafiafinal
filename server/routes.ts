@@ -14,6 +14,7 @@ const LIVEKIT_URL = 'wss://livekit.nyavkin.site/'; // URL сервера LiveKit
 interface SlotInfo {
   userId: string;
   slotNumber: number;
+  role?: 'player' | 'host';
 }
 
 // Хранилище данных о слотах
@@ -151,6 +152,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Создаем хранилище для состояния камер
   const cameraStates = new Map<string, boolean>(); // userId -> камера включена
+  
+  // Хранилище для ролей пользователей (userId -> role)
+  const userRoles = new Map<string, 'player' | 'host'>();
+  
+  // Хранение ID ведущего (может быть только один)
+  let roomHostId: string | null = null;
   
   // Периодическая полная очистка состояния для устранения рассинхронизации
   setInterval(() => {
@@ -305,6 +312,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Устанавливаем начальное состояние камеры (выключена по умолчанию)
               if (!cameraStates.has(userId)) {
                 cameraStates.set(userId, false);
+              }
+              
+              // Если указана роль, сохраняем её
+              if (data.role && (data.role === 'player' || data.role === 'host')) {
+                // Если роль - ведущий, проверяем, не занята ли роль
+                if (data.role === 'host') {
+                  if (roomHostId && roomHostId !== userId) {
+                    // Роль ведущего уже занята
+                    sendToClient({
+                      type: 'role_busy',
+                      message: 'Роль ведущего уже занята'
+                    });
+                    // Назначаем роль игрока вместо ведущего
+                    userRoles.set(userId, 'player');
+                  } else {
+                    // Назначаем роль ведущего
+                    userRoles.set(userId, 'host');
+                    roomHostId = userId;
+                    console.log(`Пользователь ${userId} назначен ведущим`);
+                  }
+                } else {
+                  // Назначаем роль игрока
+                  userRoles.set(userId, 'player');
+                }
+              } else {
+                // По умолчанию - игрок
+                userRoles.set(userId, 'player');
               }
               
               // Если пользователь не занял слот, назначаем свободный
@@ -466,6 +500,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Удаляем информацию о состоянии камеры
         cameraStates.delete(userId);
         
+        // Если пользователь был ведущим, снимаем отметку
+        if (roomHostId === userId) {
+          console.log(`Освобождена роль ведущего (отключился ${userId})`);
+          roomHostId = null;
+        }
+        
+        // Удаляем роль пользователя
+        userRoles.delete(userId);
+        
         connections.delete(userId);
         console.log(`Пользователь отключился: ${userId}`);
         
@@ -486,12 +529,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   function broadcastSlotUpdate() {
     const currentSlots: SlotInfo[] = [];
     slotAssignments.forEach((userId, slotNumber) => {
-      currentSlots.push({ userId, slotNumber });
+      // Добавляем информацию о роли пользователя
+      const role = userRoles.get(userId) || 'player';
+      currentSlots.push({ 
+        userId, 
+        slotNumber,
+        role 
+      });
     });
     
     const updateMessage = JSON.stringify({
       type: 'slots_update',
-      slots: currentSlots
+      slots: currentSlots,
+      hostId: roomHostId
     });
     
     connections.forEach((ws) => {

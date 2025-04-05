@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 export interface SlotInfo {
   userId: string;
   slotNumber: number;
+  role?: 'player' | 'host';
 }
 
 export interface SlotsState {
@@ -12,6 +13,9 @@ export interface SlotsState {
   connected: boolean;
   error: string | null;
   cameraStates: Record<string, boolean>; // userId -> cameraOn
+  slotRoles: Record<number, 'player' | 'host'>; // slotNumber -> role
+  userRole: 'player' | 'host' | null; // роль текущего пользователя
+  hostId: string | null; // ID ведущего, если есть
 }
 
 export function useSlots(userId: string) {
@@ -23,7 +27,10 @@ export function useSlots(userId: string) {
     loading: true,
     connected: false,
     error: null,
-    cameraStates: {}
+    cameraStates: {},
+    slotRoles: {},
+    userRole: null,
+    hostId: null
   });
 
   const socketRef = useRef<WebSocket | null>(null);
@@ -58,6 +65,15 @@ export function useSlots(userId: string) {
   const releaseSlot = useCallback(() => {
     return sendMessage({
       type: 'release_slot'
+    });
+  }, [sendMessage]);
+  
+  // Установка роли пользователя
+  const setUserRole = useCallback((role: 'player' | 'host') => {
+    return sendMessage({
+      type: 'register',
+      userId: userIdRef.current,
+      role
     });
   }, [sendMessage]);
 
@@ -133,12 +149,25 @@ export function useSlots(userId: string) {
             case 'slots_update': {
               // Обновление информации о слотах
               const slots: Record<number, string> = {};
+              const slotRoles: Record<number, 'player' | 'host'> = {};
               let userSlot: number | null = null;
+              let userRole: 'player' | 'host' | null = null;
+              
+              // Сохраняем ID ведущего из обновления
+              const hostId = data.hostId || null;
               
               // Заполняем объект слотов из массива
               data.slots.forEach((slot: SlotInfo) => {
                 slots[slot.slotNumber] = slot.userId;
-                console.log(`Слот ${slot.slotNumber} занят пользователем ${slot.userId}`);
+                
+                // Сохраняем роль слота
+                if (slot.role) {
+                  slotRoles[slot.slotNumber] = slot.role;
+                } else {
+                  slotRoles[slot.slotNumber] = 'player'; // по умолчанию - игрок
+                }
+                
+                console.log(`Слот ${slot.slotNumber} занят пользователем ${slot.userId} (роль: ${slotRoles[slot.slotNumber]})`);
                 
                 // Возможно два идентификатора для сравнения - текущий и глобальный
                 const currentId = userIdRef.current;
@@ -150,19 +179,25 @@ export function useSlots(userId: string) {
                 if (slot.userId === currentId || 
                     (globalId && slot.userId === globalId)) {
                   userSlot = slot.slotNumber;
-                  console.log(`Найден слот текущего пользователя: ${userSlot}`);
+                  userRole = slotRoles[slot.slotNumber];
+                  console.log(`Найден слот текущего пользователя: ${userSlot}, роль: ${userRole}`);
                 }
               });
               
               console.log('Обновляем состояние слотов:', 
                           'текущий userSlot =', userSlot, 
-                          'всего слотов =', Object.keys(slots).length);
+                          'всего слотов =', Object.keys(slots).length,
+                          'роль пользователя =', userRole,
+                          'ведущий =', hostId);
               
               setState(prev => {
                 const newState = { 
                   ...prev, 
                   slots,
-                  userSlot
+                  userSlot,
+                  slotRoles,
+                  userRole,
+                  hostId
                 };
                 console.log('Новое состояние:', newState);
                 return newState;
@@ -221,6 +256,7 @@ export function useSlots(userId: string) {
     ...state,
     selectSlot,
     releaseSlot,
-    setCameraState
+    setCameraState,
+    setUserRole
   };
 }
