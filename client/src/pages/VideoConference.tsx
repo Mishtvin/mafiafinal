@@ -109,23 +109,6 @@ export default function VideoConferencePage() {
             >
               Войти в конференцию
             </button>
-            
-            {/* Тестовый инструмент для отладки и тестирования приоритета слота 1 */}
-            <div className="mt-4">
-              <button 
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm transition-colors"
-                onClick={() => {
-                  if (window.confirm('Сбросить все назначения слотов? Это тестовый инструмент.')) {
-                    fetch('/api/admin/reset-slots', { method: 'POST' })
-                      .then(resp => resp.json())
-                      .then(data => alert(`Слоты сброшены: ${JSON.stringify(data)}`))
-                      .catch(err => console.error('Ошибка сброса слотов:', err));
-                  }
-                }}
-              >
-                Сбросить слоты (тест)
-              </button>
-            </div>
           </div>
         </div>
       ) : token ? (

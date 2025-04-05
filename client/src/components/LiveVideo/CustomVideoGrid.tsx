@@ -94,6 +94,8 @@ export function CustomVideoGrid() {
           const userId = slotsManager.slots[slotNumber];
           // Проверяем, является ли этот слот слотом текущего локального участника
           const isCurrentUserSlot = slotsManager.userSlot === slotNumber && currentLocalParticipant;
+          // Получаем роль пользователя для этого слота
+          const slotRole = slotsManager.slotRoles[slotNumber] || 'player';
           // Получаем объект участника по ID или локального участника для его слота
           const participant = isCurrentUserSlot 
             ? currentLocalParticipant 
@@ -104,11 +106,13 @@ export function CustomVideoGrid() {
               key={`slot-${slotNumber}`}
               participant={participant}
               slotNumber={slotNumber}
+              role={slotRole}
             />
           ) : (
             <EmptySlot 
               key={`empty-${slotNumber}`} 
               index={slotNumber - 1}
+              role={slotNumber === 12 ? 'host' : 'player'}
               onClick={() => handleSlotClick(slotNumber)}
             />
           );
@@ -121,9 +125,10 @@ export function CustomVideoGrid() {
 /**
  * Компонент для отображения одного участника
  */
-function ParticipantSlot({ participant, slotNumber }: { 
+function ParticipantSlot({ participant, slotNumber, role = 'player' }: { 
   participant: Participant, 
-  slotNumber: number 
+  slotNumber: number,
+  role?: 'player' | 'host' 
 }) {
   // Получаем список видеотреков
   const videoTracks = useTracks(
@@ -165,7 +170,7 @@ function ParticipantSlot({ participant, slotNumber }: {
       {/* Номер слота в левом нижнем углу */}
       <div 
         className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
-          ${participant.isLocal ? 'bg-purple-700/90' : 'bg-slate-900/80'}`}
+          ${participant.isLocal ? 'bg-purple-700/90' : role === 'host' ? 'bg-amber-600/90' : 'bg-slate-900/80'}`}
       >
         {slotNumber}
       </div>
@@ -174,6 +179,13 @@ function ParticipantSlot({ participant, slotNumber }: {
       <div className="absolute bottom-2 left-8 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
         {participant.identity}
       </div>
+      
+      {/* Отображение роли в правом верхнем углу (только для ведущего) */}
+      {role === 'host' && (
+        <div className="absolute top-2 right-2 bg-amber-600/90 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
+          Ведущий
+        </div>
+      )}
     </div>
   );
 }
@@ -181,8 +193,9 @@ function ParticipantSlot({ participant, slotNumber }: {
 /**
  * Компонент для отображения пустого слота
  */
-function EmptySlot({ index, onClick }: { 
+function EmptySlot({ index, role = 'player', onClick }: { 
   index: number, 
+  role?: 'player' | 'host',
   onClick?: () => void 
 }) {
   return (
@@ -212,9 +225,17 @@ function EmptySlot({ index, onClick }: {
         </div>
       </div>
       {/* Только номер слота для пустого слота */}
-      <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
+      <div className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
+          ${role === 'host' ? 'bg-amber-600/90' : 'bg-slate-900/80'}`}>
         {index + 1}
       </div>
+      
+      {/* Отображение роли для пустого слота ведущего */}
+      {role === 'host' && (
+        <div className="absolute top-2 right-2 bg-amber-600/90 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
+          Ведущий
+        </div>
+      )}
     </div>
   );
 }

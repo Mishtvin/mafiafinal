@@ -35,41 +35,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
   
-  // Администраторский эндпоинт для сброса назначений слотов (для тестирования)
-  app.post('/api/admin/reset-slots', (req, res) => {
-    try {
-      // Сохраняем количество очищенных записей
-      const deletedSlots = slotAssignments.size;
-      const deletedUsers = userSlots.size;
-      
-      // Очищаем назначения слотов
-      slotAssignments.clear();
-      userSlots.clear();
-      
-      console.log('Все слоты сброшены через API');
-      
-      // Отправляем обновление всем клиентам
-      broadcastSlotUpdate();
-      
-      // Возвращаем результат операции
-      res.json({
-        success: true,
-        message: 'Все слоты успешно сброшены',
-        stats: {
-          clearedSlots: deletedSlots,
-          clearedUsers: deletedUsers
-        }
-      });
-    } catch (error) {
-      console.error('Ошибка при сбросе слотов:', error);
-      res.status(500).json({ 
-        success: false,
-        message: 'Ошибка при сбросе слотов',
-        error: String(error)
-      });
-    }
-  });
-  
   // Эндпоинты для создания токена LiveKit (поддерживаем GET и POST)
   app.get('/api/token', async (req, res) => {
     try {
@@ -194,16 +159,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Хранение ID ведущего (может быть только один)
   let roomHostId: string | null = null;
   
-  // Периодическая проверка целостности состояния для устранения рассинхронизации
+  // Периодическая полная очистка состояния для устранения рассинхронизации
   setInterval(() => {
     // Проверяем, что все слоты соответствуют активным соединениям
-    const activeUserIds = new Set<string>(connections.keys());
+    const validUserIds = new Set<string>(connections.keys());
     
-    // НЕ очищаем слоты для неактивных пользователей - они могут вернуться
-    // Идея: пользователь может быть неактивен (нет соединения), но его слот сохраняется
+    // Найдем все слоты с неактивными пользователями
+    let needsUpdate = false;
+    slotAssignments.forEach((userId, slotNumber) => {
+      if (!validUserIds.has(userId)) {
+        console.log(`Очистка слота ${slotNumber} для отключенного пользователя ${userId}`);
+        slotAssignments.delete(slotNumber);
+        needsUpdate = true;
+      }
+    });
+    
+    // Удаляем записи в userSlots для отключенных пользователей
+    userSlots.forEach((slotNumber, userId) => {
+      if (!validUserIds.has(userId)) {
+        userSlots.delete(userId);
+        needsUpdate = true;
+      }
+    });
+    
+    // Очищаем состояние камер для отключенных пользователей
+    cameraStates.forEach((enabled, userId) => {
+      if (!validUserIds.has(userId)) {
+        cameraStates.delete(userId);
+        needsUpdate = true;
+      }
+    });
     
     // Проверяем целостность данных между slotAssignments и userSlots
-    let needsUpdate = false;
     userSlots.forEach((slotNumber, userId) => {
       const assignedUserId = slotAssignments.get(slotNumber);
       if (!assignedUserId || assignedUserId !== userId) {
@@ -215,7 +202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Если были изменения - рассылаем обновление
     if (needsUpdate) {
-      console.log('Обнаружены несоответствия в назначении слотов, отправляем обновления');
+      console.log('Очистка неактивных соединений вызвала рассылку обновлений');
       broadcastSlotUpdate();
       broadcastCameraStates();
     }
@@ -239,11 +226,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Проверяем и удаляем любые устаревшие соединения
     connections.forEach((ws, userId) => {
       if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-        // Удаляем только закрытые соединения, но НЕ освобождаем слоты
+        // Удаляем закрытые соединения
         connections.delete(userId);
-        console.log(`Соединение закрыто для ${userId}, но слот сохранен`);
+        
+        // Освобождаем слот при необходимости
+        const slotToRelease = userSlots.get(userId);
+        if (slotToRelease !== undefined) {
+          slotAssignments.delete(slotToRelease);
+          userSlots.delete(userId);
+          console.log(`Очистка неактивного соединения: освобожден слот ${slotToRelease} для ${userId}`);
+        }
+        
+        // Удаляем информацию о камере
+        cameraStates.delete(userId);
         
         // Отправляем обновление всем
+        broadcastSlotUpdate();
         broadcastCameraStates();
       } else if (ws.readyState === WebSocket.OPEN) {
         try {
@@ -251,11 +249,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (e) {
           console.error(`Ошибка отправки ping для ${userId}:`, e);
           
-          // При ошибке отправки удаляем соединение из списка активных, но сохраняем слот
+          // При ошибке отправки удаляем соединение
           connections.delete(userId);
-          console.log(`Соединение удалено из-за ошибки ping: ${userId}, но слот сохранен`);
+          
+          // Освобождаем слот при необходимости
+          const slotToRelease = userSlots.get(userId);
+          if (slotToRelease !== undefined) {
+            slotAssignments.delete(slotToRelease);
+            userSlots.delete(userId);
+          }
+          
+          // Удаляем информацию о камере
+          cameraStates.delete(userId);
+          
+          console.log(`Соединение удалено из-за ошибки ping: ${userId}`);
           
           // Отправляем обновление всем
+          broadcastSlotUpdate();
           broadcastCameraStates();
         }
       }
@@ -331,24 +341,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 userRoles.set(userId, 'player');
               }
               
-              // Проверяем, есть ли у пользователя слот, если нет - назначаем новый
-              // Этот блок также проверяет, если пользователь переподключается - сохраняем тот же слот
-              
-              // Проверяем, существует ли уже слот для этого пользователя
-              let existingSlot = null;
-              slotAssignments.forEach((savedUserId, slotNumber) => {
-                if (savedUserId === userId) {
-                  existingSlot = slotNumber;
-                }
-              });
-              
-              if (existingSlot) {
-                // Пользователь переподключается, возвращаем ему тот же слот
-                console.log(`Пользователь ${userId} переподключился к слоту ${existingSlot}`);
-                // Обновляем userSlots для связи двух карт
-                userSlots.set(userId, existingSlot);
-              } else if (!userSlots.has(userId)) {
-                // Пользователь подключается впервые, нужен новый слот
+              // Если пользователь не занял слот, назначаем свободный
+              if (!userSlots.has(userId)) {
                 // Список уже занятых слотов
                 const occupiedSlots = new Set<number>();
                 slotAssignments.forEach((_, slot) => {
@@ -358,33 +352,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Отладка: показываем занятые слоты перед назначением
                 console.log(`Занятые слоты перед назначением для ${userId}:`, Array.from(occupiedSlots));
                 
-                // Находим свободный слот (с приоритетом для слота 1)
+                // Находим первый свободный слот
                 let assignedSlot = false;
-                
-                // Приоритетное назначение слота 1, если он свободен
-                if (!occupiedSlots.has(1)) {
-                  slotAssignments.set(1, userId);
-                  userSlots.set(userId, 1);
-                  console.log(`Приоритетное назначение слота 1 для ${userId}`);
-                  assignedSlot = true;
-                } else {
-                  // Если слот 1 занят, ищем другие свободные слоты
-                  for (let i = 2; i <= 12; i++) {
-                    if (!occupiedSlots.has(i)) {
-                      slotAssignments.set(i, userId);
-                      userSlots.set(userId, i);
-                      console.log(`Автоматически назначен слот ${i} для ${userId}`);
-                      assignedSlot = true;
-                      break;
-                    }
+                for (let i = 1; i <= 12; i++) {
+                  if (!occupiedSlots.has(i)) {
+                    slotAssignments.set(i, userId);
+                    userSlots.set(userId, i);
+                    console.log(`Автоматически назначен слот ${i} для ${userId}`);
+                    assignedSlot = true;
+                    break;
                   }
                 }
                 
                 if (!assignedSlot) {
                   console.warn(`Не удалось найти свободный слот для ${userId}`);
                 }
-              } else {
-                console.log(`Пользователь ${userId} уже имеет слот ${userSlots.get(userId)}`);
               }
             } else {
               console.error('Ошибка: получен пустой userId при регистрации');
@@ -472,19 +454,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Проверка активности соединения
     const connectionCheckInterval = setInterval(() => {
       const now = Date.now();
-      if (now - lastPongTime > 30000) { // Увеличено с 15 до 30 секунд без ответа
-        console.log(`Соединение неактивно более 30 секунд для ${userId || 'неизвестного пользователя'}`);
+      if (now - lastPongTime > 15000) { // 15 секунд без ответа
+        console.log(`Соединение неактивно более 15 секунд для ${userId || 'неизвестного пользователя'}`);
         
         // Очищаем все ресурсы пользователя
         if (userId) {
-          // Отмечаем соединение как закрытое, но сохраняем слот
-          // НЕ освобождаем слот, чтобы сохранить его за пользователем на случай переподключения
-          console.log(`Соединение отмечено как неактивное для ${userId}, слот сохранен`);
+          // Освобождаем все слоты этого пользователя
+          const slotToRelease = userSlots.get(userId);
+          if (slotToRelease !== undefined) {
+            slotAssignments.delete(slotToRelease);
+            userSlots.delete(userId);
+            console.log(`Автоматически освобожден слот ${slotToRelease} для ${userId} из-за неактивности`);
+          }
           
-          // Удаляем из списка активных подключений
+          // Удаляем информацию о состоянии камеры
+          cameraStates.delete(userId);
+          
+          // Удаляем из списка подключений
           connections.delete(userId);
+          console.log(`Пользователь отключен из-за неактивности: ${userId}`);
           
-          // Транслируем обновление всем клиентам (но без освобождения слота)
+          // Транслируем обновление всем клиентам
+          broadcastSlotUpdate();
           broadcastCameraStates();
         }
         
@@ -499,13 +490,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       clearInterval(connectionCheckInterval);
       
       if (userId) {
-        // Не освобождаем слот при отключении пользователя, сохраняем его для возможного переподключения
-        console.log(`Пользователь отключился: ${userId} - сохраняем слот на случай переподключения`);
+        // Освобождаем слот при отключении пользователя
+        const slotToRelease = userSlots.get(userId);
+        if (slotToRelease !== undefined) {
+          slotAssignments.delete(slotToRelease);
+          userSlots.delete(userId);
+        }
         
-        // Только удаляем соединение из списка активных
+        // Удаляем информацию о состоянии камеры
+        cameraStates.delete(userId);
+        
+        // Если пользователь был ведущим, снимаем отметку
+        if (roomHostId === userId) {
+          console.log(`Освобождена роль ведущего (отключился ${userId})`);
+          roomHostId = null;
+        }
+        
+        // Удаляем роль пользователя
+        userRoles.delete(userId);
+        
         connections.delete(userId);
+        console.log(`Пользователь отключился: ${userId}`);
         
-        // Отправляем обновление всем подключенным клиентам (слоты не меняются)
+        // Отправляем обновление всем подключенным клиентам
+        broadcastSlotUpdate();
         broadcastCameraStates();
       }
     });
