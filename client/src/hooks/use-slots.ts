@@ -225,12 +225,21 @@ export function useSlots(userId: string) {
       targetSlot
     });
   }, [sendMessage]);
+  
+  // Функция для перемешивания всех пользователей (только для ведущего)
+  const shuffleAllUsers = useCallback(() => {
+    console.log('Запрос на перемешивание пользователей');
+    return sendMessage({
+      type: 'shuffle_users'
+    });
+  }, [sendMessage]);
 
   return {
     ...state,
     selectSlot,
     releaseSlot,
     setCameraState,
-    moveUserToSlot
+    moveUserToSlot,
+    shuffleAllUsers
   };
 }

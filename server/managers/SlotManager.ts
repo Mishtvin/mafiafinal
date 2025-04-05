@@ -361,6 +361,78 @@ export class SlotManager {
     
     return true;
   }
+
+  /**
+   * Перемешать всех пользователей случайным образом по слотам (только для ведущего)
+   * @param hostId ID ведущего, инициирующего перемешивание
+   * @returns true, если перемешивание прошло успешно
+   */
+  shuffleAllUsers(hostId: string): boolean {
+    // Проверяем, является ли исполнитель ведущим
+    if (!this.isUserHost(hostId)) {
+      console.log(`Отказано в перемешивании: ${hostId} не является ведущим`);
+      return false;
+    }
+
+    console.log(`Ведущий ${hostId} запускает случайное перемешивание пользователей`);
+    
+    // Получаем список всех обычных пользователей (не ведущих)
+    const regularUsers: string[] = [];
+    const regularSlots: number[] = [];
+    
+    this.slotAssignments.forEach((userId, slotNumber) => {
+      if (!this.isUserHost(userId) && slotNumber !== HOST_SLOT) {
+        regularUsers.push(userId);
+        regularSlots.push(slotNumber);
+      }
+    });
+    
+    // Если нет обычных пользователей для перемешивания
+    if (regularUsers.length === 0) {
+      console.log('Нет обычных пользователей для перемешивания');
+      return false;
+    }
+
+    console.log(`Найдено ${regularUsers.length} пользователей для перемешивания`);
+    
+    // Перемешиваем слоты
+    for (let i = regularSlots.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [regularSlots[i], regularSlots[j]] = [regularSlots[j], regularSlots[i]];
+    }
+    
+    // Временно удаляем всех пользователей из их слотов
+    // (делаем копию, чтобы не изменять карту во время итерации)
+    const tempAssignments = new Map(this.slotAssignments);
+    
+    // Удаляем текущие связи
+    tempAssignments.forEach((userId, slotNumber) => {
+      if (!this.isUserHost(userId) && slotNumber !== HOST_SLOT) {
+        this.slotAssignments.delete(slotNumber);
+        this.userSlots.delete(userId);
+      }
+    });
+    
+    // Назначаем новые слоты
+    for (let i = 0; i < regularUsers.length; i++) {
+      const userId = regularUsers[i];
+      const slotNumber = regularSlots[i];
+      
+      this.slotAssignments.set(slotNumber, userId);
+      this.userSlots.set(userId, slotNumber);
+      
+      console.log(`Пользователь ${userId} перемещен на слот ${slotNumber}`);
+    }
+    
+    // Проверяем целостность данных
+    this.validateIntegrity();
+    
+    // Отправляем событие об обновлении
+    globalEvents.emit("slots_updated", this.getAllSlotAssignments());
+    
+    console.log('Перемешивание пользователей завершено');
+    return true;
+  }
 }
 
 // Создаем глобальный экземпляр менеджера слотов

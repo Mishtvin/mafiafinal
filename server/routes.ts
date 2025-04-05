@@ -282,6 +282,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             break;
             
+          case 'shuffle_users':
+            // Ведущий запускает случайное перемешивание пользователей
+            if (!userId) break;
+            
+            console.log(`Пользователь ${userId} запросил перемешивание игроков`);
+            
+            const shuffleSuccess = slotManager.shuffleAllUsers(userId);
+            
+            if (shuffleSuccess) {
+              console.log(`Ведущий ${userId} успешно перемешал пользователей`);
+              // Обновление слотов будет отправлено через событие slots_updated
+            } else {
+              console.log(`Ведущему ${userId} не удалось перемешать пользователей`);
+              // Сообщение о неудаче
+              connectionManager.sendToUser(userId, {
+                type: 'shuffle_failed',
+                reason: 'Не удалось выполнить перемешивание пользователей'
+              });
+            }
+            break;
+            
           case 'pong':
             // Клиент отвечает на ping - отмечаем активность
             if (userId) {

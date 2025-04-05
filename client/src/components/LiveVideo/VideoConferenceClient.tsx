@@ -16,6 +16,7 @@ import {
 } from 'livekit-client';
 import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
+import { useSlots } from '../../hooks/use-slots';
 
 /**
  * Контроллер для выдвижной панели управления, размещенный ВНЕ LiveKitRoom
@@ -31,6 +32,11 @@ const ControlDrawer = ({ room }: { room: Room }) => {
   // Состояние для выбора камеры
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
+  
+  // Получение доступа к useState и функции shuffleAllUsers из хука useSlots
+  // Определяем идентификатор текущего пользователя
+  const userId = room?.localParticipant?.identity || '';
+  const { shuffleAllUsers, userSlot, slots } = useSlots(userId);
   
   // Функция для получения списка доступных камер
   async function getCameras() {
@@ -379,6 +385,31 @@ const ControlDrawer = ({ room }: { room: Room }) => {
           </div>
           
           <div className="right-controls">
+            {/* Кнопка перемешивания пользователей (только для ведущего) */}
+            {userSlot === 12 && shuffleAllUsers && (
+              <button 
+                className="control-button" 
+                aria-label="Shuffle Users"
+                onClick={() => {
+                  if (shuffleAllUsers) {
+                    console.log('Запрос на перемешивание пользователей отправлен');
+                    shuffleAllUsers();
+                  } else {
+                    console.error('Функция перемешивания недоступна');
+                  }
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="20" rx="2" ry="2"></rect>
+                  <circle cx="8" cy="8" r="1.5"></circle>
+                  <circle cx="16" cy="16" r="1.5"></circle>
+                  <circle cx="8" cy="16" r="1.5"></circle>
+                  <circle cx="16" cy="8" r="1.5"></circle>
+                  <circle cx="12" cy="12" r="1.5"></circle>
+                </svg>
+              </button>
+            )}
+            
             <button 
               className="control-button danger" 
               aria-label="Leave Room"

@@ -217,3 +217,25 @@
   background-color: rgba(248, 113, 113, 0.1);
 }
 
+/* Стиль для кнопки игральных костей (перемешивание) */
+.control-button svg rect,
+.control-button svg circle {
+  transition: all 0.2s ease;
+}
+
+.control-button:hover svg rect {
+  stroke: rgb(147, 197, 253);
+}
+
+.control-button:hover svg circle {
+  fill: rgb(147, 197, 253);
+  stroke: rgb(147, 197, 253);
+}
+
+.control-button:active svg rect,
+.control-button:active svg circle {
+  stroke-width: 2.5;
+  transform-origin: center center;
+  transform: scale(0.95);
+}
+

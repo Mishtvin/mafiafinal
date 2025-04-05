@@ -9,7 +9,11 @@ import { SlotInfo } from '../../shared/schema';
  */
 export interface WebSocketMessage {
   type: string;
+  // Общие параметры для всех сообщений
   [key: string]: any;
+  
+  // Перемешивание пользователей (shuffle_users)
+  // userId - автоматически добавляется
 }
 
 /**
@@ -370,6 +374,23 @@ export class ConnectionManager {
       case 'pong':
         // Пользователь отвечает на ping
         // Активность уже отмечена в начале метода
+        break;
+        
+      case 'shuffle_users':
+        // Перемешивание пользователей по слотам (только для ведущего)
+        console.log(`Пользователь ${userId} запросил перемешивание пользователей`);
+        const shuffleSuccess = slotManager.shuffleAllUsers(userId);
+        
+        if (shuffleSuccess) {
+          console.log(`Пользователи успешно перемешаны администратором ${userId}`);
+        } else {
+          console.log(`Ошибка при перемешивании: пользователь ${userId} не имеет прав ведущего`);
+          // Оповещаем пользователя об ошибке (опционально)
+          this.sendToUser(userId, {
+            type: 'error',
+            message: 'Только ведущий может перемешивать пользователей'
+          });
+        }
         break;
         
       default:
