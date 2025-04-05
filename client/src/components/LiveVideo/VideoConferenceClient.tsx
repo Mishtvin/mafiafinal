@@ -736,10 +736,50 @@ export function VideoConferenceClient(props: {
     };
   }, [e2eeEnabled, keyProvider, worker, props.codec]);
 
+  // Добавляем глобальный тип для хранения экземпляра комнаты
+  declare global {
+    interface Window {
+      _livekitRoom?: Room;
+    }
+  }
+  
   // Создаем комнату с заданными параметрами
   const room = useMemo(() => {
     try {
+      // Проверяем существует ли уже экземпляр комнаты, чтобы предотвратить дублирование
+      if (window._livekitRoom && window._livekitRoom.state !== 'disconnected') {
+        console.log('Используем существующую комнату LiveKit вместо создания новой');
+        
+        // Проверяем состояние соединения
+        if (window._livekitRoom.state === 'connecting') {
+          console.log('Внимание: комната уже в процессе подключения, отменяем повторное подключение');
+          return window._livekitRoom;
+        }
+        
+        // Очищаем слушатели событий с предыдущего использования
+        window._livekitRoom.removeAllListeners();
+      } else if (window._livekitRoom) {
+        // Если существующая комната отключена, очищаем ее и создаем новую
+        console.log('Сбрасываем отключенную комнату перед созданием новой');
+        window._livekitRoom.removeAllListeners();
+        window._livekitRoom = undefined;
+      }
+      
+      // Создаем новую комнату только если нет активной
       const newRoom = new Room(roomOptions);
+      window._livekitRoom = newRoom;
+      console.log('Создана новая комната LiveKit');
+      
+      // Добавляем обработчик очистки при отключении
+      newRoom.once('disconnected', () => {
+        // Задержка перед очисткой, чтобы дать время завершить все операции
+        setTimeout(() => {
+          if (window._livekitRoom === newRoom) {
+            console.log('Очищаем глобальную ссылку на отключенную комнату');
+            window._livekitRoom = undefined;
+          }
+        }, 1000);
+      });
       
       // Регистрируем дополнительные обработчики для отладки и предотвращения ошибок
       // Основные события из LiveKit - используем строковый литерал для всех событий
