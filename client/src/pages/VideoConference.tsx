@@ -39,9 +39,22 @@ export default function VideoConferencePage() {
     }
   }, [hasJoined, username, roomId]);
 
-  // Генерируем случайное имя пользователя при входе
+  // Генерируем или используем имя пользователя из глобального ID при входе
   const handleJoin = () => {
-    setUsername('User-' + Math.floor(Math.random() * 10000));
+    // Если в window уже есть глобальный идентификатор, используем его
+    if (window.currentUserIdentity && window.currentUserIdentity !== 'undefined') {
+      console.log('🔄 Используем глобальный ID для подключения:', window.currentUserIdentity);
+      setUsername(window.currentUserIdentity);
+    } else {
+      // Если нет, то создаём временный ID и сохраняем его
+      const tempId = 'User-' + Math.floor(Math.random() * 10000);
+      console.log('🆕 Создаём временный ID для подключения:', tempId);
+      setUsername(tempId);
+      
+      // Сохраняем этот ID как глобальный для следующих подключений
+      window.currentUserIdentity = tempId;
+    }
+    
     setHasJoined(true);
   };
 

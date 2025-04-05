@@ -5,6 +5,47 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import VideoConference from "@/pages/VideoConference";
 import DirectConnection from "@/pages/DirectConnection";
+import { useEffect } from "react";
+
+// Расширяем интерфейс Window для добавления нашего пользовательского свойства
+declare global {
+  interface Window {
+    currentUserIdentity: string;
+  }
+}
+
+// Генерируем стабильный идентификатор пользователя, который сохраняется между перезагрузками страницы
+function ensureUserIdentity() {
+  const DEVICE_ID_KEY = "mafia_device_id";
+  
+  // Проверяем, есть ли уже сохраненный идентификатор в localStorage
+  let userId = localStorage.getItem(DEVICE_ID_KEY);
+  
+  // Если идентификатора нет, генерируем новый
+  if (!userId) {
+    // Генерируем случайное число между 1000 и 9999 для двух частей ID
+    const randomPart1 = Math.floor(Math.random() * 9000) + 1000;
+    const randomPart2 = Math.floor(Math.random() * 9000) + 1000;
+    
+    // Создаем ID в формате "User-XXXX-YYYY"
+    userId = `User-${randomPart1}-${randomPart2}`;
+    
+    // Сохраняем ID в localStorage для последующих сессий
+    localStorage.setItem(DEVICE_ID_KEY, userId);
+    
+    console.log('🆕 Создан новый идентификатор устройства:', userId);
+  } else {
+    console.log('✅ Использован существующий идентификатор устройства:', userId);
+  }
+  
+  // Устанавливаем глобальный идентификатор в window для доступа в компонентах
+  window.currentUserIdentity = userId;
+  
+  // Отладочное сообщение
+  console.log('👤 ГЛОБАЛЬНЫЙ ИДЕНТИФИКАТОР ПОЛЬЗОВАТЕЛЯ:', window.currentUserIdentity);
+  
+  return userId;
+}
 
 function Router() {
   return (
@@ -17,6 +58,11 @@ function Router() {
 }
 
 function Home() {
+  // Убедимся, что ID уже установлен при посещении домашней страницы
+  useEffect(() => {
+    ensureUserIdentity();
+  }, []);
+  
   return (
     <div className="flex items-center justify-center h-screen bg-slate-900 text-white">
       <div className="text-center p-8 max-w-md">
@@ -73,6 +119,12 @@ function Home() {
 }
 
 function App() {
+  // Устанавливаем глобальный ID при первой загрузке приложения
+  useEffect(() => {
+    const userId = ensureUserIdentity();
+    console.log('🔑 Инициализация приложения с ID:', userId);
+  }, []);
+  
   return (
     <QueryClientProvider client={queryClient}>
       <Router />
