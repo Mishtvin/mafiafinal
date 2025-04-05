@@ -355,9 +355,11 @@ export function useSlots(userId: string) {
                 const newCameraStates = { ...prev.cameraStates };
                 
                 // Обновляем все состояния, кроме своей камеры
-                Object.entries(states).forEach(([stateUserId, isEnabled]) => {
+                Object.entries(states).forEach(([stateUserId, stateValue]) => {
                   // Проверяем, не является ли это нашей камерой
                   if (stateUserId !== currentUserId && stateUserId !== globalId) {
+                    // Явно приводим значение к boolean
+                    const isEnabled = Boolean(stateValue);
                     // Обновляем состояние только чужой камеры
                     newCameraStates[stateUserId] = isEnabled;
                     console.log(`Синхронизировано начальное состояние чужой камеры: ${stateUserId} -> ${isEnabled}`);

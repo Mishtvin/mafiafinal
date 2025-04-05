@@ -385,26 +385,44 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
         
         // Переключаем камеру через LiveKit API с обработкой таймаута
         try {
-          const cameraPromise = room.localParticipant.setCameraEnabled(newCameraState);
-          await Promise.race([
-            cameraPromise,
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Camera toggle timeout')), cameraTimeoutMs)
-            )
-          ]);
-          console.log('Камера переключена успешно через LiveKit API:', newCameraState);
-        } catch (err: unknown) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          if (errorMessage === 'Camera toggle timeout') {
-            console.warn('Превышено время ожидания переключения камеры, синхронизируем состояние');
-            // В случае таймаута при включении, считаем что запрос не прошел и сбрасываем UI
-            const currentRealState = room.localParticipant.isCameraEnabled;
-            setCameraEnabled(currentRealState);
-            window.sessionStorage.setItem('camera-state', String(currentRealState));
-            return; // Прерываем дальнейшее выполнение
-          } else {
-            throw err; // Пробрасываем другие ошибки для обработки ниже
+          // При попытке включения камеры запрашиваем разрешения от пользователя
+          if (newCameraState) {
+            try {
+              // Проверяем, есть ли разрешение на камеру
+              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+              
+              // Если успешно получили поток, то останавливаем его (мы только проверяли разрешение)
+              stream.getTracks().forEach(track => track.stop());
+              
+              console.log('Разрешение на использование камеры получено');
+            } catch (permErr) {
+              console.error('Ошибка получения разрешения камеры:', permErr);
+              // В случае отказа в разрешении, сбрасываем UI обратно в выключенное состояние
+              setCameraEnabled(false);
+              window.sessionStorage.setItem('camera-state', 'false');
+              return; // Прерываем дальнейшее выполнение
+            }
           }
+          
+          // Отключаем таймаут для включения камеры, так как это может занять больше времени
+          // особенно на мобильных устройствах
+          console.log(`Вызываем setCameraEnabled(${newCameraState}) через LiveKit API`);
+          await room.localParticipant.setCameraEnabled(newCameraState);
+          
+          console.log('Камера переключена успешно через LiveKit API:', newCameraState);
+          
+          // Дополнительная проверка после переключения
+          setTimeout(() => {
+            const apiCameraState = room.localParticipant.isCameraEnabled;
+            console.log(`Состояние камеры после переключения: треки: ${newCameraState}, API: ${apiCameraState}, сохраненное: ${window.sessionStorage.getItem('camera-state')}`);
+          }, 200);
+        } catch (err: unknown) {
+          console.error('Ошибка при переключении камеры через LiveKit API:', err);
+          // В случае ошибки сбрасываем UI состояние обратно
+          const currentRealState = room.localParticipant.isCameraEnabled;
+          setCameraEnabled(currentRealState);
+          window.sessionStorage.setItem('camera-state', String(currentRealState));
+          return; // Прерываем дальнейшее выполнение
         }
         
         // Даем немного времени на обновление состояния после переключения
