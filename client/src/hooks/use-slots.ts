@@ -242,46 +242,11 @@ export function useSlots(userId: string) {
             }
             
             case 'camera_states_update': {
-              // Обновление информации о состоянии камер
-              const newCameraStates = data.cameraStates || {};
-              console.log('Получены обновления состояния камер:', newCameraStates);
-              
-              setState(prev => {
-                // Получаем текущий ID пользователя
-                const currentUserId = userIdRef.current;
-                const globalId = window.currentUserIdentity;
-                
-                // Объединяем существующие состояния с новыми
-                // Важно: НЕ заменяем весь объект, а только обновляем полученные состояния
-                const mergedCameraStates = { ...prev.cameraStates };
-                
-                // Добавляем только те состояния, которые получили в обновлении
-                Object.entries(newCameraStates).forEach(([userId, enabled]) => {
-                  // Обновляем состояние только для других пользователей,
-                  // для текущего пользователя сохраняем его собственное состояние
-                  if (userId !== currentUserId && userId !== globalId) {
-                    console.log(`Обновляем состояние камеры для пользователя ${userId} на ${enabled}`);
-                    mergedCameraStates[userId] = enabled as boolean;
-                  } else {
-                    console.log(`Сохраняем собственное состояние камеры для ${userId}: ${mergedCameraStates[userId]}`);
-                    // Состояние текущего пользователя сохраняем, если оно уже было установлено
-                    if (userId in mergedCameraStates) {
-                      // Ничего не делаем - сохраняем текущее состояние
-                    } else {
-                      // Если состояния еще нет, используем переданное с сервера
-                      mergedCameraStates[userId] = enabled as boolean;
-                      console.log(`Устанавливаем начальное состояние камеры для ${userId}: ${enabled}`);
-                    }
-                  }
-                });
-                
-                console.log('Объединенные состояния камер:', mergedCameraStates);
-                
-                return {
-                  ...prev,
-                  cameraStates: mergedCameraStates
-                };
-              });
+              // Этот метод устарел и заменен на 'individual_camera_update'
+              // Оставляем для обратной совместимости, но делаем его поведение минимальным
+              console.log('Получено устаревшее camera_states_update сообщение, игнорируем его');
+              // Не делаем никаких обновлений состояния, чтобы избежать конфликтов
+              // с individual_camera_update
               break;
             }
             

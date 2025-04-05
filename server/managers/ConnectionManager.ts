@@ -85,15 +85,22 @@ export class ConnectionManager {
       const currentCameraStates = cameraManager.getAllCameraStates();
       
       if (ws.readyState === WebSocket.OPEN) {
+        // Отправляем информацию о слотах
         ws.send(JSON.stringify({
           type: 'slots_update',
           slots: currentSlots
         }));
         
-        ws.send(JSON.stringify({
-          type: 'camera_states_update',
-          cameraStates: currentCameraStates
-        }));
+        // Отправляем индивидуальные обновления для каждой камеры
+        // вместо общего события camera_states_update
+        Object.entries(currentCameraStates).forEach(([cameraUserId, isEnabled]) => {
+          ws.send(JSON.stringify({
+            type: 'individual_camera_update',
+            userId: cameraUserId,
+            enabled: isEnabled
+          }));
+          console.log(`Отправлено индивидуальное обновление состояния камеры для ${cameraUserId} (${isEnabled}) клиенту ${userId}`);
+        });
         
         console.log(`Отправлено первоначальное состояние клиенту ${userId}: ${currentSlots.length} слотов`);
       }
@@ -391,18 +398,11 @@ export class ConnectionManager {
       }
     };
     
-    // Подписываемся на события изменения состояний камер
+    // Больше не используем массовые обновления состояний камер
+    // Заменено на индивидуальные обновления
     const cameraStatesListener = (cameraStates: Record<string, boolean>) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.send(JSON.stringify({
-            type: 'camera_states_update',
-            cameraStates
-          }));
-        } catch (error) {
-          console.error(`Ошибка отправки обновления состояний камер пользователю ${userId}:`, error);
-        }
-      }
+      // Функция оставлена для совместимости, но не выполняет никакой логики
+      // Все обновления происходят через индивидуальные сообщения individual_camera_update
     };
     
     // Слушатель для обновления состояния конкретной камеры
