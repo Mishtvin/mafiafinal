@@ -144,6 +144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Создаем WebSocket сервер на отдельном пути
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  console.log('WebSocket server initialized on path /ws');
 
   // Коллекция подключений для отслеживания клиентов
   const connections = new Map<string, WebSocket>();

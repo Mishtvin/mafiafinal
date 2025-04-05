@@ -15,8 +15,19 @@ export function CustomVideoGrid() {
   const participants = useParticipants();
   const [currentLocalParticipant] = participants.filter(p => p.isLocal);
   
-  // Используем хук для синхронизации слотов
-  const slotsManager = useSlots(currentLocalParticipant?.identity || 'unknown');
+  // Используем хук для синхронизации слотов с реальным идентификатором
+  const userIdentity = currentLocalParticipant?.identity || 'unknown-user';
+  console.log('Local participant identity:', userIdentity);
+  const slotsManager = useSlots(userIdentity);
+  
+  // Принудительное обновление компонента при изменении слотов
+  const [forceUpdate, setForceUpdate] = useState<number>(0);
+  
+  // Пересоздаем функцию обновления при изменении слотов
+  useEffect(() => {
+    console.log('Сработал эффект принудительного обновления', slotsManager.slots.size);
+    setForceUpdate(prev => prev + 1);
+  }, [slotsManager.slots, slotsManager.userSlot]);
   
   // Обработчик клика по пустому слоту
   const handleSlotClick = (slotNumber: number) => {

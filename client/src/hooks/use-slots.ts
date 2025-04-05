@@ -14,6 +14,8 @@ export interface SlotsState {
 }
 
 export function useSlots(userId: string) {
+  console.log('useSlots hook initialized with userId:', userId);
+  
   const [state, setState] = useState<SlotsState>({
     slots: new Map(),
     userSlot: null,
@@ -106,6 +108,7 @@ export function useSlots(userId: string) {
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('WebSocket получено сообщение:', data);
           
           switch (data.type) {
             case 'slots_update': {
@@ -116,18 +119,28 @@ export function useSlots(userId: string) {
               // Заполняем Map слотов из массива
               data.slots.forEach((slot: SlotInfo) => {
                 slots.set(slot.slotNumber, slot.userId);
+                console.log(`Слот ${slot.slotNumber} занят пользователем ${slot.userId}`);
                 
                 // Если это слот текущего пользователя
                 if (slot.userId === userIdRef.current) {
                   userSlot = slot.slotNumber;
+                  console.log(`Найден слот текущего пользователя: ${userSlot}`);
                 }
               });
               
-              setState(prev => ({ 
-                ...prev, 
-                slots,
-                userSlot
-              }));
+              console.log('Обновляем состояние слотов:', 
+                          'текущий userSlot =', userSlot, 
+                          'всего слотов =', slots.size);
+              
+              setState(prev => {
+                const newState = { 
+                  ...prev, 
+                  slots,
+                  userSlot
+                };
+                console.log('Новое состояние:', newState);
+                return newState;
+              });
               break;
             }
             
