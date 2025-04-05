@@ -14,6 +14,7 @@ import {
   type VideoCodec,
   ConnectionState,
   createLocalVideoTrack,
+  RoomEvent,
 } from 'livekit-client';
 import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
@@ -517,12 +518,31 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
                   const event = new Event('roomDisconnected');
                   window.dispatchEvent(event);
                   
-                  // Отключаемся от комнаты только если соединение установлено
-                  if (room.state === 'connected') {
-                    console.log('Выполняем корректное отключение от комнаты');
-                    room.disconnect();
-                  } else {
-                    console.log('Соединение не установлено, пропускаем disconnect');
+                  // Безопасное отключение от комнаты с проверками
+                  console.log('ВЫХОД: Текущее состояние комнаты:', room.state);
+                  try {
+                    // Предотвращаем отправку сигнала Leave на сервер, если еще не подключены
+                    if (room.state === 'connected') {
+                      console.log('ВЫХОД: Корректное отключение от комнаты');
+                      room.disconnect(false); // Указываем explicit=false для более безопасного отключения
+                    } else if (room.state === 'connecting') {
+                      console.log('ВЫХОД: Комната в процессе подключения, отменяем соединение');
+                      // В этом состоянии безопаснее закрыть соединение принудительно
+                      try {
+                        // @ts-ignore - обращаемся к приватному свойству для более чистого отключения
+                        if (room.engine && room.engine.client) {
+                          // @ts-ignore
+                          room.engine.client.close();
+                          console.log('ВЫХОД: Принудительно закрыто соединение');
+                        }
+                      } catch (innerErr) {
+                        console.warn('ВЫХОД: Ошибка при принудительном закрытии:', innerErr);
+                      }
+                    } else {
+                      console.log('ВЫХОД: Пропуск вызова disconnect(), комната не в состоянии connected или connecting');
+                    }
+                  } catch (err) {
+                    console.error('ОШИБКА ПРИ ОТКЛЮЧЕНИИ:', err);
                   }
                   
                   // Редирект на главную (на случай, если слушатель событий не сработает)
@@ -609,13 +629,51 @@ export function VideoConferenceClient(props: {
   }, [e2eeEnabled, keyProvider, worker, props.codec]);
 
   // Создаем комнату с заданными параметрами
-  const room = useMemo(() => new Room(roomOptions), [roomOptions]);
-  
-  // Применяем шифрование, если оно включено
-  if (e2eeEnabled && e2eePassphrase) {
-    keyProvider.setKey(e2eePassphrase);
-    room.setE2EEEnabled(true);
-  }
+  const room = useMemo(() => {
+    try {
+      const newRoom = new Room(roomOptions);
+      
+      // Регистрируем дополнительные обработчики для отладки и предотвращения ошибок
+      newRoom.on(RoomEvent.SignalConnected, () => {
+        console.log('СОБЫТИЕ: Сигнальное соединение установлено');
+      });
+      
+      newRoom.on(RoomEvent.Disconnected, () => {
+        console.log('СОБЫТИЕ: Комната отключена');
+      });
+      
+      newRoom.on(RoomEvent.Reconnecting, () => {
+        console.log('СОБЫТИЕ: Переподключение к комнате...');
+      });
+      
+      newRoom.on(RoomEvent.Reconnected, () => {
+        console.log('СОБЫТИЕ: Переподключение завершено успешно');
+      });
+      
+      // Важный обработчик для трассировки ошибки "cannot send signal request"
+      // Используем строки вместо перечисления RoomEvent для нестандартных событий
+      newRoom.on('leave', (reason: any) => {
+        console.log('СОБЫТИЕ: Операция отключения (leave), причина:', reason);
+      });
+      
+      // Обработчик ошибок сигнального соединения для отладки
+      newRoom.on('signalError', (err: any) => {
+        console.error('ОШИБКА СИГНАЛЬНОГО СОЕДИНЕНИЯ:', err);
+      });
+      
+      // Применяем шифрование, если оно включено
+      if (e2eeEnabled && e2eePassphrase) {
+        keyProvider.setKey(e2eePassphrase);
+        newRoom.setE2EEEnabled(true);
+      }
+      
+      console.log('Успешно создана новая комната LiveKit');
+      return newRoom;
+    } catch (e) {
+      console.error('ОШИБКА ПРИ СОЗДАНИИ КОМНАТЫ:', e);
+      return new Room(); // Создаем пустую комнату в случае ошибки
+    }
+  }, [roomOptions, e2eeEnabled, e2eePassphrase, keyProvider]);
   
   // Генерируем и инициализируем идентификатор пользователя
   const userId = useMemo(() => {
@@ -672,13 +730,32 @@ export function VideoConferenceClient(props: {
     
     // Правильная очистка ресурсов при размонтировании компонента
     return () => {
-      // Отключаемся от комнаты только если соединение установлено
-      if (room && room.state === 'connected') {
-        console.log('Выполняем корректное отключение при размонтировании компонента');
+      // Безопасное отключение от комнаты с проверками
+      if (room) {
+        console.log('РАЗМОНТИРОВАНИЕ: Текущее состояние комнаты:', room.state);
         try {
-          room.disconnect();
+          // Предотвращаем отправку сигнала Leave на сервер, если еще не подключены
+          if (room.state === 'connected') {
+            console.log('РАЗМОНТИРОВАНИЕ: Корректное отключение от комнаты');
+            room.disconnect(false); // Указываем explicit=false для более безопасного отключения
+          } else if (room.state === 'connecting') {
+            console.log('РАЗМОНТИРОВАНИЕ: Комната в процессе подключения, отменяем соединение');
+            // В этом состоянии безопаснее закрыть соединение принудительно
+            try {
+              // @ts-ignore - обращаемся к приватному свойству для более чистого отключения
+              if (room.engine && room.engine.client) {
+                // @ts-ignore
+                room.engine.client.close();
+                console.log('РАЗМОНТИРОВАНИЕ: Принудительно закрыто соединение');
+              }
+            } catch (innerErr) {
+              console.warn('РАЗМОНТИРОВАНИЕ: Ошибка при принудительном закрытии:', innerErr);
+            }
+          } else {
+            console.log('РАЗМОНТИРОВАНИЕ: Пропуск вызова disconnect(), комната не в состоянии connected или connecting');
+          }
         } catch (err) {
-          console.error('Ошибка при отключении от комнаты:', err);
+          console.error('ОШИБКА ПРИ ОТКЛЮЧЕНИИ:', err);
         }
       }
     };
