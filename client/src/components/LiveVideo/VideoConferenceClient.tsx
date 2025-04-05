@@ -198,7 +198,7 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
     };
     
     // Функция инициализации камеры (выполняется один раз после подключения)
-    const initializeCamera = () => {
+    const initializeCamera = async () => {
       if (!room || !room.localParticipant || cameraInitialized) return;
       
       console.log('ИНИЦИАЛИЗАЦИЯ: Настраиваем камеру после подключения');
@@ -206,68 +206,147 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       
       // Получаем состояние камеры из хранилища
       const savedState = window.sessionStorage.getItem('camera-state');
-      const shouldEnableCamera = savedState !== 'false'; // По умолчанию включено
+      // По умолчанию камера включена, если явно не сохранено обратное
+      const shouldEnableCamera = savedState !== 'false';
       
       console.log('ИНИЦИАЛИЗАЦИЯ: Целевое состояние камеры:', shouldEnableCamera);
       
       // Устанавливаем UI состояние сразу
       setCameraEnabled(shouldEnableCamera);
       
-      // Улучшенная стратегия с несколькими попытками и прогрессивными задержками
-      const attemptEnableCamera = (attempt = 1, maxAttempts = 5) => {
+      // Сохраняем состояние в хранилище - нужно для синхронизации между вкладками
+      window.sessionStorage.setItem('camera-state', String(shouldEnableCamera));
+      console.log('Сохраняем состояние камеры в sessionStorage:', shouldEnableCamera);
+      
+      // 1. Предварительная проверка доступа к медиа-устройствам
+      // для решения проблемы "Permission denied" или отсутствия разрешений
+      try {
+        if (shouldEnableCamera) {
+          console.log('ПОДГОТОВКА: Предварительная проверка доступа к камере...');
+          const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+            video: true,
+            audio: false
+          });
+          
+          console.log('ПОДГОТОВКА: Доступ к камере подтвержден, останавливаем тестовый поток');
+          mediaStream.getTracks().forEach(track => track.stop());
+        }
+      } catch (err) {
+        console.error('ОШИБКА ПРИ ПРОВЕРКЕ ДОСТУПА К КАМЕРЕ:', err);
+        // Если нет доступа к камере, меняем целевое состояние
+        setCameraEnabled(false);
+        window.sessionStorage.setItem('camera-state', 'false');
+        return; // Выходим, т.к. без разрешений дальнейшие попытки бессмысленны
+      }
+      
+      // 2. Улучшенная стратегия инициализации с несколькими попытками
+      const attemptEnableCamera = async (attempt = 1, maxAttempts = 5) => {
         // Проверка состояния комнаты перед попыткой
         if (!room || !room.localParticipant || room.state !== 'connected') {
-          console.warn(`Отложено включение камеры: комната ${room?.state || 'не определена'}`);
+          console.warn(`Отложена инициализация камеры: комната ${room?.state || 'не определена'}`);
           
           // Планируем повторную попытку
           if (attempt < maxAttempts) {
             const delay = Math.min(1000 * attempt, 5000);
-            console.log(`Повторная попытка через ${delay}ms (${attempt}/${maxAttempts})`);
+            console.log(`Повторная попытка инициализации через ${delay}ms (${attempt}/${maxAttempts})`);
             setTimeout(() => attemptEnableCamera(attempt + 1, maxAttempts), delay);
           } else {
-            console.error(`Не удалось настроить камеру после ${maxAttempts} попыток: комната не в правильном состоянии`);
+            console.error(`Не удалось настроить камеру после ${maxAttempts} попыток: комната не в корректном состоянии`);
           }
           return;
         }
         
         console.log(`ИНИЦИАЛИЗАЦИЯ: Применяем состояние камеры через LiveKit API (попытка ${attempt}/${maxAttempts})`);
         
-        room.localParticipant.setCameraEnabled(shouldEnableCamera)
-          .then(() => {
-            console.log('ИНИЦИАЛИЗАЦИЯ: Камера успешно настроена, состояние:', shouldEnableCamera);
+        try {
+          // 3. Используем метод с параметрами устройства для большей надежности
+          if (shouldEnableCamera) {
+            // При включении камеры используем более надежный подход с опциями
             
-            // Синхронизируем с WebSocket только если камера включена
-            if (shouldEnableCamera && slotsState && typeof slotsState.setCameraState === 'function') {
-              slotsState.setCameraState(true);
-            }
+            // Создаем новый видеотрек с нужными параметрами
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
             
-            // Проверяем и синхронизируем еще раз через некоторое время
-            setTimeout(syncCameraState, 1000);
-          })
-          .catch(err => {
-            console.error(`ОШИБКА ИНИЦИАЛИЗАЦИИ КАМЕРЫ (попытка ${attempt}/${maxAttempts}):`, err);
-            
-            // Если произошла ошибка и не исчерпаны попытки, пробуем еще раз через прогрессивную задержку
-            if (attempt < maxAttempts) {
-              // Экспоненциальная задержка между попытками
-              const delay = Math.min(1000 * Math.pow(1.5, attempt), 5000);
-              console.log(`ПОВТОРНАЯ ПОПЫТКА настройки камеры через ${delay}ms (${attempt + 1}/${maxAttempts})`);
+            // Если устройства найдены, пытаемся использовать первое
+            if (videoDevices.length > 0) {
+              const firstCameraId = videoDevices[0].deviceId;
+              console.log(`ИНИЦИАЛИЗАЦИЯ: Используем устройство ${videoDevices[0].label || firstCameraId}`);
               
-              setTimeout(() => attemptEnableCamera(attempt + 1, maxAttempts), delay);
+              try {
+                // Создаем видеотрек с указанным устройством
+                const videoTrack = await createLocalVideoTrack({
+                  deviceId: firstCameraId,
+                  resolution: VideoPresets.h720.resolution,
+                });
+                
+                // Публикуем трек вместо вызова setCameraEnabled
+                await room.localParticipant.publishTrack(videoTrack);
+                console.log('ИНИЦИАЛИЗАЦИЯ: Камера активирована через прямую публикацию трека');
+              } catch (err) {
+                console.error('Ошибка публикации трека с устройством:', err);
+                // Пробуем fallback через стандартный метод
+                await room.localParticipant.setCameraEnabled(true);
+              }
             } else {
-              console.error(`Не удалось настроить камеру после ${maxAttempts} попыток, последняя ошибка:`, err);
+              // Если устройства не найдены, используем стандартный метод
+              await room.localParticipant.setCameraEnabled(true);
+            }
+          } else {
+            // При отключении используем стандартный метод
+            await room.localParticipant.setCameraEnabled(false);
+          }
+          
+          console.log('ИНИЦИАЛИЗАЦИЯ: Камера успешно настроена, состояние:', shouldEnableCamera);
+          
+          // 4. Синхронизируем с WebSocket только если камера включена
+          if (shouldEnableCamera && slotsState && typeof slotsState.setCameraState === 'function') {
+            slotsState.setCameraState(true);
+          }
+          
+          // Проверяем и синхронизируем еще раз через некоторое время
+          setTimeout(syncCameraState, 1000);
+        } catch (err) {
+          console.error(`ОШИБКА ИНИЦИАЛИЗАЦИИ КАМЕРЫ (попытка ${attempt}/${maxAttempts}):`, err);
+          
+          // 5. Если произошла ошибка и не исчерпаны попытки, используем более интеллектуальную стратегию
+          if (attempt < maxAttempts) {
+            // Экспоненциальная задержка с ограничением
+            const delay = Math.min(1000 * Math.pow(1.5, attempt), 5000);
+            console.log(`ПОВТОРНАЯ ПОПЫТКА настройки камеры через ${delay}ms (${attempt + 1}/${maxAttempts})`);
+            
+            setTimeout(() => attemptEnableCamera(attempt + 1, maxAttempts), delay);
+          } else {
+            console.error(`Не удалось настроить камеру после ${maxAttempts} попыток`, err);
+            
+            // Изменяем UI-состояние, если не удалось включить камеру
+            if (shouldEnableCamera) {
+              setCameraEnabled(false);
+              window.sessionStorage.setItem('camera-state', 'false');
+              console.log('Сбрасываем UI-состояние камеры из-за ошибок');
               
-              // Изменяем UI-состояние, если не удалось включить камеру
-              if (shouldEnableCamera) {
-                setCameraEnabled(false);
-                console.log('Сбрасываем UI-состояние камеры из-за ошибок');
+              // Попытка очистки текущего состояния треков
+              try {
+                const tracks = room.localParticipant.getTracks();
+                if (tracks.length > 0) {
+                  console.log('Очищаем существующие треки для сброса состояния...');
+                  for (const publication of tracks) {
+                    if (publication.kind === 'video') {
+                      await room.localParticipant.unpublishTrack(publication.track);
+                    }
+                  }
+                }
+              } catch (cleanupErr) {
+                console.error('Ошибка при очистке треков:', cleanupErr);
               }
             }
-          });
+          }
+        }
       };
       
-      // Начинаем с небольшой задержкой для стабилизации соединения
-      setTimeout(() => attemptEnableCamera(1, 5), 800);
+      // Начинаем с небольшой прогрессивной задержкой для стабилизации соединения
+      const startDelay = 800;
+      console.log(`Инициализация камеры начнется через ${startDelay}ms...`);
+      setTimeout(() => attemptEnableCamera(1, 5), startDelay);
     };
     
     // Функция для синхронизации состояния UI с реальным состоянием камеры
