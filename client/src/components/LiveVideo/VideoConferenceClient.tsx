@@ -1,8 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  formatChatMessageLinks,
   LiveKitRoom,
-  ControlBar,
 } from '@livekit/components-react';
 import {
   ExternalE2EEKeyProvider,
@@ -674,7 +672,7 @@ export function VideoConferenceClient(props: {
         connectOptions={connectOptions}
         serverUrl={props.liveKitUrl}
         audio={false}
-        video={false}
+        video={true}
       >
         <div className="flex flex-col h-screen bg-slate-900 overflow-hidden">        
           {/* Main content with custom grid */}
