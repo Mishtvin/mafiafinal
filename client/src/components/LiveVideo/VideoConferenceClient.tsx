@@ -107,7 +107,7 @@ export function VideoConferenceClient(props: {
           
           {/* Выдвижная панель управления */}
           <div className={`control-drawer ${controlsOpen ? 'open' : ''}`}>
-            <div className="controls-container">
+            <div className="controls-container" style={{ paddingTop: '40px' }}>
               <button 
                 className="control-button" 
                 aria-label="Toggle Camera"
