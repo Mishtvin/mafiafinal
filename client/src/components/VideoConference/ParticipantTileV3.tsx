@@ -168,7 +168,11 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
           // Попытка переподключить видео
           if (room && participant === room.localParticipant) {
             console.log('Attempting to recover local video track...');
-            // VideoProvider должен автоматически обработать переподключение
+            // VideoProvider должен автоматически обработать переподключение,
+            // но мы можем дополнительно инициировать процесс восстановления:
+            room.localParticipant.setCameraEnabled(false)
+              .then(() => setTimeout(() => room.localParticipant.setCameraEnabled(true), 300))
+              .catch(e => console.error('Error recovering video track:', e));
           }
         }
       }
@@ -249,7 +253,8 @@ export default function ParticipantTile({ participant }: ParticipantTileProps) {
   };
   
   // Определяем, является ли этот участник локальным
-  const isLocal = room && participant === room.localParticipant;
+  // Явно приводим к boolean, чтобы избежать ошибок типизации
+  const isLocal: boolean = !!(room && participant === room.localParticipant);
   
   return (
     <div 

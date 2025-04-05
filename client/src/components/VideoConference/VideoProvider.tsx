@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRoomContext } from './CustomLiveKitRoom';
-import { VideoPresets, Track, LocalTrackPublication } from 'livekit-client';
+import { VideoPresets, Track, LocalTrackPublication, RoomEvent } from 'livekit-client';
 
 interface VideoProviderProps {
   children: ReactNode;
@@ -184,7 +184,7 @@ export default function VideoProvider({ children, enabled }: VideoProviderProps)
     return () => clearInterval(checkInterval);
   }, [room, activeTrack, handleTrackEnded]);
   
-  // Добавляем обработчик событий комнаты для восстановления при реконнекте
+  // Добавляем обработчик событий комнаты для восстановления при реконнекте и отслеживания трека
   useEffect(() => {
     if (!room) return;
     
@@ -195,12 +195,83 @@ export default function VideoProvider({ children, enabled }: VideoProviderProps)
       }
     };
     
-    room.on('reconnected', handleReconnected);
+    // Обработка событий трека от LocalParticipant для раннего обнаружения проблем
+    const handleLocalTrackPublished = (publication: LocalTrackPublication) => {
+      if (publication.kind === 'video' && publication.track?.source === Track.Source.Camera) {
+        console.log('VIDEO PROVIDER: Local video track published', {
+          trackSid: publication.trackSid,
+          readyState: publication.track?.mediaStreamTrack?.readyState || 'unknown'
+        });
+        
+        // Проактивно мониторим трек сразу после публикации
+        const mediaTrack = publication.track?.mediaStreamTrack;
+        if (mediaTrack) {
+          console.log('VIDEO PROVIDER: Setting up ended event listener');
+          
+          mediaTrack.onended = () => {
+            console.log('VIDEO PROVIDER: mediaStreamTrack.onended triggered immediately after publish');
+            // При завершении трека пытаемся сразу же переподключиться
+            handleTrackEnded();
+          };
+          
+          // Добавляем защиту от перехода в состояние ended
+          // Чаще всего проблема возникает сразу после публикации трека
+          // Запускаем агрессивный мониторинг в течение первых 10 секунд
+          let checkCount = 0;
+          const earlyWarningInterval = setInterval(() => {
+            checkCount++;
+            if (checkCount > 20) {
+              clearInterval(earlyWarningInterval);
+              return;
+            }
+            
+            if (mediaTrack.readyState === 'ended') {
+              console.log('VIDEO PROVIDER: Early detection of ended track, position', checkCount);
+              clearInterval(earlyWarningInterval);
+              handleTrackEnded();
+            }
+          }, 200);  // Проверка каждые 200мс в течение первых 4 секунд
+        }
+        
+        setActiveTrack(publication);
+      }
+    };
+    
+    // Отслеживаем события изменения состояния трека
+    const handleLocalTrackUnpublished = (publication: LocalTrackPublication) => {
+      if (publication.kind === 'video' && publication.track?.source === Track.Source.Camera) {
+        console.log('VIDEO PROVIDER: Local video track unpublished', {
+          trackSid: publication.trackSid
+        });
+        
+        // Если это активный трек, сбрасываем его
+        if (activeTrack && activeTrack.trackSid === publication.trackSid) {
+          setActiveTrack(null);
+          
+          // Если видео должно быть включено, пробуем переподключиться
+          if (enabled) {
+            console.log('VIDEO PROVIDER: Auto-reconnecting camera after unpublish');
+            setTimeout(() => setupVideoTrack(true), 300);
+          }
+        }
+      }
+    };
+    
+    // Подписываемся на события
+    room.on(RoomEvent.Reconnected, handleReconnected);
+    if (room.localParticipant) {
+      room.localParticipant.on(RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
+      room.localParticipant.on(RoomEvent.LocalTrackUnpublished, handleLocalTrackUnpublished);
+    }
     
     return () => {
-      room.off('reconnected', handleReconnected);
+      room.off(RoomEvent.Reconnected, handleReconnected);
+      if (room.localParticipant) {
+        room.localParticipant.off(RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
+        room.localParticipant.off(RoomEvent.LocalTrackUnpublished, handleLocalTrackUnpublished);
+      }
     };
-  }, [room, enabled, setupVideoTrack]);
+  }, [room, enabled, setupVideoTrack, handleTrackEnded, activeTrack]);
   
   // Возвращаем дочерние компоненты без изменений
   return <>{children}</>;
