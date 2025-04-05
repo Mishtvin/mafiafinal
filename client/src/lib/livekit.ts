@@ -3,6 +3,16 @@
 const TOKEN_ENDPOINT = '/api/livekit/token';
 
 /**
+ * Генерирует уникальный идентификатор пользователя с случайным суффиксом
+ * Это помогает избежать конфликтов между разными вкладками браузера
+ */
+function generateUniqueIdentity(baseIdentity: string): string {
+  // Добавляем случайный суффикс для уникальности между вкладками
+  const tabId = Math.floor(Math.random() * 10000);
+  return `${baseIdentity}-${tabId}`;
+}
+
+/**
  * Fetches a LiveKit token from the token service
  * 
  * @param identity The participant's identity/username
@@ -11,7 +21,10 @@ const TOKEN_ENDPOINT = '/api/livekit/token';
  */
 export async function fetchToken(identity: string, roomName?: string): Promise<string> {
   try {
-    console.log('Fetching token for', { identity, roomName });
+    // Создаем уникальный идентификатор для каждой вкладки
+    const uniqueIdentity = generateUniqueIdentity(identity);
+    
+    console.log('Fetching token for', { identity: uniqueIdentity, roomName });
     
     // Используем POST запрос с JSON телом
     const response = await fetch(TOKEN_ENDPOINT, {
@@ -20,7 +33,7 @@ export async function fetchToken(identity: string, roomName?: string): Promise<s
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        identity,
+        identity: uniqueIdentity,
         roomName
       })
     });
