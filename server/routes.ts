@@ -522,7 +522,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 } else {
                   // Дополнительная проверка: возможно, слот занят пользователем, который отключился
                   const slotUserId = slotAssignments.get(preferredSlot);
-                  if (slotUserId && !connections.has(slotUserId)) {
+                  
+                  // Особый случай: пользователь с другим ID, но то же самое соединение
+                  const isUserReconnectWithDifferentId = slotUserId && 
+                    (slotUserId.includes(userId) || userId.includes(slotUserId) || 
+                    (sessionId && SESSION_STORE.has(sessionId) && 
+                     SESSION_STORE.get(sessionId)!.userId === slotUserId));
+                  
+                  if (isUserReconnectWithDifferentId) {
+                    // Пользователь переподключается с немного другим ID, но это тот же физический пользователь
+                    console.log(`🔄 Обнаружено переподключение пользователя с другим ID: старый=${slotUserId}, новый=${userId}`);
+                    
+                    // Очищаем старые данные пользователя
+                    userSlots.delete(slotUserId);
+                    if (connections.has(slotUserId)) {
+                      connections.delete(slotUserId);
+                    }
+                    
+                    // Обновляем слот под новый ID
+                    slotAssignments.set(preferredSlot, userId);
+                    userSlots.set(userId, preferredSlot);
+                    console.log(`✅ Обновлен ID пользователя в слоте ${preferredSlot}: ${slotUserId} -> ${userId}`);
+                    assignedSlot = true;
+                  }
+                  // Стандартный случай: проверка на отключенного пользователя
+                  else if (slotUserId && !connections.has(slotUserId)) {
                     // Слот занят отключенным пользователем, можно освободить и занять
                     console.log(`♻️ Освобождаем слот ${preferredSlot} от неактивного пользователя ${slotUserId}`);
                     slotAssignments.delete(preferredSlot);
