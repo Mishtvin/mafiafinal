@@ -516,8 +516,13 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
                   const event = new Event('roomDisconnected');
                   window.dispatchEvent(event);
                   
-                  // Отключаемся от комнаты
-                  room.disconnect();
+                  // Отключаемся от комнаты только если соединение установлено
+                  if (room.state === 'connected') {
+                    console.log('Выполняем корректное отключение от комнаты');
+                    room.disconnect();
+                  } else {
+                    console.log('Соединение не установлено, пропускаем disconnect');
+                  }
                   
                   // Редирект на главную (на случай, если слушатель событий не сработает)
                   setTimeout(() => {
@@ -663,6 +668,19 @@ export function VideoConferenceClient(props: {
         }
       }
     }
+    
+    // Правильная очистка ресурсов при размонтировании компонента
+    return () => {
+      // Отключаемся от комнаты только если соединение установлено
+      if (room && room.state === 'connected') {
+        console.log('Выполняем корректное отключение при размонтировании компонента');
+        try {
+          room.disconnect();
+        } catch (err) {
+          console.error('Ошибка при отключении от комнаты:', err);
+        }
+      }
+    };
   }, [room?.localParticipant, slotsState]);
   
   // Автоматически регистрируем пользователя при подключении
