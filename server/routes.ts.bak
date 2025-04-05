@@ -193,6 +193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`Периодическая проверка: соединения=${connections.size}, слоты=${slotAssignments.size}, присвоено=${userSlots.size}, камеры=${cameraStates.size}`);
   }, 10000); // каждые 10 секунд
 
+  // Интервал для проверки соединений (pings)
   const pingInterval = 5000; // 5 секунд
   const pingIntervalId = setInterval(() => {
     // Проверяем и удаляем любые устаревшие соединения
