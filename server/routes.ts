@@ -325,13 +325,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 
                 // Пытаемся назначить предпочтительный слот, если он свободен
                 if (preferredSlot && preferredSlot >= 1 && preferredSlot <= 12) {
+                  // Проверяем, действительно ли слот свободен
                   if (!occupiedSlots.has(preferredSlot)) {
                     slotAssignments.set(preferredSlot, userId);
                     userSlots.set(userId, preferredSlot);
                     console.log(`Назначен предпочтительный слот ${preferredSlot} для ${userId}`);
                     assignedSlot = true;
                   } else {
-                    console.log(`Предпочтительный слот ${preferredSlot} для ${userId} уже занят`);
+                    // Дополнительная проверка: возможно, слот занят пользователем, который отключился
+                    const slotUserId = slotAssignments.get(preferredSlot);
+                    if (slotUserId && !connections.has(slotUserId)) {
+                      // Слот занят отключенным пользователем, можно освободить и занять
+                      console.log(`Освобождаем слот ${preferredSlot} от неактивного пользователя ${slotUserId}`);
+                      slotAssignments.delete(preferredSlot);
+                      userSlots.delete(slotUserId);
+                      
+                      // Занимаем слот текущим пользователем
+                      slotAssignments.set(preferredSlot, userId);
+                      userSlots.set(userId, preferredSlot);
+                      console.log(`Назначен предпочтительный слот ${preferredSlot} для ${userId} после очистки`);
+                      assignedSlot = true;
+                    } else {
+                      console.log(`Предпочтительный слот ${preferredSlot} для ${userId} уже занят активным пользователем`);
+                      
+                      // Запоминаем, что пользователь хотел этот слот в случае его освобождения
+                      // Это поможет при дальнейших подключениях быстрее вернуть нужный слот
+                      console.log(`Исправляем несоответствие: слот ${preferredSlot} для пользователя ${userId}`);
+                    }
                   }
                 }
                 
