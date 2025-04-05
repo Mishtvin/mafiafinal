@@ -516,6 +516,9 @@ export function VideoConferenceClient(props: {
         serverUrl={props.liveKitUrl}
         audio={false}
         video={false}
+        onDisconnected={() => {
+          console.log('LiveKit отключен через компонент LiveKitRoom');
+        }}
       >
         <div className="flex flex-col h-screen bg-slate-900 overflow-hidden">        
           {/* Main content with custom grid */}

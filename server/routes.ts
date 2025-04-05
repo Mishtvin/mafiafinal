@@ -35,6 +35,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
   
+  // Администраторский эндпоинт для сброса назначений слотов (для тестирования)
+  app.post('/api/admin/reset-slots', (req, res) => {
+    try {
+      // Сохраняем количество очищенных записей
+      const deletedSlots = slotAssignments.size;
+      const deletedUsers = userSlots.size;
+      
+      // Очищаем назначения слотов
+      slotAssignments.clear();
+      userSlots.clear();
+      
+      console.log('Все слоты сброшены через API');
+      
+      // Отправляем обновление всем клиентам
+      broadcastSlotUpdate();
+      
+      // Возвращаем результат операции
+      res.json({
+        success: true,
+        message: 'Все слоты успешно сброшены',
+        stats: {
+          clearedSlots: deletedSlots,
+          clearedUsers: deletedUsers
+        }
+      });
+    } catch (error) {
+      console.error('Ошибка при сбросе слотов:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Ошибка при сбросе слотов',
+        error: String(error)
+      });
+    }
+  });
+  
   // Эндпоинты для создания токена LiveKit (поддерживаем GET и POST)
   app.get('/api/token', async (req, res) => {
     try {
@@ -323,15 +358,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Отладка: показываем занятые слоты перед назначением
                 console.log(`Занятые слоты перед назначением для ${userId}:`, Array.from(occupiedSlots));
                 
-                // Находим первый свободный слот
+                // Находим свободный слот (с приоритетом для слота 1)
                 let assignedSlot = false;
-                for (let i = 1; i <= 12; i++) {
-                  if (!occupiedSlots.has(i)) {
-                    slotAssignments.set(i, userId);
-                    userSlots.set(userId, i);
-                    console.log(`Автоматически назначен слот ${i} для ${userId}`);
-                    assignedSlot = true;
-                    break;
+                
+                // Приоритетное назначение слота 1, если он свободен
+                if (!occupiedSlots.has(1)) {
+                  slotAssignments.set(1, userId);
+                  userSlots.set(userId, 1);
+                  console.log(`Приоритетное назначение слота 1 для ${userId}`);
+                  assignedSlot = true;
+                } else {
+                  // Если слот 1 занят, ищем другие свободные слоты
+                  for (let i = 2; i <= 12; i++) {
+                    if (!occupiedSlots.has(i)) {
+                      slotAssignments.set(i, userId);
+                      userSlots.set(userId, i);
+                      console.log(`Автоматически назначен слот ${i} для ${userId}`);
+                      assignedSlot = true;
+                      break;
+                    }
                   }
                 }
                 
