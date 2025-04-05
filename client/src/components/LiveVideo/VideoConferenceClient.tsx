@@ -90,24 +90,38 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         
         // Если есть активный трек, получаем его deviceId
         if (videoTracks.length > 0 && videoTracks[0].track) {
-          // Используем source для получения информации о MediaStreamTrack
-          const mediaStreamTrack = videoTracks[0].track.mediaStreamTrack;
-          
-          // Получаем список устройств для сравнения
-          navigator.mediaDevices.enumerateDevices().then(devices => {
-            // Находим соответствие по groupId (более надежный способ идентификации)
-            const matchingDevice = devices.find(device => 
-              device.kind === 'videoinput' && 
-              device.groupId === mediaStreamTrack.getSettings().groupId
-            );
+          try {
+            // Используем source для получения информации о MediaStreamTrack
+            const mediaStreamTrack = videoTracks[0].track.mediaStreamTrack;
+            const currentSettings = mediaStreamTrack.getSettings();
             
-            if (matchingDevice && matchingDevice.deviceId) {
-              console.log('Определена активная камера:', matchingDevice.deviceId);
-              setSelectedCamera(matchingDevice.deviceId);
+            // Если в настройках трека есть deviceId, используем его напрямую
+            if (currentSettings.deviceId) {
+              console.log('Определена активная камера через deviceId:', currentSettings.deviceId);
+              setSelectedCamera(currentSettings.deviceId);
+            } else {
+              // Запасной вариант через groupId
+              navigator.mediaDevices.enumerateDevices().then(devices => {
+                // Находим соответствие по groupId или label
+                const matchingDevice = devices.find(device => 
+                  device.kind === 'videoinput' && (
+                    device.groupId === currentSettings.groupId ||
+                    (device.label && mediaStreamTrack.label && 
+                     device.label.includes(mediaStreamTrack.label))
+                  )
+                );
+                
+                if (matchingDevice && matchingDevice.deviceId) {
+                  console.log('Определена активная камера через groupId:', matchingDevice.deviceId);
+                  setSelectedCamera(matchingDevice.deviceId);
+                }
+              }).catch(err => {
+                console.error('Ошибка при получении текущей камеры:', err);
+              });
             }
-          }).catch(err => {
-            console.error('Ошибка при получении текущей камеры:', err);
-          });
+          } catch (err) {
+            console.error('Ошибка при определении текущей камеры:', err);
+          }
         }
       }
     };
@@ -166,22 +180,34 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         // Обновляем выбранную камеру и используем её при следующем включении
         setSelectedCamera(deviceId);
         
-        // Если камера уже включена, то быстро переключаем её
+        // Если камера уже включена, то полностью отключаем все треки и создаем новый
         if (room.localParticipant.isCameraEnabled) {
           // Временно отключаем камеру
           await room.localParticipant.setCameraEnabled(false);
           
-          // Переключаем на новую камеру с задержкой
+          // Отключаем все существующие треки
+          const videoTracks = room.localParticipant.getTrackPublications().filter(
+            track => track.kind === 'video'
+          );
+          
+          // Массовое отключение всех треков
+          await room.localParticipant.unpublishAllTracks();
+          
+          // Создаем и публикуем новый трек с указанным deviceId
           setTimeout(async () => {
             try {
-              // Включаем камеру с новым deviceId
-              await room.localParticipant.setCameraEnabled(true, {
-                deviceId: { exact: deviceId }
+              // Создаем новый трек с указанным deviceId
+              const videoTrack = await createLocalVideoTrack({
+                deviceId: { exact: deviceId },
               });
+              
+              // Публикуем новый трек напрямую
+              await room.localParticipant.publishTrack(videoTrack);
+              
               console.log('Камера успешно переключена на:', deviceId);
             } catch (err) {
-              console.error('Ошибка при включении новой камеры:', err);
-              // Пробуем просто включить камеру обратно
+              console.error('Ошибка при публикации нового трека:', err);
+              // В случае ошибки пробуем просто включить камеру обратно
               room.localParticipant.setCameraEnabled(true);
             }
           }, 300);
