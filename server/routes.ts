@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { slotStorage } from "./slotStorage";
 import { AccessToken, VideoGrant } from "livekit-server-sdk";
 import { WebSocketServer } from "ws";
 import { WebSocket } from "ws";
@@ -286,7 +285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
 
     // Обработка входящих сообщений
-    ws.on('message', async (message: Buffer | string) => {
+    ws.on('message', (message: Buffer | string) => {
       try {
         const messageStr = message.toString();
         const data = JSON.parse(messageStr);
@@ -308,67 +307,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 cameraStates.set(userId, false);
               }
               
-              // Если пользователь не занял слот, пробуем восстановить предыдущий или назначить новый
+              // Если пользователь не занял слот, назначаем свободный
               if (!userSlots.has(userId)) {
-                // Определяем комнату - всегда используем 'mafialive-room' для совместимости с клиентом
-                const roomName = 'mafialive-room';
+                // Список уже занятых слотов
+                const occupiedSlots = new Set<number>();
+                slotAssignments.forEach((_, slot) => {
+                  occupiedSlots.add(slot);
+                });
                 
-                try {
-                  // Сначала пробуем получить предыдущий слот пользователя из БД
-                  const lastSlot = await slotStorage.getUserLastSlot(userId, roomName);
-                  
-                  if (lastSlot !== null) {
-                    console.log(`Найден предыдущий слот ${lastSlot} для пользователя ${userId}`);
-                    
-                    // Проверяем, свободен ли предыдущий слот
-                    if (!slotAssignments.has(lastSlot)) {
-                      // Восстанавливаем прежний слот
-                      slotAssignments.set(lastSlot, userId);
-                      userSlots.set(userId, lastSlot);
-                      console.log(`Восстановлен предыдущий слот ${lastSlot} для ${userId}`);
-                    } else {
-                      console.log(`Предыдущий слот ${lastSlot} занят, будет выбран новый`);
-                    }
+                // Отладка: показываем занятые слоты перед назначением
+                console.log(`Занятые слоты перед назначением для ${userId}:`, Array.from(occupiedSlots));
+                
+                // Находим первый свободный слот
+                let assignedSlot = false;
+                for (let i = 1; i <= 12; i++) {
+                  if (!occupiedSlots.has(i)) {
+                    slotAssignments.set(i, userId);
+                    userSlots.set(userId, i);
+                    console.log(`Автоматически назначен слот ${i} для ${userId}`);
+                    assignedSlot = true;
+                    break;
                   }
-                } catch (error) {
-                  console.error('Ошибка при попытке получить предыдущий слот:', error);
                 }
                 
-                // Если слот все еще не назначен, назначаем новый
-                if (!userSlots.has(userId)) {
-                  // Список уже занятых слотов
-                  const occupiedSlots = new Set<number>();
-                  slotAssignments.forEach((_, slot) => {
-                    occupiedSlots.add(slot);
-                  });
-                  
-                  // Отладка: показываем занятые слоты перед назначением
-                  console.log(`Занятые слоты перед назначением для ${userId}:`, Array.from(occupiedSlots));
-                  
-                  // Находим первый свободный слот
-                  let assignedSlot = false;
-                  for (let i = 1; i <= 12; i++) {
-                    if (!occupiedSlots.has(i)) {
-                      slotAssignments.set(i, userId);
-                      userSlots.set(userId, i);
-                      console.log(`Автоматически назначен новый слот ${i} для ${userId}`);
-                      
-                      // Сохраняем слот в базе данных
-                      try {
-                        await slotStorage.saveUserSlot(userId, i, roomName);
-                        console.log(`Слот ${i} сохранен в БД для пользователя ${userId}`);
-                      } catch (error) {
-                        console.error(`Ошибка при сохранении слота ${i} для ${userId}:`, error);
-                      }
-                      
-                      assignedSlot = true;
-                      break;
-                    }
-                  }
-                  
-                  if (!assignedSlot) {
-                    console.warn(`Не удалось найти свободный слот для ${userId}`);
-                  }
+                if (!assignedSlot) {
+                  console.warn(`Не удалось найти свободный слот для ${userId}`);
                 }
               }
             } else {
@@ -410,15 +373,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userSlots.set(userId, selectedSlot);
             
             console.log(`Пользователь ${userId} выбрал слот ${selectedSlot}`);
-            
-            // Сохраняем выбранный слот в базе данных
-            try {
-              const roomName = 'mafialive-room'; // всегда используем одну комнату
-              await slotStorage.saveUserSlot(userId, selectedSlot, roomName);
-              console.log(`Слот ${selectedSlot} сохранен в БД для пользователя ${userId}`);
-            } catch (error) {
-              console.error(`Ошибка при сохранении слота ${selectedSlot} для ${userId}:`, error);
-            }
             
             // Отправляем обновление всем подключенным клиентам
             broadcastSlotUpdate();
