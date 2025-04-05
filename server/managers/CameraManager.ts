@@ -39,45 +39,22 @@ export class CameraManager {
    * Установить состояние камеры пользователя с защитой от слишком частых обновлений
    * @param userId Идентификатор пользователя
    * @param isEnabled Новое состояние камеры
-   * @returns Объект с результатом обновления или undefined если обновление не выполнено
    */
-  setCameraState(userId: string, isEnabled: boolean): { userId: string, isEnabled: boolean, timestamp: number } | undefined {
+  setCameraState(userId: string, isEnabled: boolean): void {
     const oldState = this.cameraStates.get(userId);
-    const now = Date.now();
+    
+    // Если состояние не изменилось, ничего не делаем
+    if (oldState === isEnabled) {
+      return;
+    }
     
     // Проверяем, не было ли недавно обновления для этого пользователя
+    const now = Date.now();
     const lastUpdate = this.lastCameraUpdates.get(userId) || 0;
     
-    // Проверка на частоту обновлений
-    const isTooFrequent = now - lastUpdate < this.updateThreshold;
-    
-    // ВАЖНОЕ ИЗМЕНЕНИЕ: Мы всегда обновляем метку времени и возвращаем результат, 
-    // даже если состояние не изменилось или запрос слишком частый.
-    // Это гарантирует, что клиент получит подтверждение своей попытки изменения состояния,
-    // даже если реальное изменение не произошло.
-    
-    // Если состояние не изменилось или обновление слишком частое,
-    // обновляем только метку времени, но не меняем состояние
-    if (oldState === isEnabled || isTooFrequent) {
-      if (oldState === isEnabled) {
-        console.log(`Состояние камеры пользователя ${userId} не изменилось (${isEnabled})`);
-      }
-      
-      if (isTooFrequent) {
-        console.log(`Слишком частое обновление камеры для ${userId}, пропускаем (прошло ${now - lastUpdate}ms)`);
-      }
-      
-      // Обновляем метку времени в любом случае
-      this.lastCameraUpdates.set(userId, now);
-      
-      // Возвращаем текущее состояние с пометкой, что изменений не было
-      return {
-        userId,
-        isEnabled: oldState !== undefined ? oldState : isEnabled, // Используем текущее состояние или новое, если текущего нет
-        timestamp: now,
-        // Новое поле, показывающее, что состояние не изменилось
-        noChange: true
-      } as any; // Используем any для совместимости с существующим интерфейсом
+    if (now - lastUpdate < this.updateThreshold) {
+      console.log(`Слишком частое обновление камеры для ${userId}, пропускаем (прошло ${now - lastUpdate}ms)`);
+      return;
     }
     
     // Обновляем состояние и время последнего обновления
@@ -86,15 +63,12 @@ export class CameraManager {
     
     console.log(`Камера пользователя ${userId} ${isEnabled ? 'включена' : 'выключена'}`);
     
+    // Отправляем ТОЛЬКО событие об индивидуальном изменении состояния камеры
+    // и НЕ отправляем массовое обновление, которое может сбросить состояния других камер
+    globalEvents.emit("camera_state_changed", userId, isEnabled);
+    
     // Логируем состояние для отладки
     console.log('Текущие состояния камер:', JSON.stringify(this.getAllCameraStates()));
-    
-    // Возвращаем результат обновления
-    return {
-      userId,
-      isEnabled,
-      timestamp: now
-    };
   }
 
   /**

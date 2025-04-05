@@ -52,30 +52,15 @@ export function useSlots(userId: string) {
     
     // Сохраняем состояние камеры в sessionStorage для устойчивости к сбросам
     window.sessionStorage.setItem('camera-state', String(enabled));
-    console.log(`Сохранено ЛОКАЛЬНОЕ состояние камеры:`, enabled);
-    
-    // Немедленно обновляем локальное состояние для быстрой обратной связи
-    setState(prev => {
-      const userId = userIdRef.current;
-      const newCameraStates = { ...prev.cameraStates };
-      newCameraStates[userId] = enabled;
-      return {
-        ...prev,
-        cameraStates: newCameraStates
-      };
-    });
+    console.log(`Сохраняем состояние камеры в sessionStorage: ${enabled}`);
     
     // Обновляем время последнего переключения
     lastCameraToggleTime.current = now;
     
-    // Генерируем уникальный идентификатор запроса для отслеживания
-    const requestId = `req_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    
-    // Отправляем обновление на сервер с идентификатором запроса
+    // Отправляем обновление на сервер
     return sendMessage({
       type: 'camera_state_change',
-      enabled,
-      requestId
+      enabled
     });
   }, [sendMessage]);
 
@@ -245,84 +230,62 @@ export function useSlots(userId: string) {
             // Обработка индивидуального обновления состояния камеры
             case 'individual_camera_update': {
               const { userId, enabled } = data;
-              console.log(`Получено сообщение individual_camera_update: ${userId} -> ${enabled}`);
+              console.log(`Получено индивидуальное обновление камеры: ${userId} -> ${enabled}`);
               
-              // Получаем текущий ID пользователя
-              const currentUserId = userIdRef.current;
-              const globalId = window.currentUserIdentity;
-              
-              // Проверяем, является ли это обновление для нашей собственной камеры
-              const isCurrentUser = (
-                userId === currentUserId || 
-                userId === globalId
-              );
-              
-              console.log(`Проверка своей камеры: userId=${userId}, currentUserId=${currentUserId}, globalId=${globalId}, isCurrentUser=${isCurrentUser}`);
-              
-              // Полностью игнорируем обновления своей камеры от сервера
-              if (isCurrentUser) {
-                console.log(`ИГНОРИРУЕМ обновление своей камеры из individual_camera_update`);
-                return; // Выходим из обработчика, не меняя состояние
-              }
-              
-              // Для чужих камер обновляем состояние
               setState(prev => {
+                // Получаем текущий ID пользователя
+                const currentUserId = userIdRef.current;
+                const globalId = window.currentUserIdentity;
+                
+                // Создаем копию текущего состояния камер
                 const newCameraStates = { ...prev.cameraStates };
-                console.log(`Обновляем состояние ЧУЖОЙ камеры: ${userId} -> ${enabled}`);
-                newCameraStates[userId] = enabled;
+                
+                // Проверяем, является ли эта камера нашим пользователем
+                // ТОЛЬКО точное соответствие одному из наших идентификаторов
+                const isCurrentUser = (
+                  userId === currentUserId || 
+                  userId === globalId
+                );
+                
+                console.log(`Проверка своей камеры: userId=${userId}, currentUserId=${currentUserId}, globalId=${globalId}, isCurrentUser=${isCurrentUser}`);
+                
+                if (isCurrentUser) {
+                  // ДЛЯ СВОЕЙ КАМЕРЫ:
+                  console.log(`Получено обновление СВОЕЙ камеры с сервера: userId=${userId}, enabled=${enabled}`);
+                  console.log(`Наш ID: currentUserId=${currentUserId}, globalId=${globalId}`);
+                  
+                  // Всегда проверяем сохраненное состояние в sessionStorage
+                  const savedState = window.sessionStorage.getItem('camera-state');
+                  console.log(`Но используем сохраненное состояние:`, savedState);
+                  
+                  if (savedState !== null) {
+                    // Используем ТОЛЬКО сохраненное состояние вместо полученного
+                    const savedEnabled = savedState === 'true';
+                    console.log(`Устанавливаем свою камеру в сохраненное состояние: ${savedEnabled}`);
+                    newCameraStates[userId] = savedEnabled;
+                  } else if (userId in newCameraStates) {
+                    // Не меняем уже установленное состояние
+                    console.log(`Сохраняем текущее состояние своей камеры: ${userId} -> ${newCameraStates[userId]}`);
+                  } else {
+                    // Если нет данных, то по умолчанию камера ВЫКЛЮЧЕНА
+                    newCameraStates[userId] = false;
+                    console.log(`Устанавливаем начальное состояние своей камеры в выключено`);
+                    
+                    // Сохраняем это состояние
+                    window.sessionStorage.setItem('camera-state', 'false');
+                  }
+                } else {
+                  // ДЛЯ ЧУЖИХ КАМЕР:
+                  // Всегда обновляем состояние из сети
+                  console.log(`Обновляем состояние чужой камеры: ${userId} -> ${enabled}`);
+                  newCameraStates[userId] = enabled;
+                }
                 
                 return {
                   ...prev,
                   cameraStates: newCameraStates
                 };
               });
-              break;
-            }
-            
-            // Новый тип сообщения - обновление состояния камеры для других пользователей
-            case 'peer_camera_update': {
-              const { userId, enabled, timestamp } = data;
-              console.log(`Получено обновление чужой камеры (peer_camera_update): ${userId} -> ${enabled}`);
-              
-              // Проверяем, что это НЕ наша камера
-              const currentUserId = userIdRef.current;
-              const globalId = window.currentUserIdentity;
-              
-              if (userId === currentUserId || userId === globalId) {
-                console.log(`ОШИБКА: Получено peer_camera_update для своей камеры. Игнорируем.`);
-                return; // Выходим, не меняя состояние
-              }
-              
-              // Обновляем состояние чужой камеры
-              setState(prev => {
-                const newCameraStates = { ...prev.cameraStates };
-                newCameraStates[userId] = enabled;
-                
-                console.log(`Обновлено состояние чужой камеры: ${userId} -> ${enabled}, timestamp=${timestamp}`);
-                return {
-                  ...prev,
-                  cameraStates: newCameraStates
-                };
-              });
-              break;
-            }
-            
-            // Подтверждение от сервера об успешном изменении камеры
-            case 'camera_state_acknowledged': {
-              const { userId, enabled, requestId } = data;
-              console.log(`Получено подтверждение изменения камеры: ${userId} -> ${enabled}, requestId=${requestId}`);
-              
-              // Проверка что это наша камера
-              const currentUserId = userIdRef.current;
-              const globalId = window.currentUserIdentity;
-              
-              if (userId !== currentUserId && userId !== globalId) {
-                console.log(`ОШИБКА: Получено camera_state_acknowledged для чужой камеры. Игнорируем.`);
-                return;
-              }
-              
-              // Здесь не меняем состояние, оно уже обновлено в момент вызова setCameraState
-              console.log(`Изменение состояния камеры успешно подтверждено сервером: ${enabled}`);
               break;
             }
             
@@ -332,45 +295,6 @@ export function useSlots(userId: string) {
               console.log('Получено устаревшее camera_states_update сообщение, игнорируем его');
               // Не делаем никаких обновлений состояния, чтобы избежать конфликтов
               // с individual_camera_update
-              break;
-            }
-            
-            // Новый тип сообщения для начальной синхронизации состояний камер
-            case 'initial_camera_states': {
-              const { states } = data;
-              console.log('Получен набор начальных состояний камер:', states);
-              
-              // Получаем текущий ID пользователя для фильтрации
-              const currentUserId = userIdRef.current;
-              const globalId = window.currentUserIdentity;
-              
-              // Проверяем, не содержатся ли наши камеры в списке (что некорректно)
-              if (states[currentUserId] !== undefined || (globalId && states[globalId] !== undefined)) {
-                console.log('ПРЕДУПРЕЖДЕНИЕ: Полученные initial_camera_states содержат нашу камеру, это ошибка');
-              }
-              
-              // Обновляем состояния всех чужих камер
-              setState(prev => {
-                // Создаем копию текущих состояний
-                const newCameraStates = { ...prev.cameraStates };
-                
-                // Обновляем все состояния, кроме своей камеры
-                Object.entries(states).forEach(([stateUserId, stateValue]) => {
-                  // Проверяем, не является ли это нашей камерой
-                  if (stateUserId !== currentUserId && stateUserId !== globalId) {
-                    // Явно приводим значение к boolean
-                    const isEnabled = Boolean(stateValue);
-                    // Обновляем состояние только чужой камеры
-                    newCameraStates[stateUserId] = isEnabled;
-                    console.log(`Синхронизировано начальное состояние чужой камеры: ${stateUserId} -> ${isEnabled}`);
-                  }
-                });
-                
-                return {
-                  ...prev,
-                  cameraStates: newCameraStates
-                };
-              });
               break;
             }
             
