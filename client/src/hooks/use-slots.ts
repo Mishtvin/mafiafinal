@@ -12,6 +12,8 @@ export interface SlotsState {
   connected: boolean;
   error: string | null;
   cameraStates: Record<string, boolean>; // userId -> cameraOn
+  lastUpdatedCamera?: string; // userId последней обновленной камеры
+  cameraUpdateTimestamp?: number; // временная метка обновления
 }
 
 export function useSlots(userId: string) {
@@ -283,7 +285,9 @@ export function useSlots(userId: string) {
                 
                 return {
                   ...prev,
-                  cameraStates: newCameraStates
+                  cameraStates: newCameraStates,
+                  lastUpdatedCamera: userId,
+                  cameraUpdateTimestamp: Date.now()
                 };
               });
               break;

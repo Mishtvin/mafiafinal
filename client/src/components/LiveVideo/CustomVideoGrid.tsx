@@ -92,7 +92,7 @@ export function CustomVideoGrid() {
 /**
  * Мемоизированный компонент самой сетки - изолирует перерисовки
  * Этот компонент перерисовывается только при изменении слотов или участников,
- * но не при изменении состояния камер
+ * и содержит внутреннюю оптимизацию для перерисовки только изменившихся камер
  */
 const MemoizedVideoGrid = React.memo(
   function VideoGrid({
@@ -108,10 +108,30 @@ const MemoizedVideoGrid = React.memo(
     currentLocalParticipant: Participant | undefined;
     onSlotClick: (slotNumber: number) => void;
   }) {
+    // Состояние для отслеживания последнего обновления камеры
+    const [lastCameraUpdate, setLastCameraUpdate] = useState<{
+      userId: string;
+      timestamp: number;
+    } | null>(null);
+    
     // Создаем сетку из 12 слотов
     const slotNumbers = useMemo(() => {
       return Array.from({ length: 12 }, (_, i) => i + 1);
     }, []);
+    
+    // Получаем доступ к состоянию слотов и камер
+    const slotsContext = useSlots(currentLocalParticipant?.identity || 'unknown-user');
+    
+    // Отслеживаем изменения в состоянии камеры
+    useEffect(() => {
+      if (slotsContext.lastUpdatedCamera && slotsContext.cameraUpdateTimestamp) {
+        setLastCameraUpdate({
+          userId: slotsContext.lastUpdatedCamera,
+          timestamp: slotsContext.cameraUpdateTimestamp
+        });
+        console.log(`[CAMERA UPDATE] Обнаружено изменение камеры: ${slotsContext.lastUpdatedCamera}`);
+      }
+    }, [slotsContext.lastUpdatedCamera, slotsContext.cameraUpdateTimestamp]);
 
     console.log('[RENDER] MemoizedVideoGrid - должен перерисовываться ТОЛЬКО при изменении слотов или участников');
 
@@ -127,11 +147,23 @@ const MemoizedVideoGrid = React.memo(
             ? currentLocalParticipant 
             : (userId ? participantsMap.get(userId) : undefined);
           
+          // Установка ключа, который зависит от обновления камеры
+          // Если этот слот содержит камеру, которая обновилась, добавляем метку времени к ключу
+          const cameraKey = lastCameraUpdate && userId === lastCameraUpdate.userId
+            ? `${lastCameraUpdate.timestamp}`
+            : '';
+          
+          // Получаем метку времени для принудительного обновления
+          const forceUpdateTimestamp = lastCameraUpdate && userId === lastCameraUpdate.userId
+            ? lastCameraUpdate.timestamp
+            : undefined;
+            
           return participant ? (
             <ParticipantSlot 
-              key={`slot-${slotNumber}`}
+              key={`slot-${slotNumber}-${cameraKey}`}
               participant={participant}
               slotNumber={slotNumber}
+              forceUpdateTimestamp={forceUpdateTimestamp}
             />
           ) : (
             <EmptySlot 
@@ -184,13 +216,26 @@ const MemoizedVideoGrid = React.memo(
 );
 
 /**
+ * Props для компонента StableVideoTrack
+ */
+interface StableVideoTrackProps {
+  participant: Participant;
+  forceUpdateTimestamp?: number;
+}
+
+/**
  * Стабильный компонент для отображения видеотрека участника
  * Оптимизирован для минимизации перерисовок
  */
 const StableVideoTrack = React.memo(
-  ({ participant }: { participant: Participant }) => {
+  ({ participant, forceUpdateTimestamp }: StableVideoTrackProps) => {
     // Сохраняем идентификатор для логов
     const identity = participant.identity;
+    
+    // Если передана метка времени, выводим сообщение о перерисовке из-за неё
+    if (forceUpdateTimestamp) {
+      console.log(`[FORCE UPDATE] Принудительное обновление видео для ${identity} в ${new Date(forceUpdateTimestamp).toISOString()}`);
+    }
     
     // Получаем список видеотреков
     const videoTracks = useTracks(
@@ -252,7 +297,12 @@ const StableVideoTrack = React.memo(
   },
   // Строгий компаратор для предотвращения перерисовки
   (prevProps, nextProps) => {
-    // Сравниваем только идентификаторы - это единственное, что мы используем из props
+    // Проверяем наличие принудительного обновления
+    if (prevProps.forceUpdateTimestamp !== nextProps.forceUpdateTimestamp) {
+      return false; // Если метки различаются, разрешаем перерисовку
+    }
+    
+    // Сравниваем идентификаторы
     return prevProps.participant.identity === nextProps.participant.identity;
   }
 );
@@ -262,8 +312,20 @@ const StableVideoTrack = React.memo(
  * Обернут в React.memo для предотвращения лишних перерисовок
  * Используем сильный компаратор, чтобы предотвратить лишние перерисовки
  */
+/**
+ * Prop для компонента ParticipantSlot с дополнительной меткой времени
+ * для принудительного обновления при изменении камеры
+ */
+interface ParticipantSlotProps {
+  participant: Participant;
+  slotNumber: number;
+  // Метка времени не используется напрямую в компоненте,
+  // но передается через свойство key для принудительного обновления
+  forceUpdateTimestamp?: number;
+}
+
 const ParticipantSlot = React.memo(
-  ({ participant, slotNumber }: { participant: Participant; slotNumber: number }) => {
+  ({ participant, slotNumber, forceUpdateTimestamp }: ParticipantSlotProps) => {
     // Отслеживаем перерисовки
     console.log(`[RENDER] ParticipantSlot ${slotNumber} для ${participant.identity}`);
     
@@ -273,7 +335,10 @@ const ParticipantSlot = React.memo(
     
     return (
       <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
-        <StableVideoTrack participant={participant} />
+        <StableVideoTrack 
+          participant={participant} 
+          forceUpdateTimestamp={forceUpdateTimestamp} 
+        />
         
         {/* Номер слота в левом нижнем углу */}
         <div 
@@ -296,7 +361,8 @@ const ParticipantSlot = React.memo(
     return (
       prevProps.slotNumber === nextProps.slotNumber &&
       prevProps.participant.identity === nextProps.participant.identity &&
-      prevProps.participant.isLocal === nextProps.participant.isLocal
+      prevProps.participant.isLocal === nextProps.participant.isLocal &&
+      prevProps.forceUpdateTimestamp === nextProps.forceUpdateTimestamp
     );
   }
 );
