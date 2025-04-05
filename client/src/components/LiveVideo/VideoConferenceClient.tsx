@@ -16,6 +16,7 @@ import {
 } from 'livekit-client';
 import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
+import { IsolatedVideoGrid } from './IsolatedVideoGrid';
 import { useSlots } from '../../hooks/use-slots';
 
 import { SlotsState } from '../../hooks/use-slots';
@@ -678,7 +679,7 @@ export function VideoConferenceClient(props: {
         <div className="flex flex-col h-screen bg-slate-900 overflow-hidden">        
           {/* Main content with custom grid */}
           <main className="flex-1 relative overflow-y-auto mobile-scroller">
-            <CustomVideoGrid />
+            <IsolatedVideoGrid />
           </main>
         </div>
       </LiveKitRoom>
