@@ -170,123 +170,133 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
   
   // Обновляем статус камеры при изменении состояния локального участника
   useEffect(() => {
-    const updateCameraState = () => {
-      if (room && room.localParticipant) {
-        // Проверка состояния камеры напрямую через видеотреки
-        const hasActiveVideoTracks = room.localParticipant
-          .getTrackPublications()
-          .some(track => track.kind === 'video' && !track.isMuted && track.track);
-        
-        // По умолчанию используем API статус для синхронизации UI
-        const apiCameraEnabled = room.localParticipant.isCameraEnabled;
-        
-        // Проверяем первое ли это подключение
-        const isFirstConnection = !window.sessionStorage.getItem('camera-state-initialized');
-        
-        // Получаем сохраненное состояние камеры из sessionStorage (добавлено для сохранения состояния)
-        const savedCameraState = window.sessionStorage.getItem('camera-state');
-        const hasSavedState = savedCameraState !== null;
-        
-        // Определяем эффективное состояние камеры
-        let effectiveState: boolean;
-        
-        if (hasSavedState) {
-          // Приоритет у сохраненного состояния, если оно есть
-          effectiveState = savedCameraState === 'true';
-          console.log('Использую сохраненное состояние камеры:', effectiveState);
-        } else if (isFirstConnection) {
-          // При первом подключении камера ВКЛЮЧЕНА
-          effectiveState = true;
-        } else {
-          // Иначе используем текущее API состояние
-          effectiveState = apiCameraEnabled;
+    if (!room || !room.localParticipant) return;
+    
+    // Флаги для контроля подключения и инициализации камеры
+    let isConnected = false;
+    let cameraInitialized = false;
+    let cameraInitializationTimer: NodeJS.Timeout | null = null;
+    
+    // Обработчик события подключения к комнате
+    const handleConnected = () => {
+      console.log('СОБЫТИЕ: Комната подключена, планируем инициализацию камеры');
+      isConnected = true;
+      
+      // Задержка перед инициализацией камеры для стабильности
+      if (!cameraInitialized) {
+        // Отменяем любые предыдущие таймеры
+        if (cameraInitializationTimer) {
+          clearTimeout(cameraInitializationTimer);
         }
         
-        // Отмечаем, что инициализация прошла
-        if (isFirstConnection) {
-          window.sessionStorage.setItem('camera-state-initialized', 'true');
-        }
-        
-        console.log('Состояние камеры обновлено:', 
-                    'треки:', hasActiveVideoTracks, 
-                    'API:', apiCameraEnabled,
-                    'сохраненное:', hasSavedState ? savedCameraState : 'нет',
-                    'итоговое:', effectiveState,
-                    'первое подключение:', isFirstConnection);
-        
-        // Устанавливаем состояние в UI
-        setCameraEnabled(effectiveState);
-        
-        // Если мы восстанавливаем состояние и камера должна быть включена, 
-        // то включаем ее через LiveKit API с увеличенной задержкой
-        if (hasSavedState && effectiveState && !apiCameraEnabled) {
-          console.log('Восстанавливаю сохраненное состояние камеры: включение (с задержкой)');
-          setTimeout(() => {
-            console.log('Запускаем включение камеры после задержки');
-            room.localParticipant.setCameraEnabled(true)
-              .then(() => {
-                console.log('Камера успешно включена после переподключения');
-                // Синхронизируем с WebSocket
-                if (slotsState && typeof slotsState.setCameraState === 'function') {
-                  slotsState.setCameraState(true);
-                }
-              })
-              .catch(err => console.error('Ошибка при восстановлении состояния камеры:', err));
-          }, 2500); // Увеличенная задержка для стабильности
-        }
-        
-        // Этот вызов только обновляет список доступных камер и определяет текущую активную
-        // Вызываем только если камера включена, чтобы избежать сброса на другую камеру
-        if (effectiveState) {
-          getCameras();
-        }
+        cameraInitializationTimer = setTimeout(() => {
+          initializeCamera();
+        }, 1000);
       }
     };
     
-    // Слушаем изменения состояния камеры
-    if (room && room.localParticipant) {
-      room.localParticipant.on('trackMuted', updateCameraState);
-      room.localParticipant.on('trackUnmuted', updateCameraState);
-      room.localParticipant.on('trackPublished', updateCameraState);
-      room.localParticipant.on('trackUnpublished', updateCameraState);
+    // Функция инициализации камеры (выполняется один раз после подключения)
+    const initializeCamera = () => {
+      if (!room || !room.localParticipant || cameraInitialized) return;
       
-      // Проверяем сохраненное состояние, иначе используем камеру ВКЛЮЧЕННОЙ при инициализации
+      console.log('ИНИЦИАЛИЗАЦИЯ: Настраиваем камеру после подключения');
+      cameraInitialized = true;
+      
+      // Получаем состояние камеры из хранилища
       const savedState = window.sessionStorage.getItem('camera-state');
-      if (savedState === 'false') {
-        setCameraEnabled(false);
-      } else {
-        setCameraEnabled(true);
+      const shouldEnableCamera = savedState !== 'false'; // По умолчанию включено
+      
+      console.log('ИНИЦИАЛИЗАЦИЯ: Целевое состояние камеры:', shouldEnableCamera);
+      
+      // Устанавливаем UI состояние сразу
+      setCameraEnabled(shouldEnableCamera);
+      
+      // Обновляем реальное состояние камеры через LiveKit API с задержкой
+      setTimeout(() => {
+        console.log('ИНИЦИАЛИЗАЦИЯ: Применяем состояние камеры через LiveKit API');
+        
+        room.localParticipant.setCameraEnabled(shouldEnableCamera)
+          .then(() => {
+            console.log('ИНИЦИАЛИЗАЦИЯ: Камера успешно настроена, состояние:', shouldEnableCamera);
+            
+            // Синхронизируем с WebSocket только если камера включена
+            if (shouldEnableCamera && slotsState && typeof slotsState.setCameraState === 'function') {
+              slotsState.setCameraState(true);
+            }
+            
+            // Проверяем и синхронизируем еще раз через некоторое время
+            setTimeout(syncCameraState, 1000);
+          })
+          .catch(err => {
+            console.error('ОШИБКА ИНИЦИАЛИЗАЦИИ КАМЕРЫ:', err);
+            // Если произошла ошибка, пробуем еще раз через некоторое время
+            setTimeout(() => {
+              console.log('ПОВТОРНАЯ ПОПЫТКА настройки камеры');
+              room.localParticipant.setCameraEnabled(shouldEnableCamera)
+                .catch(err => console.error('ПОВТОРНАЯ ОШИБКА настройки камеры:', err));
+            }, 2000);
+          });
+      }, 1500);
+    };
+    
+    // Функция для синхронизации состояния UI с реальным состоянием камеры
+    const syncCameraState = () => {
+      if (!room || !room.localParticipant) return;
+      
+      // Получаем реальное состояние камеры
+      const apiCameraEnabled = room.localParticipant.isCameraEnabled;
+      
+      // Если состояния не совпадают, синхронизируем UI
+      if (cameraEnabled !== apiCameraEnabled) {
+        console.log('СИНХРОНИЗАЦИЯ: Обнаружено рассогласование состояний камеры (UI/API):', 
+                    cameraEnabled, '/', apiCameraEnabled);
+        setCameraEnabled(apiCameraEnabled);
+        window.sessionStorage.setItem('camera-state', String(apiCameraEnabled));
       }
       
-      // Вызываем немедленно для обновления состояния
-      updateCameraState();
-      
-      // Дополнительно проверяем состояние иконки после увеличенной задержки
-      // для гарантированной синхронизации с LiveKit
-      setTimeout(() => {
-        // Проверяем на рассогласование и если есть - исправляем
-        const realCameraState = room.localParticipant.isCameraEnabled;
-        
-        // Для выключенной камеры всегда устанавливаем значение false,
-        // даже если реально она ещё не отключилась полностью
-        if (cameraEnabled !== realCameraState) {
-          console.log('Обнаружено рассогласование - синхронизируем UI с реальным состоянием камеры');
-          setCameraEnabled(realCameraState);
-          // Обновляем сохраненное состояние
-          window.sessionStorage.setItem('camera-state', String(realCameraState));
-        }
-      }, 3000);
+      // Обновляем список камер, если камера включена
+      if (apiCameraEnabled) {
+        getCameras();
+      }
+    };
+    
+    // Обработчик событий изменения состояния треков
+    const handleTrackChange = () => {
+      // Вызываем синхронизацию только если камера уже инициализирована
+      if (cameraInitialized) {
+        syncCameraState();
+      }
+    };
+    
+    // Регистрируем обработчики событий
+    room.on('connected', handleConnected);
+    room.localParticipant.on('trackMuted', handleTrackChange);
+    room.localParticipant.on('trackUnmuted', handleTrackChange);
+    room.localParticipant.on('trackPublished', handleTrackChange);
+    room.localParticipant.on('trackUnpublished', handleTrackChange);
+    
+    // Если комната уже подключена, инициализируем камеру
+    if (room.state === 'connected') {
+      handleConnected();
     }
     
     return () => {
-      if (room && room.localParticipant) {
-        room.localParticipant.off('trackMuted', updateCameraState);
-        room.localParticipant.off('trackUnmuted', updateCameraState);
-        room.localParticipant.off('trackPublished', updateCameraState);
-        room.localParticipant.off('trackUnpublished', updateCameraState);
+      // Очищаем все таймеры
+      if (cameraInitializationTimer) {
+        clearTimeout(cameraInitializationTimer);
       }
-    }
-  }, [room, slotsState]);
+      
+      // Удаляем обработчики событий
+      room.off('connected', handleConnected);
+      
+      if (room.localParticipant) {
+        room.localParticipant.off('trackMuted', handleTrackChange);
+        room.localParticipant.off('trackUnmuted', handleTrackChange);
+        room.localParticipant.off('trackPublished', handleTrackChange);
+        room.localParticipant.off('trackUnpublished', handleTrackChange);
+      }
+    };
+  }, [room, slotsState, cameraEnabled]);
   
   // Функция переключения камеры с надежной проверкой переключения
   const toggleCamera = async () => {
