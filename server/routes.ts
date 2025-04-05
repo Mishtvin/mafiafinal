@@ -300,14 +300,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId = data.userId;
             if (userId) {
               connections.set(userId, ws);
-              console.log(`Пользователь зарегистрирован: ${userId}`);
+              const preferredSlot = data.preferredSlot ? Number(data.preferredSlot) : null;
+              console.log(`Пользователь зарегистрирован: ${userId}${preferredSlot ? `, предпочтительный слот: ${preferredSlot}` : ', без предпочтительного слота'}`);
               
               // Устанавливаем начальное состояние камеры (выключена по умолчанию)
               if (!cameraStates.has(userId)) {
                 cameraStates.set(userId, false);
               }
               
-              // Если пользователь не занял слот, назначаем свободный
+              // Если пользователь не занял слот, пытаемся назначить предпочтительный или свободный
               if (!userSlots.has(userId)) {
                 // Список уже занятых слотов
                 const occupiedSlots = new Set<number>();
@@ -318,15 +319,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Отладка: показываем занятые слоты перед назначением
                 console.log(`Занятые слоты перед назначением для ${userId}:`, Array.from(occupiedSlots));
                 
-                // Находим первый свободный слот
+                // Проверяем, есть ли предпочтительный слот
+                const preferredSlot = data.preferredSlot ? Number(data.preferredSlot) : null;
                 let assignedSlot = false;
-                for (let i = 1; i <= 12; i++) {
-                  if (!occupiedSlots.has(i)) {
-                    slotAssignments.set(i, userId);
-                    userSlots.set(userId, i);
-                    console.log(`Автоматически назначен слот ${i} для ${userId}`);
+                
+                // Пытаемся назначить предпочтительный слот, если он свободен
+                if (preferredSlot && preferredSlot >= 1 && preferredSlot <= 12) {
+                  if (!occupiedSlots.has(preferredSlot)) {
+                    slotAssignments.set(preferredSlot, userId);
+                    userSlots.set(userId, preferredSlot);
+                    console.log(`Назначен предпочтительный слот ${preferredSlot} для ${userId}`);
                     assignedSlot = true;
-                    break;
+                  } else {
+                    console.log(`Предпочтительный слот ${preferredSlot} для ${userId} уже занят`);
+                  }
+                }
+                
+                // Если предпочтительный слот не указан или занят, находим первый свободный
+                if (!assignedSlot) {
+                  for (let i = 1; i <= 12; i++) {
+                    if (!occupiedSlots.has(i)) {
+                      slotAssignments.set(i, userId);
+                      userSlots.set(userId, i);
+                      console.log(`Автоматически назначен слот ${i} для ${userId}`);
+                      assignedSlot = true;
+                      break;
+                    }
                   }
                 }
                 
