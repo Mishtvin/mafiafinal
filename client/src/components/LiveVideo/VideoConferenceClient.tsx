@@ -164,10 +164,16 @@ const ControlDrawer = ({ room }: { room: Room }) => {
           .getTrackPublications()
           .some(track => track.kind === 'video' && !track.isMuted && track.track);
         
-        // Обновляем состояние UI на основе реального состояния треков
-        console.log('Состояние камеры обновлено:', hasActiveVideoTracks, 
-                    '(LiveKit API:', room.localParticipant.isCameraEnabled, ')');
-        setCameraEnabled(hasActiveVideoTracks);
+        // Обновляем состояние UI на основе реального состояния треков или API LiveKit
+        // В начале подключения у нас может еще не быть треков, но камера уже может быть включена
+        const effectiveState = hasActiveVideoTracks || room.localParticipant.isCameraEnabled;
+        
+        console.log('Состояние камеры обновлено:', 
+                    'треки:', hasActiveVideoTracks, 
+                    'API:', room.localParticipant.isCameraEnabled,
+                    'итоговое:', effectiveState);
+        
+        setCameraEnabled(effectiveState);
         
         // Этот вызов только обновляет список доступных камер и определяет текущую активную
         getCameras();
