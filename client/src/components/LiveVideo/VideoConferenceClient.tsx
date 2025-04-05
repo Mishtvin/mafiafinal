@@ -18,11 +18,13 @@ import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
 import { useSlots } from '../../hooks/use-slots';
 
+import { SlotsState } from '../../hooks/use-slots';
+
 /**
  * Контроллер для выдвижной панели управления, размещенный ВНЕ LiveKitRoom
  * для предотвращения проблем с переподключением
  */ 
-const ControlDrawer = ({ room }: { room: Room }) => {
+const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnType<typeof useSlots> }) => {
   const [isOpen, setIsOpen] = useState(false);
   
   // Принудительно устанавливаем начальное состояние камеры как включенное
@@ -172,8 +174,24 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         // Проверяем первое ли это подключение
         const isFirstConnection = !window.sessionStorage.getItem('camera-state-initialized');
         
-        // При первом подключении устанавливаем камеру как выключенную
-        let effectiveState = isFirstConnection ? false : apiCameraEnabled;
+        // Получаем сохраненное состояние камеры из sessionStorage (добавлено для сохранения состояния)
+        const savedCameraState = window.sessionStorage.getItem('camera-state');
+        const hasSavedState = savedCameraState !== null;
+        
+        // Определяем эффективное состояние камеры
+        let effectiveState: boolean;
+        
+        if (hasSavedState) {
+          // Приоритет у сохраненного состояния, если оно есть
+          effectiveState = savedCameraState === 'true';
+          console.log('Использую сохраненное состояние камеры:', effectiveState);
+        } else if (isFirstConnection) {
+          // При первом подключении камера выключена
+          effectiveState = false;
+        } else {
+          // Иначе используем текущее API состояние
+          effectiveState = apiCameraEnabled;
+        }
         
         // Отмечаем, что инициализация прошла
         if (isFirstConnection) {
@@ -183,10 +201,29 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         console.log('Состояние камеры обновлено:', 
                     'треки:', hasActiveVideoTracks, 
                     'API:', apiCameraEnabled,
+                    'сохраненное:', hasSavedState ? savedCameraState : 'нет',
                     'итоговое:', effectiveState,
                     'первое подключение:', isFirstConnection);
         
+        // Устанавливаем состояние в UI
         setCameraEnabled(effectiveState);
+        
+        // Если мы восстанавливаем состояние и камера должна быть включена, 
+        // то включаем ее через LiveKit API
+        if (hasSavedState && effectiveState && !apiCameraEnabled) {
+          console.log('Восстанавливаю сохраненное состояние камеры: включение');
+          setTimeout(() => {
+            room.localParticipant.setCameraEnabled(true)
+              .then(() => {
+                console.log('Камера успешно включена после переподключения');
+                // Синхронизируем с WebSocket
+                if (slotsState && typeof slotsState.setCameraState === 'function') {
+                  slotsState.setCameraState(true);
+                }
+              })
+              .catch(err => console.error('Ошибка при восстановлении состояния камеры:', err));
+          }, 1000); // Задержка для стабильности
+        }
         
         // Этот вызов только обновляет список доступных камер и определяет текущую активную
         // Вызываем только если камера включена, чтобы избежать сброса на другую камеру
@@ -203,21 +240,28 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       room.localParticipant.on('trackPublished', updateCameraState);
       room.localParticipant.on('trackUnpublished', updateCameraState);
       
-      // ПРИНУДИТЕЛЬНО устанавливаем камеру как выключенную при инициализации
-      setCameraEnabled(false);
+      // ПРИНУДИТЕЛЬНО устанавливаем камеру как выключенную при инициализации,
+      // но только если нет сохраненного состояния
+      const savedState = window.sessionStorage.getItem('camera-state');
+      if (savedState !== 'true') {
+        setCameraEnabled(false);
+      }
       
-      // Вызываем немедленно для обновления состояния селекта
+      // Вызываем немедленно для обновления состояния
       updateCameraState();
       
       // Дополнительно проверяем состояние иконки после небольшой задержки
       setTimeout(() => {
         // Проверяем на рассогласование и если есть - исправляем
         const realCameraState = room.localParticipant.isCameraEnabled;
+        
         // Для выключенной камеры всегда устанавливаем значение false,
         // даже если реально она ещё не отключилась полностью
         if (cameraEnabled !== realCameraState) {
           console.log('Обнаружено рассогласование - синхронизируем UI с реальным состоянием камеры');
           setCameraEnabled(realCameraState);
+          // Обновляем сохраненное состояние
+          window.sessionStorage.setItem('camera-state', String(realCameraState));
         }
       }, 1500);
     }
@@ -230,7 +274,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         room.localParticipant.off('trackUnpublished', updateCameraState);
       }
     }
-  }, [room]);
+  }, [room, slotsState]);
   
   // Функция переключения камеры с надежной проверкой переключения
   const toggleCamera = async () => {
@@ -242,9 +286,20 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       // Обновляем UI состояние немедленно
       setCameraEnabled(newCameraState);
       
+      // Сохраняем желаемое состояние камеры в sessionStorage
+      // для восстановления после перезагрузки или переподключения
+      window.sessionStorage.setItem('camera-state', String(newCameraState));
+      console.log('Сохранено желаемое состояние камеры:', newCameraState);
+      
       try {
         // Небольшая задержка для предотвращения потенциальных проблем синхронизации
         await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Вызываем slotsState для синхронизации состояния через WebSocket
+        if (slotsState && typeof slotsState.setCameraState === 'function') {
+          console.log('Синхронизируем состояние камеры через WebSocket:', newCameraState);
+          slotsState.setCameraState(newCameraState);
+        }
         
         // Переключаем камеру через LiveKit API
         await room.localParticipant.setCameraEnabled(newCameraState);
@@ -271,6 +326,9 @@ const ControlDrawer = ({ room }: { room: Room }) => {
             console.log('Состояние камеры и UI рассинхронизированы, исправляем:', 
                         'реальное:', realCameraState, 'UI:', newCameraState);
             setCameraEnabled(realCameraState);
+            
+            // Обновляем сохраненное состояние
+            window.sessionStorage.setItem('camera-state', String(realCameraState));
           }
           
           // Обновляем список камер, но не переключаем на другую при выключении
@@ -284,6 +342,9 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         setTimeout(() => {
           const realState = room.localParticipant.isCameraEnabled;
           setCameraEnabled(realState);
+          
+          // Обновляем сохраненное состояние
+          window.sessionStorage.setItem('camera-state', String(realState));
         }, 300);
       }
     }
@@ -571,7 +632,7 @@ export function VideoConferenceClient(props: {
       </LiveKitRoom>
       
       {/* Рендерим элементы управления отдельно */}
-      <ControlDrawer room={room} />
+      <ControlDrawer room={room} slotsState={slotsState} />
     </>
   );
 }
