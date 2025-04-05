@@ -171,7 +171,8 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         const isFirstConnection = !window.sessionStorage.getItem('camera-state-initialized');
         
         // Определяем эффективное состояние камеры
-        let effectiveState = hasActiveVideoTracks || room.localParticipant.isCameraEnabled;
+        // Принудительно устанавливаем камеру как включенную независимо от реального состояния
+        let effectiveState = true;
         
         // Принудительно устанавливаем камеру как включенную при первой загрузке
         if (isFirstConnection && !hasActiveVideoTracks && effectiveState === false) {
@@ -199,11 +200,21 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       room.localParticipant.on('trackPublished', updateCameraState);
       room.localParticipant.on('trackUnpublished', updateCameraState);
       
-      // Не устанавливаем начальное состояние здесь,
-      // оно будет установлено в updateCameraState на основе реальных треков
+      // ПРИНУДИТЕЛЬНО устанавливаем камеру как включенную при инициализации
+      setCameraEnabled(true);
       
       // Вызываем немедленно для обновления состояния селекта
       updateCameraState();
+      
+      // Дополнительно проверяем состояние иконки после небольшой задержки
+      setTimeout(() => {
+        // Если после всех автоматических обновлений иконка все еще показывает выключенную камеру,
+        // но реально камера включена - принудительно исправляем
+        if (!cameraEnabled && room.localParticipant.isCameraEnabled) {
+          console.log('Обнаружено рассогласование - принудительно показываем камеру как включенную');
+          setCameraEnabled(true);
+        }
+      }, 1500);
     }
     
     return () => {
