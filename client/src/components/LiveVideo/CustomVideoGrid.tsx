@@ -98,7 +98,7 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
       )}
       {/* Номер слота в левом нижнем углу */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
-        {slotNumber}
+        {slotNumber === 12 ? "Ведучий" : slotNumber}
       </div>
       
       {/* Имя пользователя рядом с номером слота */}
@@ -133,14 +133,12 @@ function EmptySlot({ index }: { index: number }) {
               />
             </svg>
           </div>
-          <div className="bg-slate-800/60 px-2 py-0.5 rounded-md">
-            <span className="text-xs font-medium text-slate-400">Ожидание</span>
-          </div>
+
         </div>
       </div>
       {/* Только номер слота для пустого слота */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
-        {index + 1}
+        {index + 1 === 12 ? "Ведучий" : index + 1}
       </div>
     </div>
   );
