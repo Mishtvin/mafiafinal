@@ -456,31 +456,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (now - lastPongTime > 15000) { // 15 секунд без ответа
         console.log(`Соединение неактивно более 15 секунд для ${userId || 'неизвестного пользователя'}`);
         
-        // Очищаем все ресурсы пользователя
+        // Временно помечаем как неактивного, но НЕ освобождаем слоты и не удаляем соединение
+        // Это позволит пользователю вернуться к своему слоту, когда вкладка снова станет активной
         if (userId) {
-          // Освобождаем все слоты этого пользователя
-          const slotToRelease = userSlots.get(userId);
-          if (slotToRelease !== undefined) {
-            slotAssignments.delete(slotToRelease);
-            userSlots.delete(userId);
-            console.log(`Автоматически освобожден слот ${slotToRelease} для ${userId} из-за неактивности`);
+          console.log(`Соединение помечено как неактивное для ${userId}, но слот ${userSlots.get(userId)} сохранен`);
+          
+          // Оставляем слот и соединение как есть, только обновляем состояние камеры на выключенное
+          if (cameraStates.has(userId)) {
+            cameraStates.set(userId, false);
+            broadcastCameraStates();
           }
-          
-          // Удаляем информацию о состоянии камеры
-          cameraStates.delete(userId);
-          
-          // Удаляем из списка подключений
-          connections.delete(userId);
-          console.log(`Пользователь отключен из-за неактивности: ${userId}`);
-          
-          // Транслируем обновление всем клиентам
-          broadcastSlotUpdate();
-          broadcastCameraStates();
         }
         
-        // Принудительно закрываем соединение
-        ws.terminate();
-        clearInterval(connectionCheckInterval);
+        // НЕ закрываем соединение, оставляем его активным
+        // ws.terminate(); // Удалено для предотвращения потери слота
       }
     }, 5000);
     
