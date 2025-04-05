@@ -214,7 +214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     broadcastCameraStates();
   }, 5000); // каждые 5 секунд
 
-  const pingInterval = 2000; // Уменьшаем до 2 секунд для более быстрой синхронизации
+  const pingInterval = 5000; // 5 секунд
   const pingIntervalId = setInterval(() => {
     // Проверяем и удаляем любые устаревшие соединения
     connections.forEach((ws, userId) => {
@@ -338,43 +338,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error('Ошибка: получен пустой userId при регистрации');
             }
             
-            // Немедленно отправляем текущее состояние конкретно этому пользователю
-            if (ws.readyState === WebSocket.OPEN) {
-              try {
-                // Формируем актуальное состояние слотов
-                const currentSlots: SlotInfo[] = [];
-                slotAssignments.forEach((slotUserId, slotNumber) => {
-                  currentSlots.push({ userId: slotUserId, slotNumber });
-                });
-                
-                // Сортируем для стабильного порядка
-                currentSlots.sort((a, b) => a.slotNumber - b.slotNumber);
-                
-                // Отправляем состояние слотов новому пользователю
-                ws.send(JSON.stringify({
-                  type: 'slots_update',
-                  slots: currentSlots
-                }));
-                
-                // Формируем актуальное состояние камер
-                const currentCameraStates: Record<string, boolean> = {};
-                cameraStates.forEach((enabled, cameraUserId) => {
-                  currentCameraStates[cameraUserId] = enabled;
-                });
-                
-                // Отправляем состояние камер новому пользователю
-                ws.send(JSON.stringify({
-                  type: 'camera_states_update',
-                  cameraStates: currentCameraStates
-                }));
-                
-                console.log(`Отправлено начальное состояние пользователю ${userId}: слотов=${currentSlots.length}, камер=${Object.keys(currentCameraStates).length}`);
-              } catch (e) {
-                console.error(`Ошибка отправки начального состояния для ${userId}:`, e);
-              }
-            }
-            
-            // Отправляем обновление всем для синхронизации
+            // Отправляем текущее состояние слотов всем клиентам для синхронизации
             broadcastSlotUpdate();
             
             // Отправляем состояние камер всем клиентам для синхронизации
@@ -383,78 +347,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
           case 'select_slot':
             // Пользователь выбирает слот
-            if (!userId) {
-              console.log('Попытка выбора слота без ID пользователя');
-              break;
-            }
+            if (!userId) break;
             
             const selectedSlot = data.slotNumber;
             const previousSlot = userSlots.get(userId);
             
-            console.log(`Запрос на выбор слота ${selectedSlot} от ${userId}, предыдущий слот: ${previousSlot}, dragAndDrop: ${!!data.dragAndDrop}`);
+            // Освобождаем предыдущий слот, если был
+            if (previousSlot !== undefined) {
+              slotAssignments.delete(previousSlot);
+            }
             
             // Проверяем, не занят ли выбранный слот
             const currentOccupant = slotAssignments.get(selectedSlot);
-            
-            // Проверяем валидность операции
-            if (selectedSlot === previousSlot) {
-              console.log(`Игнорирую выбор того же слота ${selectedSlot} пользователем ${userId}`);
-              
-              // Сообщаем клиенту, что операция не нужна
-              sendToClient({
-                type: 'slot_selection_result',
-                success: false,
-                message: 'same_slot'
-              });
-              break;
-            }
-            
             if (currentOccupant && currentOccupant !== userId) {
-              console.log(`Слот ${selectedSlot} уже занят пользователем ${currentOccupant}`);
-              
-              // Слот занят другим пользователем - при обычном клике сообщаем, что занято
-              if (!data.dragAndDrop) {
-                sendToClient({
-                  type: 'slot_busy',
-                  slotNumber: selectedSlot
-                });
-                break;
-              }
-              
-              // При перетаскивании - меняем пользователей местами
-              console.log(`Меняем местами: ${userId} из слота ${previousSlot} и ${currentOccupant} из слота ${selectedSlot}`);
-              
-              // Перемещаем другого пользователя в предыдущий слот текущего пользователя
-              if (previousSlot !== undefined) {
-                slotAssignments.set(previousSlot, currentOccupant);
-                userSlots.set(currentOccupant, previousSlot);
-                console.log(`Пользователь ${currentOccupant} перемещен в слот ${previousSlot}`);
-              } else {
-                // Если у текущего пользователя нет предыдущего слота, просто освободим слот другого пользователя
-                slotAssignments.delete(selectedSlot);
-                userSlots.delete(currentOccupant);
-                console.log(`Освобожден слот ${selectedSlot} пользователя ${currentOccupant} при перетаскивании`);
-              }
-            }
-            
-            // Освобождаем предыдущий слот текущего пользователя
-            if (previousSlot !== undefined && slotAssignments.get(previousSlot) === userId) {
-              slotAssignments.delete(previousSlot);
-              console.log(`Освобожден предыдущий слот ${previousSlot} пользователя ${userId}`);
+              // Слот занят другим пользователем
+              sendToClient({
+                type: 'slot_busy',
+                slotNumber: selectedSlot
+              });
+              return;
             }
             
             // Занимаем новый слот
             slotAssignments.set(selectedSlot, userId);
             userSlots.set(userId, selectedSlot);
             
-            console.log(`Пользователь ${userId} ${data.dragAndDrop ? "перетащил себя в" : "выбрал"} слот ${selectedSlot}`);
-            
-            // Сообщаем клиенту, что операция успешна
-            sendToClient({
-              type: 'slot_selection_result',
-              success: true,
-              slotNumber: selectedSlot
-            });
+            console.log(`Пользователь ${userId} выбрал слот ${selectedSlot}`);
             
             // Отправляем обновление всем подключенным клиентам
             broadcastSlotUpdate();
@@ -499,10 +417,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
-    // Проверка активности соединения (уменьшаем интервал для более быстрой синхронизации)
+    // Проверка активности соединения
     const connectionCheckInterval = setInterval(() => {
       const now = Date.now();
-      if (now - lastPongTime > 10000) { // Уменьшаем с 15 до 10 секунд без ответа
+      if (now - lastPongTime > 15000) { // 15 секунд без ответа
         console.log(`Соединение неактивно более 15 секунд для ${userId || 'неизвестного пользователя'}`);
         
         // Очищаем все ресурсы пользователя
@@ -531,7 +449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ws.terminate();
         clearInterval(connectionCheckInterval);
       }
-    }, 3000); // Уменьшаем интервал проверки с 5000 до 3000 мс
+    }, 5000);
     
     // Обработка отключения
     ws.on('close', () => {
@@ -566,104 +484,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Функция для отправки обновления слотов всем подключенным клиентам
   function broadcastSlotUpdate() {
-    // Добавляем микрозадержку для снижения вероятности гонки состояний
-    setTimeout(() => {
-      _broadcastSlotUpdate();
-    }, 10);
-  }
-
-  // Внутренняя реализация для отправки обновлений слотов
-  function _broadcastSlotUpdate() {
     const currentSlots: SlotInfo[] = [];
     slotAssignments.forEach((userId, slotNumber) => {
       currentSlots.push({ userId, slotNumber });
     });
-    
-    // Сортируем для стабильного порядка слотов
-    currentSlots.sort((a, b) => a.slotNumber - b.slotNumber);
-    
-    console.log('Трансляция обновления слотов:', currentSlots.map(s => `${s.slotNumber}:${s.userId}`).join(', '));
     
     const updateMessage = JSON.stringify({
       type: 'slots_update',
       slots: currentSlots
     });
     
-    // Доставляем сообщение только активным соединениям
-    let activeConnections = 0;
-    let errorConnections = 0;
-
-    connections.forEach((ws, wsUserId) => {
+    connections.forEach((ws) => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
           ws.send(updateMessage);
-          activeConnections++;
         } catch (e) {
-          console.error(`Ошибка отправки обновления слотов для ${wsUserId}:`, e);
-          errorConnections++;
-          
-          // При ошибке отправки, возможно соединение уже закрыто, но WebSocket API не обновил статус
-          // Удаляем проблемное соединение
-          connections.delete(wsUserId);
-          
-          // Освобождаем слот, если есть
-          const slotToRelease = userSlots.get(wsUserId);
-          if (slotToRelease !== undefined) {
-            slotAssignments.delete(slotToRelease);
-            userSlots.delete(wsUserId);
-            console.log(`Очистка соединения из-за ошибки отправки: освобожден слот ${slotToRelease} для ${wsUserId}`);
-          }
-          
-          // Очищаем состояние камеры
-          cameraStates.delete(wsUserId);
+          console.error('Ошибка отправки обновления слотов:', e);
         }
       }
     });
-    
-    // Если были ошибки с отправкой, нужно повторно разослать обновленное состояние
-    if (errorConnections > 0) {
-      // Отложенная отправка, дающая время на обработку отключений
-      setTimeout(() => {
-        const updatedSlots: SlotInfo[] = [];
-        slotAssignments.forEach((userId, slotNumber) => {
-          updatedSlots.push({ userId, slotNumber });
-        });
-        updatedSlots.sort((a, b) => a.slotNumber - b.slotNumber);
-        
-        const updatedMessage = JSON.stringify({
-          type: 'slots_update',
-          slots: updatedSlots
-        });
-        
-        let updatedSentCount = 0;
-        connections.forEach((ws, wsUserId) => {
-          if (ws.readyState === WebSocket.OPEN) {
-            try {
-              ws.send(updatedMessage);
-              updatedSentCount++;
-            } catch (e) {
-              console.error(`Повторная ошибка отправки для ${wsUserId}:`, e);
-            }
-          }
-        });
-        
-        console.log(`После очистки: отправлено повторное обновление о слотах ${updatedSentCount} клиентам`);
-      }, 50); // Небольшая задержка
-    }
-    
-    console.log(`Отправлено обновление о слотах ${activeConnections} подключенным клиентам`);
   }
   
   // Функция для отправки обновления состояния камер всем клиентам
   function broadcastCameraStates() {
-    // Добавляем микрозадержку для снижения вероятности гонки состояний
-    setTimeout(() => {
-      _broadcastCameraStates();
-    }, 10);
-  }
-  
-  // Внутренняя реализация для отправки обновлений камер
-  function _broadcastCameraStates() {
     const currentCameraStates: Record<string, boolean> = {};
     cameraStates.forEach((enabled, userId) => {
       currentCameraStates[userId] = enabled;
@@ -674,67 +517,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cameraStates: currentCameraStates
     });
     
-    // Доставляем сообщение только активным соединениям
-    let activeConnections = 0;
-    let errorConnections = 0;
-
-    connections.forEach((ws, wsUserId) => {
+    connections.forEach((ws) => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
           ws.send(updateMessage);
-          activeConnections++;
         } catch (e) {
-          console.error(`Ошибка отправки обновления состояния камер для ${wsUserId}:`, e);
-          errorConnections++;
-          
-          // При ошибке отправки удаляем проблемное соединение
-          connections.delete(wsUserId);
-          
-          // Освобождаем слот, если есть
-          const slotToRelease = userSlots.get(wsUserId);
-          if (slotToRelease !== undefined) {
-            slotAssignments.delete(slotToRelease);
-            userSlots.delete(wsUserId);
-            console.log(`Очистка соединения из-за ошибки отправки камер: освобожден слот ${slotToRelease} для ${wsUserId}`);
-          }
-          
-          // Очищаем состояние камеры
-          cameraStates.delete(wsUserId);
+          console.error('Ошибка отправки обновления состояния камер:', e);
         }
       }
     });
-    
-    // Если были ошибки с отправкой, нужно повторно разослать обновленное состояние
-    if (errorConnections > 0) {
-      // Отложенная отправка, дающая время на обработку отключений
-      setTimeout(() => {
-        const updatedCameraStates: Record<string, boolean> = {};
-        cameraStates.forEach((enabled, userId) => {
-          updatedCameraStates[userId] = enabled;
-        });
-        
-        const updatedMessage = JSON.stringify({
-          type: 'camera_states_update',
-          cameraStates: updatedCameraStates
-        });
-        
-        let updatedSentCount = 0;
-        connections.forEach((ws, wsUserId) => {
-          if (ws.readyState === WebSocket.OPEN) {
-            try {
-              ws.send(updatedMessage);
-              updatedSentCount++;
-            } catch (e) {
-              console.error(`Повторная ошибка отправки камер для ${wsUserId}:`, e);
-            }
-          }
-        });
-        
-        console.log(`После очистки: отправлено повторное обновление о камерах ${updatedSentCount} клиентам`);
-      }, 50); // Небольшая задержка
-    }
-    
-    console.log(`Отправлено обновление о состоянии камер ${activeConnections} подключенным клиентам`);
   }
 
   return httpServer;

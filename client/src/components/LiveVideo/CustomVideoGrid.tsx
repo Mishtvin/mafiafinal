@@ -23,11 +23,11 @@ export function CustomVideoGrid() {
   // Принудительное обновление компонента при изменении слотов
   const [forceUpdate, setForceUpdate] = useState<number>(0);
   
-  // Пересоздаем функцию обновления при изменении слотов или списка участников
+  // Пересоздаем функцию обновления при изменении слотов
   useEffect(() => {
     console.log('Сработал эффект принудительного обновления', Object.keys(slotsManager.slots).length);
     setForceUpdate(prev => prev + 1);
-  }, [slotsManager.slots, slotsManager.userSlot, participants.length]);
+  }, [slotsManager.slots, slotsManager.userSlot]);
   
   // Обработчик клика по пустому слоту
   const handleSlotClick = (slotNumber: number) => {
@@ -78,61 +78,13 @@ export function CustomVideoGrid() {
 
   // Принудительно отображаем локального участника в его слоте
   // даже если в мапе слотов не совпадают идентификаторы
-  // и проверяем соответствие всех участников
   useEffect(() => {
     if (currentLocalParticipant && slotsManager.userSlot && slotsManager.connected) {
-      // Синхронизируем отображаемый идентификатор участника в слоте
-      // с реальным идентификатором локального участника
-      const localUserSlot = slotsManager.userSlot;
-      const localUserId = currentLocalParticipant.identity;
-      const currentAssignedId = slotsManager.slots[localUserSlot];
-      
-      // Проверяем соответствие LiveKit участников и слотов
-      const livekitIds = new Set(participants.map(p => p.identity));
-      const slotIds = new Set(Object.values(slotsManager.slots));
-      
-      // Проверка на несоответствие: участники есть в LiveKit, но нет в слотах
-      let missingParticipants = 0;
-      participants.forEach(p => {
-        if (!slotIds.has(p.identity)) {
-          console.log(`Участник ${p.identity} виден в LiveKit, но не виден в слотах`);
-          missingParticipants++;
-        }
-      });
-      
-      // Проверка на несоответствие: участники есть в слотах, но нет в LiveKit
-      let invalidSlots = 0;
-      Object.values(slotsManager.slots).forEach(userId => {
-        if (!livekitIds.has(userId)) {
-          console.log(`Пользователь ${userId} виден в слотах, но не виден в LiveKit`);
-          invalidSlots++;
-        }
-      });
-      
-      // Если есть несоответствия, принудительно обновляем камеру для синхронизации
-      if (missingParticipants > 0 || invalidSlots > 0) {
-        console.log(`Несоответствие: ${missingParticipants} участников нет в слотах, ${invalidSlots} слотов с неактивными участниками`);
-        // Запрашиваем принудительное обновление слотов
-        const isEnabled = currentLocalParticipant.isCameraEnabled || false;
-        console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${localUserId}`);
-        slotsManager.setCameraState(isEnabled);
-      }
-      
-      // Проверяем, нужно ли обновление
-      if (currentAssignedId !== localUserId) {
-        console.log(`Фиксируем несоответствие ID в слоте ${localUserSlot}: сейчас=${currentAssignedId}, должен быть=${localUserId}`);
-        
-        // Отправляем запрос на повторную регистрацию через API хука
-        slotsManager.releaseSlot(); // Сначала освобождаем слот
-        setTimeout(() => {
-          slotsManager.selectSlot(localUserSlot); // Затем выбираем тот же слот снова
-          console.log(`Переотправлена регистрация для синхронизации ID: ${localUserId}`);
-        }, 100);
-      }
-      
+      // Добавляем текущего участника принудительно в его слот
+      slotsManager.slots[slotsManager.userSlot] = currentLocalParticipant.identity;
       console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
     }
-  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected, slotsManager.slots, slotsManager, participants]);
+  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected]);
 
   return (
     <div className="h-full w-full p-4">
@@ -178,100 +130,8 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
   
   const hasVideo = videoTracks.length > 0;
   
-  // Используем общий slotsManager из главного компонента
-  const slotsManager = useSlots(participant.identity);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // Обработчики для drag and drop
-  const handleDragStart = (e: React.DragEvent) => {
-    // Только локальный пользователь может инициировать перетаскивание
-    if (!participant.isLocal) {
-      e.preventDefault();
-      return;
-    }
-    
-    // Сохраняем информацию о перетаскиваемом слоте
-    e.dataTransfer.setData('text/plain', String(slotNumber));
-    e.dataTransfer.effectAllowed = 'move';
-    
-    // Добавляем информацию, что это локальный пользователь
-    try {
-      e.dataTransfer.setData('application/json', JSON.stringify({
-        isLocal: true,
-        identity: participant.identity
-      }));
-    } catch (error) {
-      console.error('Ошибка сохранения JSON данных:', error);
-    }
-    
-    // Визуальный отклик для пользователя
-    setIsDragging(true);
-    
-    // Важно: вызываем stopPropagation, чтобы предотвратить другие обработчики
-    e.stopPropagation();
-    
-    console.log(`Начато перетаскивание из слота ${slotNumber} для пользователя ${participant.identity}`);
-  };
-  
-  const handleDragEnd = () => {
-    setIsDragging(false);
-  };
-  
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-  
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    try {
-      // Получаем данные о перетаскиваемом слоте
-      const slotData = e.dataTransfer.getData('text/plain');
-      console.log('Получены данные о перетаскивании:', slotData);
-      
-      if (!slotData) {
-        console.error('Не удалось получить данные о перетаскиваемом слоте');
-        return;
-      }
-      
-      const draggedSlotNumber = Number(slotData);
-      
-      // Игнорируем перетаскивание на тот же слот
-      if (draggedSlotNumber === slotNumber) {
-        console.log('Перетаскивание в тот же слот - игнорируем');
-        return;
-      }
-      
-      // Только текущий пользователь может инициировать обмен
-      if (participant.isLocal) {
-        console.log(`Перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber}`);
-        
-        // Вызываем API для обмена местами с флагом dragAndDrop=true
-        const success = slotsManager.selectSlot(slotNumber, true);
-        console.log(`Результат запроса смены слота: ${success ? 'успешно' : 'неудачно'}`);
-      } else {
-        console.log(`Получено перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber} - игнорируем, т.к. целевой участник не локальный`);
-      }
-    } catch (error) {
-      console.error('Ошибка при обработке drag-and-drop:', error);
-    } finally {
-      setIsDragging(false);
-    }
-  };
-
   return (
-    <div 
-      className={`video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700 ${
-        isDragging ? 'opacity-60' : ''
-      }`}
-      draggable={true}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
+    <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
       {hasVideo ? (
         <div className="h-full w-full relative flex items-center justify-center">
           {/* Здесь мы используем первый найденный трек */}
@@ -319,81 +179,10 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
  * Компонент для отображения пустого слота
  */
 function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) {
-  // Для поддержки drag-n-drop пустых слотов
-  const [isDragOver, setIsDragOver] = useState(false);
-  
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setIsDragOver(true);
-  };
-  
-  const handleDragLeave = () => {
-    setIsDragOver(false);
-  };
-  
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    try {
-      // Получаем данные о перетаскиваемом слоте
-      const slotData = e.dataTransfer.getData('text/plain');
-      console.log('Получены данные о перетаскивании в пустой слот:', slotData);
-      
-      if (!slotData) {
-        console.error('Не удалось получить данные о перетаскиваемом слоте');
-        return;
-      }
-      
-      const draggedSlotNumber = Number(slotData);
-      console.log(`Перетаскивание из слота ${draggedSlotNumber} в пустой слот ${index + 1}`);
-      
-      // Обычно при перетаскивании в пустой слот мы просто вызываем onClick
-      // Но сначала проверим, что это локальный пользователь
-      try {
-        const jsonData = e.dataTransfer.getData('application/json');
-        if (jsonData) {
-          const data = JSON.parse(jsonData);
-          if (data.isLocal) {
-            console.log('Перетаскивание локального пользователя в пустой слот');
-            // Если это локальный пользователь, то вызываем стандартный обработчик клика
-            if (onClick) {
-              onClick();
-              console.log('Обработчик клика вызван для пустого слота');
-            }
-          } else {
-            console.log('Перетаскивание не-локального пользователя - игнорируем');
-          }
-        } else {
-          // Если нет дополнительных данных, считаем что перетаскивание допустимо
-          console.log('Нет данных о локальности пользователя, выполняем перетаскивание');
-          if (onClick) {
-            onClick();
-            console.log('Обработчик клика вызван для пустого слота (без доп. данных)');
-          }
-        }
-      } catch (jsonError) {
-        console.error('Ошибка при обработке JSON данных:', jsonError);
-        // При ошибке парсинга JSON все равно пытаемся обработать
-        if (onClick) onClick();
-      }
-    } catch (error) {
-      console.error('Ошибка при обработке drag-and-drop в пустой слот:', error);
-    } finally {
-      setIsDragOver(false);
-    }
-  };
-  
   return (
     <div 
-      className={`video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border ${
-        isDragOver ? 'border-purple-500/50 ring-2 ring-purple-500/30' : 'border-slate-700/30'
-      } cursor-pointer`}
+      className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 cursor-pointer"
       onClick={onClick}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
     >
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center">

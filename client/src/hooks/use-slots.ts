@@ -39,22 +39,7 @@ export function useSlots(userId: string) {
   }, []);
   
   // Функция для обновления состояния камеры
-  // userId - опциональный параметр, если не указан - используется текущий пользователь
-  const setCameraState = useCallback((enabledOrUserId: boolean | string, enabledParam?: boolean) => {
-    // Проверяем формат аргументов
-    let enabled: boolean;
-    
-    if (typeof enabledOrUserId === 'boolean') {
-      // Вызов в старом формате setCameraState(enabled)
-      enabled = enabledOrUserId;
-    } else if (typeof enabledOrUserId === 'string' && typeof enabledParam === 'boolean') {
-      // Вызов в новом формате setCameraState(userId, enabled)
-      enabled = enabledParam;
-    } else {
-      console.error('Неверный формат аргументов setCameraState');
-      return false;
-    }
-    
+  const setCameraState = useCallback((enabled: boolean) => {
     return sendMessage({
       type: 'camera_state_change',
       enabled
@@ -62,20 +47,12 @@ export function useSlots(userId: string) {
   }, [sendMessage]);
 
   // Выбор слота
-  const selectSlot = useCallback((slotNumber: number, dragAndDrop: boolean = false) => {
-    // Проверка, не выбран ли тот же слот
-    if (state.userSlot === slotNumber) {
-      console.log(`Игнорирую выбор текущего слота ${slotNumber}`);
-      return false;
-    }
-
-    console.log(`Выбираем слот ${slotNumber} с dragAndDrop=${dragAndDrop}`);
+  const selectSlot = useCallback((slotNumber: number) => {
     return sendMessage({
       type: 'select_slot',
-      slotNumber,
-      dragAndDrop
+      slotNumber
     });
-  }, [sendMessage, state.userSlot]);
+  }, [sendMessage]);
 
   // Освобождение слота
   const releaseSlot = useCallback(() => {
@@ -90,13 +67,8 @@ export function useSlots(userId: string) {
     userIdRef.current = userId;
     console.log('ID пользователя обновлен в useSlots:', userId);
 
-    // Увеличиваем попытки переподключения для улучшения надёжности
-    const maxReconnectAttempts = 5;
-    let reconnectAttempt = 0;
-
     // Функция для установки соединения
     const connectWebSocket = () => {
-      reconnectAttempt++;
       setState(prev => ({ ...prev, loading: true, error: null }));
 
       // Определяем адрес WebSocket сервера
@@ -136,14 +108,6 @@ export function useSlots(userId: string) {
           loading: false,
           connected: false 
         }));
-        
-        // Немедленно пытаемся переподключиться при ошибке
-        setTimeout(() => {
-          if (socketRef.current === socket) {
-            console.log('Немедленное переподключение после ошибки WebSocket');
-            connectWebSocket();
-          }
-        }, 500);
       };
 
       // Обработчик закрытия соединения
@@ -151,28 +115,12 @@ export function useSlots(userId: string) {
         console.log('WebSocket соединение закрыто');
         setState(prev => ({ ...prev, connected: false }));
         
-        // Уменьшаем время переподключения для более быстрого восстановления
-        // Адаптивный интервал в зависимости от попытки: чем больше попыток, тем больше интервал
-        const reconnectDelay = Math.min(1000 * Math.pow(1.5, reconnectAttempt - 1), 5000);
-        
-        if (reconnectAttempt <= maxReconnectAttempts) {
-          console.log(`Попытка переподключения ${reconnectAttempt}/${maxReconnectAttempts} через ${reconnectDelay}мс`);
-          
-          setTimeout(() => {
-            if (socketRef.current === socket) {
-              connectWebSocket();
-            }
-          }, reconnectDelay);
-        } else {
-          console.log(`Достигнуто максимальное количество попыток переподключения (${maxReconnectAttempts})`);
-          // Сбрасываем счетчик попыток и пробуем ещё раз через больший интервал
-          reconnectAttempt = 0;
-          setTimeout(() => {
-            if (socketRef.current === socket) {
-              connectWebSocket();
-            }
-          }, 5000);
-        }
+        // Переподключение через 5 секунд при разрыве соединения
+        setTimeout(() => {
+          if (socketRef.current === socket) {
+            connectWebSocket();
+          }
+        }, 5000);
       };
 
       // Обработчик входящих сообщений
@@ -240,23 +188,9 @@ export function useSlots(userId: string) {
               break;
             }
             
-            case 'slot_selection_result': {
-              // Результат выбора слота
-              if (data.success) {
-                console.log(`Успешно выбран слот ${data.slotNumber}`);
-              } else {
-                console.log(`Ошибка выбора слота: ${data.message}`);
-              }
-              break;
-            }
-            
             case 'ping': {
-              // Ответ на пинг от сервера с текущим временем для измерения задержки
-              sendMessage({ 
-                type: 'pong',
-                timestamp: Date.now(),
-                userId: userIdRef.current || window.currentUserIdentity
-              });
+              // Ответ на пинг от сервера
+              sendMessage({ type: 'pong' });
               break;
             }
             
