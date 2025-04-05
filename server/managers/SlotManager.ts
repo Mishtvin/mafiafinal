@@ -74,8 +74,24 @@ export class SlotManager {
       return false;
     }
     
-    // Проверяем особые правила для слота ведущего
-    if (slotNumber === HOST_SLOT && !this.isUserHost(userId)) {
+    // Особый случай: если это ведущий, просящий слот 12
+    if (slotNumber === HOST_SLOT && this.isUserHost(userId)) {
+      console.log(`Ведущий ${userId} запрашивает слот ${HOST_SLOT}`);
+      
+      // Если слот 12 занят другим пользователем
+      const currentUser = this.slotAssignments.get(HOST_SLOT);
+      if (currentUser && currentUser !== userId) {
+        console.log(`Слот ${HOST_SLOT} занят ${currentUser}, выполняется принудительное освобождение для нового ведущего`);
+        
+        // Принудительно освобождаем слот 12 для нового ведущего
+        this.slotAssignments.delete(HOST_SLOT);
+        this.userSlots.delete(currentUser);
+      }
+      
+      // В этом случае всегда позволяем занять слот
+    } 
+    // Проверяем особые правила для слота ведущего для не-ведущих
+    else if (slotNumber === HOST_SLOT && !this.isUserHost(userId)) {
       console.error(`Слот ${HOST_SLOT} зарезервирован только для ведущего`);
       return false;
     }
@@ -87,9 +103,9 @@ export class SlotManager {
       return false;
     }
     
-    // Проверка занятости слота
+    // Проверка занятости слота (для не особых случаев)
     const currentUser = this.slotAssignments.get(slotNumber);
-    if (currentUser && currentUser !== userId) {
+    if (currentUser && currentUser !== userId && !(slotNumber === HOST_SLOT && this.isUserHost(userId))) {
       console.error(`Слот ${slotNumber} уже занят пользователем ${currentUser}`);
       return false;
     }
@@ -166,11 +182,15 @@ export class SlotManager {
       // Ведущему назначаем специальный слот 12
       console.log(`Автоматическое назначение слота для ведущего: ${userId}`);
       
-      // Если слот 12 занят, освобождаем его
+      // Если слот 12 занят, принудительно освобождаем его
       const currentHostUser = this.slotAssignments.get(HOST_SLOT);
       if (currentHostUser) {
-        console.log(`Слот ведущего ${HOST_SLOT} уже занят пользователем ${currentHostUser}, освобождаем`);
-        this.releaseUserSlot(currentHostUser);
+        console.log(`Слот ведущего ${HOST_SLOT} уже занят пользователем ${currentHostUser}, принудительно освобождаем`);
+        
+        // Принудительное удаление - прямое изменение карт без вызова releaseUserSlot или releaseSlot
+        this.slotAssignments.delete(HOST_SLOT);
+        this.userSlots.delete(currentHostUser);
+        console.log(`Принудительно освобожден слот ${HOST_SLOT} для нового ведущего`);
       }
       
       // Назначаем слот ведущего
