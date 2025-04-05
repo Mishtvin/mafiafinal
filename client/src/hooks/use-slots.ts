@@ -309,53 +309,11 @@ export function useSlots(userId: string) {
     };
   }, [userId, sendMessage]);
 
-  // Функция для принудительного отключения WebSocket соединения
-  const disconnect = useCallback(() => {
-    console.log('Принудительное отключение WebSocket соединения');
-    
-    try {
-      if (socketRef.current && 
-          (socketRef.current.readyState === WebSocket.OPEN || 
-           socketRef.current.readyState === WebSocket.CONNECTING)) {
-        
-        // Перед закрытием отправляем сообщение о выходе
-        if (socketRef.current.readyState === WebSocket.OPEN) {
-          console.log('Отправляем сообщение о выходе перед закрытием WebSocket');
-          sendMessage({
-            type: 'unregister',
-            userId: userIdRef.current
-          });
-        }
-        
-        // Отключаем все обработчики событий, чтобы избежать автоматической попытки переподключения
-        socketRef.current.onclose = null;
-        socketRef.current.onerror = null;
-        
-        // Активное закрытие сокета с кодом 1000 (нормальное закрытие)
-        socketRef.current.close(1000, 'Пользователь покинул страницу');
-        console.log('WebSocket соединение закрыто явно');
-        
-        // Обновляем состояние после закрытия
-        setState(prev => ({
-          ...prev,
-          connected: false,
-          loading: false
-        }));
-      }
-    } catch (err) {
-      console.error('Ошибка при закрытии WebSocket:', err);
-    }
-    
-    // Обнуляем ссылку на сокет
-    socketRef.current = null;
-  }, []);
-
   return {
     ...state,
     selectSlot,
     releaseSlot,
     setCameraState,
-    registerUser,
-    disconnect
+    registerUser
   };
 }
