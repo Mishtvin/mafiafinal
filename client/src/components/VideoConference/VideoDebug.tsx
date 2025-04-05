@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Room, LocalParticipant, Participant, Track, ConnectionState } from 'livekit-client';
-import { useRoomContext } from '@livekit/components-react';
+import { useRoomContext } from './CustomLiveKitRoom';
 
 /**
  * Улучшенный компонент VideoDebug помогает отлаживать проблемы с видео и микрофоном

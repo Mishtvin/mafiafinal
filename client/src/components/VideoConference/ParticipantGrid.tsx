@@ -1,8 +1,8 @@
 import { useMemo, useEffect, useState } from "react";
 import ParticipantTile from "./ParticipantTileV2";
 import { Participant, Track, ConnectionState } from "livekit-client";
-// Используем стандартный хук контекста из LiveKit
-import { useRoomContext } from "@livekit/components-react";
+// Используем наш кастомный хук контекста
+import { useRoomContext } from "./CustomLiveKitRoom";
 
 /**
  * Улучшенный компонент ParticipantGrid с дополнительной логикой стабилизации видео
