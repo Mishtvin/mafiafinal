@@ -39,13 +39,14 @@ export class CameraManager {
    * Установить состояние камеры пользователя с защитой от слишком частых обновлений
    * @param userId Идентификатор пользователя
    * @param isEnabled Новое состояние камеры
+   * @returns Объект с результатом обновления или undefined если обновление не выполнено
    */
-  setCameraState(userId: string, isEnabled: boolean): void {
+  setCameraState(userId: string, isEnabled: boolean): { userId: string, isEnabled: boolean, timestamp: number } | undefined {
     const oldState = this.cameraStates.get(userId);
     
     // Если состояние не изменилось, ничего не делаем
     if (oldState === isEnabled) {
-      return;
+      return undefined;
     }
     
     // Проверяем, не было ли недавно обновления для этого пользователя
@@ -54,7 +55,7 @@ export class CameraManager {
     
     if (now - lastUpdate < this.updateThreshold) {
       console.log(`Слишком частое обновление камеры для ${userId}, пропускаем (прошло ${now - lastUpdate}ms)`);
-      return;
+      return undefined;
     }
     
     // Обновляем состояние и время последнего обновления
@@ -63,12 +64,19 @@ export class CameraManager {
     
     console.log(`Камера пользователя ${userId} ${isEnabled ? 'включена' : 'выключена'}`);
     
-    // Отправляем ТОЛЬКО событие об индивидуальном изменении состояния камеры
-    // и НЕ отправляем массовое обновление, которое может сбросить состояния других камер
-    globalEvents.emit("camera_state_changed", userId, isEnabled);
+    // НОВОЕ: Больше не отправляем события напрямую
+    // Вместо этого возвращаем результат обновления для дальнейшей обработки
+    // Это позволяет ConnectionManager индивидуально обрабатывать каждое обновление
     
     // Логируем состояние для отладки
     console.log('Текущие состояния камер:', JSON.stringify(this.getAllCameraStates()));
+    
+    // Возвращаем результат обновления
+    return {
+      userId,
+      isEnabled,
+      timestamp: now
+    };
   }
 
   /**

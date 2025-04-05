@@ -91,21 +91,44 @@ export class ConnectionManager {
           slots: currentSlots
         }));
         
-        // Отправляем индивидуальные обновления только для ДРУГИХ камер, кроме своей
-        // Это предотвращает перезапись собственного состояния камеры при подключении
+        // ИЗМЕНЕНИЕ ЛОГИКИ: Отправляем все состояния чужих камер одним сообщением
+        // и дополнительно каждую камеру отдельным сообщением (для совместимости)
+        
+        // Собираем состояния чужих камер (без своей камеры)
+        const otherCameraStates: Record<string, boolean> = {};
+        
         Object.entries(currentCameraStates).forEach(([cameraUserId, isEnabled]) => {
-          // Проверяем, не является ли это камерой самого подключающегося пользователя
+          // Только для чужих камер
           if (cameraUserId !== userId) {
+            // Добавляем в массив состояний чужих камер
+            otherCameraStates[cameraUserId] = isEnabled;
+            
+            // Отправляем новый тип сообщения peer_camera_update
+            ws.send(JSON.stringify({
+              type: 'peer_camera_update',
+              userId: cameraUserId,
+              enabled: isEnabled,
+              timestamp: Date.now()
+            }));
+            
+            // Для обратной совместимости отправляем и старый тип
             ws.send(JSON.stringify({
               type: 'individual_camera_update',
               userId: cameraUserId,
               enabled: isEnabled
             }));
-            console.log(`Отправлено индивидуальное обновление состояния ЧУЖОЙ камеры для ${cameraUserId} (${isEnabled}) клиенту ${userId}`);
+            
+            console.log(`Отправлено обновление состояния ЧУЖОЙ камеры для ${cameraUserId} (${isEnabled}) клиенту ${userId}`);
           } else {
             console.log(`Пропускаем отправку состояния СВОЕЙ камеры для ${cameraUserId} клиенту ${userId}`);
           }
         });
+        
+        // Отправляем полный набор состояний чужих камер
+        ws.send(JSON.stringify({
+          type: 'initial_camera_states',
+          states: otherCameraStates
+        }));
         
         console.log(`Отправлено первоначальное состояние клиенту ${userId}: ${currentSlots.length} слотов`);
       }
@@ -303,8 +326,20 @@ export class ConnectionManager {
             // Напрямую устанавливаем значение в маппинге CameraManager
             cameraManager['cameraStates'].set(data.userId, cameraState);
             
-            // Явно уведомляем только об одном обновлении
-            globalEvents.emit("camera_state_changed", data.userId, cameraState);
+            // ИЗМЕНЕНИЕ: Больше не отправляем событие напрямую
+            // Вместо этого используем обновленную логику индивидуальной отправки
+            
+            // Отправляем уведомление о камере ТОЛЬКО ДРУГИМ пользователям
+            this.connections.forEach((connections, otherUserId) => {
+              if (otherUserId !== data.userId) { // Не отправляем самому себе
+                this.sendToUser(otherUserId, {
+                  type: 'peer_camera_update',
+                  userId: data.userId,
+                  enabled: cameraState,
+                  timestamp: Date.now()
+                });
+              }
+            });
           } else {
             // Инициализируем новое состояние камеры
             cameraManager.initializeUserCamera(data.userId);
@@ -317,8 +352,6 @@ export class ConnectionManager {
             type: 'slots_update',
             slots: currentSlots
           });
-          
-          // Отправляем состояние камер только если жестко необходимо (не здесь)
         }
         break;
         
@@ -347,7 +380,55 @@ export class ConnectionManager {
         // Изменение состояния камеры
         if (data.enabled !== undefined) {
           const isEnabled = Boolean(data.enabled);
-          cameraManager.setCameraState(userId, isEnabled);
+          const requestId = data.requestId;
+          
+          // Обновляем состояние в CameraManager и получаем результат обновления
+          const updateResult = cameraManager.setCameraState(userId, isEnabled);
+          
+          // Проверяем, что обновление действительно произошло
+          if (updateResult) {
+            const { timestamp } = updateResult;
+            
+            // Если есть requestId, отправляем подтверждение ТОЛЬКО этому пользователю
+            if (requestId) {
+              this.sendToUser(userId, {
+                type: 'camera_state_acknowledged',
+                userId,
+                enabled: isEnabled,
+                requestId,
+                timestamp
+              });
+              console.log(`Отправлено подтверждение изменения камеры пользователю ${userId}, requestId=${requestId}`);
+            }
+            
+            // Отправляем уведомление ТОЛЬКО ДРУГИМ пользователям
+            this.connections.forEach((connections, otherUserId) => {
+              if (otherUserId !== userId) { // Не отправляем самому себе
+                this.sendToUser(otherUserId, {
+                  type: 'peer_camera_update',
+                  userId,
+                  enabled: isEnabled,
+                  timestamp
+                });
+                console.log(`Отправлено уведомление о камере ${userId} -> ${isEnabled} пользователю ${otherUserId}`);
+              }
+            });
+          } else {
+            console.log(`Обновление состояния камеры для ${userId} не выполнено (слишком частое или не изменилось)`);
+            
+            // Даже если обновление не выполнено, отправляем подтверждение для закрытия запроса
+            if (requestId) {
+              const currentState = cameraManager.getCameraState(userId) || false;
+              this.sendToUser(userId, {
+                type: 'camera_state_acknowledged',
+                userId,
+                enabled: currentState,
+                requestId,
+                noChange: true
+              });
+              console.log(`Отправлено подтверждение БЕЗ изменения камеры пользователю ${userId}, requestId=${requestId}`);
+            }
+          }
         }
         break;
         
