@@ -200,16 +200,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       broadcastCameraStates();
     }
     
-    console.log(`Периодическая проверка: соединения=${connections.size}, слоты=${slotAssignments.size}, присвоено=${userSlots.size}, камеры=${cameraStates.size}`);
+    // Тихая периодическая проверка без вывода логов
     
-    // Проверяем корректность назначения слотов
-    // Отладка: показываем все текущие слоты
-    console.log('Текущие назначения слотов:');
-    slotAssignments.forEach((userId, slot) => {
-      console.log(`- Слот ${slot}: ${userId}`);
-    });
-    
-    // Периодически отправляем обновление всем клиентам для синхронизации
+      // Периодически отправляем обновление всем клиентам для синхронизации
     broadcastSlotUpdate();
     broadcastCameraStates();
   }, 5000); // каждые 5 секунд
@@ -264,8 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
-    // Выводим текущее состояние для отладки
-    console.log(`Активные соединения: ${connections.size}, активные слоты: ${slotAssignments.size}`);
+    // Тихие пинги без логирования состояния
   }, pingInterval);
   
   // Обработчик подключений WebSocket
@@ -388,11 +380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const targetUserId = data.userId;
             const targetSlot = data.targetSlot;
             
-            console.log(`[MOVE USER] Запрос на перемещение: пользователь ${userId} хочет переместить ${targetUserId} в слот ${targetSlot}`);
-            console.log(`[MOVE USER] Текущее состояние слотов:`);
-            slotAssignments.forEach((userId, slotNumber) => {
-              console.log(`[MOVE USER] - Слот ${slotNumber}: ${userId}`);
-            });
+            console.log(`[MOVE USER] Запрос: ${userId} перемещает ${targetUserId} в слот ${targetSlot}`);
             
             // Проверяем, что пользователь существует
             if (!connections.has(targetUserId)) {
@@ -407,19 +395,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               break;
             }
             
-            console.log(`[MOVE USER] Текущий слот пользователя ${targetUserId}: ${currentUserSlot}`);
-            
             // Проверяем, не занят ли целевой слот
             const targetSlotOccupant = slotAssignments.get(targetSlot);
             if (targetSlotOccupant && targetSlotOccupant !== targetUserId) {
-              console.log(`[MOVE USER] Целевой слот ${targetSlot} занят пользователем ${targetSlotOccupant}`);
-              
               // Если целевой слот занят, выполняем обмен слотами
               if (targetSlotOccupant) {
                 const occupantCurrentSlot = userSlots.get(targetSlotOccupant);
                 if (occupantCurrentSlot !== undefined) {
-                  console.log(`[MOVE USER] Выполняем обмен слотами между ${targetUserId} (${currentUserSlot}) и ${targetSlotOccupant} (${targetSlot})`);
-                  
                   // Устанавливаем перемещаемого пользователя на новый слот
                   slotAssignments.set(targetSlot, targetUserId);
                   userSlots.set(targetUserId, targetSlot);
@@ -427,25 +409,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Перемещаем текущего владельца слота на слот перемещаемого пользователя
                   slotAssignments.set(currentUserSlot, targetSlotOccupant);
                   userSlots.set(targetSlotOccupant, currentUserSlot);
-                  
-                  console.log(`[MOVE USER] Успешно: Пользователи ${targetUserId} и ${targetSlotOccupant} обменялись слотами ${currentUserSlot} и ${targetSlot}`);
-                } else {
-                  console.log(`[MOVE USER] Ошибка: не удалось определить текущий слот для ${targetSlotOccupant}`);
                 }
               }
             } else {
               // Если целевой слот свободен, просто перемещаем пользователя
-              console.log(`[MOVE USER] Целевой слот ${targetSlot} свободен, перемещаем пользователя ${targetUserId}`);
               slotAssignments.delete(currentUserSlot);
               slotAssignments.set(targetSlot, targetUserId);
               userSlots.set(targetUserId, targetSlot);
-              console.log(`[MOVE USER] Успешно: Пользователь ${targetUserId} перемещен из слота ${currentUserSlot} в слот ${targetSlot}`);
             }
-            
-            console.log(`[MOVE USER] Новое состояние слотов после перемещения:`);
-            slotAssignments.forEach((userId, slotNumber) => {
-              console.log(`[MOVE USER] - Слот ${slotNumber}: ${userId}`);
-            });
             
             // Отправляем обновление всем подключенным клиентам
             broadcastSlotUpdate();
