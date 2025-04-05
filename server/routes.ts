@@ -513,20 +513,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       currentSlots.push({ userId, slotNumber });
     });
     
+    // Сортируем для стабильного порядка слотов
+    currentSlots.sort((a, b) => a.slotNumber - b.slotNumber);
+    
+    console.log('Трансляция обновления слотов:', currentSlots.map(s => `${s.slotNumber}:${s.userId}`).join(', '));
+    
     const updateMessage = JSON.stringify({
       type: 'slots_update',
       slots: currentSlots
     });
     
-    connections.forEach((ws) => {
+    let sentCount = 0;
+    connections.forEach((ws, wsUserId) => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
           ws.send(updateMessage);
+          sentCount++;
         } catch (e) {
-          console.error('Ошибка отправки обновления слотов:', e);
+          console.error(`Ошибка отправки обновления слотов для ${wsUserId}:`, e);
         }
       }
     });
+    
+    console.log(`Отправлено обновление о слотах ${sentCount} подключенным клиентам`);
   }
   
   // Функция для отправки обновления состояния камер всем клиентам
@@ -541,15 +550,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cameraStates: currentCameraStates
     });
     
-    connections.forEach((ws) => {
+    let sentCount = 0;
+    connections.forEach((ws, wsUserId) => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
           ws.send(updateMessage);
+          sentCount++;
         } catch (e) {
-          console.error('Ошибка отправки обновления состояния камер:', e);
+          console.error(`Ошибка отправки обновления состояния камер для ${wsUserId}:`, e);
         }
       }
     });
+    
+    console.log(`Отправлено обновление о состоянии камер ${sentCount} подключенным клиентам`);
   }
 
   return httpServer;

@@ -197,8 +197,12 @@ export function useSlots(userId: string) {
             }
             
             case 'ping': {
-              // Ответ на пинг от сервера
-              sendMessage({ type: 'pong' });
+              // Ответ на пинг от сервера с текущим временем для измерения задержки
+              sendMessage({ 
+                type: 'pong',
+                timestamp: Date.now(),
+                userId: userIdRef.current || window.currentUserIdentity
+              });
               break;
             }
             

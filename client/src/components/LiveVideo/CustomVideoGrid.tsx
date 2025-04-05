@@ -81,10 +81,16 @@ export function CustomVideoGrid() {
   useEffect(() => {
     if (currentLocalParticipant && slotsManager.userSlot && slotsManager.connected) {
       // Добавляем текущего участника принудительно в его слот
-      slotsManager.slots[slotsManager.userSlot] = currentLocalParticipant.identity;
+      const updatedSlots = {...slotsManager.slots};
+      updatedSlots[slotsManager.userSlot] = currentLocalParticipant.identity;
+      
+      // Проверяем, сколько слотов изменилось
+      const slotEntries = Object.entries(updatedSlots);
+      console.log(`Сработал эффект принудительного обновления`, slotEntries.length);
+      
       console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
     }
-  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected]);
+  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected, slotsManager.slots]);
 
   return (
     <div className="h-full w-full p-4">
