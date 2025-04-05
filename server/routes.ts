@@ -14,7 +14,6 @@ const LIVEKIT_URL = 'wss://livekit.nyavkin.site/'; // URL сервера LiveKit
 interface SlotInfo {
   userId: string;
   slotNumber: number;
-  role?: 'player' | 'host';
 }
 
 // Хранилище данных о слотах
@@ -529,19 +528,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   function broadcastSlotUpdate() {
     const currentSlots: SlotInfo[] = [];
     slotAssignments.forEach((userId, slotNumber) => {
-      // Добавляем информацию о роли пользователя
-      const role = userRoles.get(userId) || 'player';
       currentSlots.push({ 
         userId, 
-        slotNumber,
-        role 
+        slotNumber
       });
     });
     
     const updateMessage = JSON.stringify({
       type: 'slots_update',
-      slots: currentSlots,
-      hostId: roomHostId
+      slots: currentSlots
     });
     
     connections.forEach((ws) => {

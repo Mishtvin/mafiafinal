@@ -20,9 +20,8 @@ export type User = typeof users.$inferSelect;
 export interface SlotInfo {
   userId: string;
   slotNumber: number;
-  role?: 'player' | 'host';
 }
 
 export interface RoomInfo {
-  hostId?: string; // ID пользователя-ведущего, если есть
+  // Дополнительная информация о комнате, если понадобится
 }
