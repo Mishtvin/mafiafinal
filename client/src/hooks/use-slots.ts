@@ -217,20 +217,31 @@ export function useSlots(userId: string) {
                 // Создаем копию текущего состояния камер
                 const newCameraStates = { ...prev.cameraStates };
                 
-                // Если это НЕ текущий пользователь, обновляем состояние
-                // Для текущего пользователя сохраняем его собственное состояние
-                if (userId !== currentUserId && userId !== globalId) {
-                  console.log(`Обновляем состояние чужой камеры: ${userId} -> ${enabled}`);
-                  newCameraStates[userId] = enabled;
-                } else {
-                  // Для текущего пользователя сохраняем текущее состояние, если оно уже установлено
-                  if (userId in newCameraStates) {
+                // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Никогда не обновляем состояние своей камеры из сети
+                // Это предотвращает случайные переключения собственной камеры при получении
+                // обновлений от сервера для любого пользователя
+                const isCurrentUser = (userId === currentUserId || userId === globalId);
+                
+                if (isCurrentUser) {
+                  // Для текущего пользователя проверяем сохраненное состояние в sessionStorage
+                  const savedState = window.sessionStorage.getItem('camera-state');
+                  console.log(`Получено обновление своей камеры, но используем сохраненное состояние:`, savedState);
+                  
+                  if (savedState !== null) {
+                    // Используем сохраненное состояние вместо полученного
+                    newCameraStates[userId] = savedState === 'true';
+                  } else if (userId in newCameraStates) {
+                    // Не меняем уже установленное состояние
                     console.log(`Сохраняем текущее состояние своей камеры: ${userId} -> ${newCameraStates[userId]}`);
                   } else {
-                    // Если нет текущего состояния, используем полученное
-                    console.log(`Устанавливаем начальное состояние своей камеры: ${userId} -> ${enabled}`);
-                    newCameraStates[userId] = enabled;
+                    // Если нет данных, то по умолчанию камера выключена
+                    newCameraStates[userId] = false;
+                    console.log(`Устанавливаем начальное состояние своей камеры в выключено`);
                   }
+                } else {
+                  // Для других пользователей всегда обновляем состояние из сети
+                  console.log(`Обновляем состояние чужой камеры: ${userId} -> ${enabled}`);
+                  newCameraStates[userId] = enabled;
                 }
                 
                 return {

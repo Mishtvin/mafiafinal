@@ -317,6 +317,10 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
             console.log(`Обновляем локальное состояние камеры для ID=${currentUserId}:`, newCameraState);
           }
           
+          // ВАЖНО: Сохраняем состояние в sessionStorage
+          // Это значение будет использоваться для игнорирования обновлений с сервера
+          window.sessionStorage.setItem('camera-state', String(newCameraState));
+          
           // Отправляем обновление на сервер для всех других клиентов
           slotsState.setCameraState(newCameraState);
         }
