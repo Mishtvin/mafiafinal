@@ -160,7 +160,10 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
         </div>
       )}
       {/* Номер слота в левом нижнем углу */}
-      <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
+      <div 
+        className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
+          ${participant.isLocal ? 'bg-purple-700/90' : 'bg-slate-900/80'}`}
+      >
         {slotNumber === 12 ? "Ведучий" : slotNumber}
       </div>
       
