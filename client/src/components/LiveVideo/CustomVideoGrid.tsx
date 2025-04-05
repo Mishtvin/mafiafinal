@@ -130,16 +130,28 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
   
   const hasVideo = videoTracks.length > 0;
   
-  // Для поддержки drag-n-drop
+  // Используем общий slotsManager из главного компонента
   const slotsManager = useSlots(participant.identity);
   const [isDragging, setIsDragging] = useState(false);
   
   // Обработчики для drag and drop
   const handleDragStart = (e: React.DragEvent) => {
+    // Только локальный пользователь может инициировать перетаскивание
+    if (!participant.isLocal) {
+      e.preventDefault();
+      return;
+    }
+    
     // Сохраняем информацию о перетаскиваемом слоте
     e.dataTransfer.setData('text/plain', String(slotNumber));
     e.dataTransfer.effectAllowed = 'move';
     setIsDragging(true);
+    
+    // Добавляем информацию, что это локальный пользователь
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      isLocal: true,
+      identity: participant.identity
+    }));
   };
   
   const handleDragEnd = () => {
@@ -153,19 +165,29 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
   
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const draggedSlotNumber = Number(e.dataTransfer.getData('text/plain'));
     
-    // Только текущий пользователь может инициировать обмен
-    if (participant.isLocal) {
-      console.log(`Перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber}`);
-      // Вызываем API для обмена местами с флагом dragAndDrop=true
-      slotsManager.selectSlot(slotNumber, true);
-    } else if (draggedSlotNumber !== slotNumber) {
-      // Если перетаскивание выполнено другим пользователем на наш слот
-      console.log(`Получено перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber}`);
+    try {
+      const draggedSlotNumber = Number(e.dataTransfer.getData('text/plain'));
+      
+      // Игнорируем перетаскивание на тот же слот
+      if (draggedSlotNumber === slotNumber) {
+        console.log('Перетаскивание в тот же слот - игнорируем');
+        return;
+      }
+      
+      // Только текущий пользователь может инициировать обмен
+      if (participant.isLocal) {
+        console.log(`Перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber}`);
+        // Вызываем API для обмена местами с флагом dragAndDrop=true
+        slotsManager.selectSlot(slotNumber, true);
+      } else {
+        console.log(`Получено перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber} - игнорируем`);
+      }
+    } catch (error) {
+      console.error('Ошибка при обработке drag-and-drop:', error);
+    } finally {
+      setIsDragging(false);
     }
-    
-    setIsDragging(false);
   };
 
   return (
@@ -241,13 +263,30 @@ function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) 
   
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const draggedSlotNumber = Number(e.dataTransfer.getData('text/plain'));
-    console.log(`Перетаскивание из слота ${draggedSlotNumber} в пустой слот ${index + 1}`);
     
-    // Перенаправляем на стандартный обработчик клика
-    if (onClick) onClick();
-    
-    setIsDragOver(false);
+    try {
+      const draggedSlotNumber = Number(e.dataTransfer.getData('text/plain'));
+      console.log(`Перетаскивание из слота ${draggedSlotNumber} в пустой слот ${index + 1}`);
+      
+      // Проверяем, является ли перетаскиваемый элемент локальным пользователем
+      const jsonData = e.dataTransfer.getData('application/json');
+      if (jsonData) {
+        const data = JSON.parse(jsonData);
+        if (data.isLocal) {
+          // Если это локальный пользователь, то вызываем стандартный обработчик клика
+          if (onClick) onClick();
+        } else {
+          console.log('Перетаскивание не-локального пользователя - игнорируем');
+        }
+      } else {
+        // Если нет дополнительных данных, то это тоже обрабатываем
+        if (onClick) onClick();
+      }
+    } catch (error) {
+      console.error('Ошибка при обработке drag-and-drop в пустой слот:', error);
+    } finally {
+      setIsDragOver(false);
+    }
   };
   
   return (

@@ -352,13 +352,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const selectedSlot = data.slotNumber;
             const previousSlot = userSlots.get(userId);
             
-            // Освобождаем предыдущий слот, если был
-            if (previousSlot !== undefined) {
-              slotAssignments.delete(previousSlot);
-            }
-            
             // Проверяем, не занят ли выбранный слот
             const currentOccupant = slotAssignments.get(selectedSlot);
+            
+            // Проверяем валидность операции
+            if (selectedSlot === previousSlot) {
+              console.log(`Игнорирую выбор того же слота ${selectedSlot} пользователем ${userId}`);
+              break;
+            }
+            
             if (currentOccupant && currentOccupant !== userId) {
               // Слот занят другим пользователем - при обычном клике сообщаем, что занято
               if (!data.dragAndDrop) {
@@ -366,20 +368,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   type: 'slot_busy',
                   slotNumber: selectedSlot
                 });
-                return;
+                break;
               }
               
               // При перетаскивании - меняем пользователей местами
               console.log(`Меняем местами: ${userId} из слота ${previousSlot} и ${currentOccupant} из слота ${selectedSlot}`);
               
-              // Получаем WebSocket второго пользователя, если он подключен
-              const otherUserWs = connections.get(currentOccupant);
-              
               // Перемещаем другого пользователя в предыдущий слот текущего пользователя
               if (previousSlot !== undefined) {
                 slotAssignments.set(previousSlot, currentOccupant);
                 userSlots.set(currentOccupant, previousSlot);
+              } else {
+                // Если у текущего пользователя нет предыдущего слота, просто освободим слот другого пользователя
+                slotAssignments.delete(selectedSlot);
+                userSlots.delete(currentOccupant);
+                console.log(`Освобожден слот ${selectedSlot} пользователя ${currentOccupant} при перетаскивании`);
               }
+            }
+            
+            // Освобождаем предыдущий слот текущего пользователя
+            if (previousSlot !== undefined && slotAssignments.get(previousSlot) === userId) {
+              slotAssignments.delete(previousSlot);
+              console.log(`Освобожден предыдущий слот ${previousSlot} пользователя ${userId}`);
             }
             
             // Занимаем новый слот

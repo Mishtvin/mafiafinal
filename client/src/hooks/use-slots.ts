@@ -48,12 +48,19 @@ export function useSlots(userId: string) {
 
   // Выбор слота
   const selectSlot = useCallback((slotNumber: number, dragAndDrop: boolean = false) => {
+    // Проверка, не выбран ли тот же слот
+    if (state.userSlot === slotNumber) {
+      console.log(`Игнорирую выбор текущего слота ${slotNumber}`);
+      return false;
+    }
+
+    console.log(`Выбираем слот ${slotNumber} с dragAndDrop=${dragAndDrop}`);
     return sendMessage({
       type: 'select_slot',
       slotNumber,
       dragAndDrop
     });
-  }, [sendMessage]);
+  }, [sendMessage, state.userSlot]);
 
   // Освобождение слота
   const releaseSlot = useCallback(() => {
