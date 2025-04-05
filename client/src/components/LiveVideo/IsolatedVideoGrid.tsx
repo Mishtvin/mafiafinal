@@ -5,6 +5,7 @@ import { useSlots } from '../../hooks/use-slots';
 import { IsolatedParticipantSlot } from './IsolatedParticipantSlot';
 import { CameraProvider } from '../../contexts/CameraContext';
 import { CameraController } from './CameraController';
+import { CameraToggle } from './CameraToggle';
 import { ConnectionIndicator } from './ConnectionIndicator';
 
 /**
@@ -86,6 +87,11 @@ export const IsolatedVideoGrid = React.memo(() => {
       
       {/* Индикатор соединения */}
       <ConnectionIndicator />
+      
+      {/* Кнопка переключения камеры */}
+      <div className="absolute bottom-4 right-4 z-20">
+        <CameraToggle />
+      </div>
       
       {/* Сетка видео */}
       <div className="h-full w-full p-4">

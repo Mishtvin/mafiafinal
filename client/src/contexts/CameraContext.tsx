@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useWebSocketContext } from './WebSocketContext';
 
 // Интерфейс для контекста камеры
 export interface CameraContextType {
@@ -27,9 +26,6 @@ export const CameraProvider = ({
   children: ReactNode; 
   localParticipantId: string;
 }) => {
-  // Получаем доступ к WebSocket API
-  const { sendMessage, isConnected } = useWebSocketContext();
-  
   // Локальное состояние камеры
   const [cameraEnabled, setCameraEnabled] = useState<boolean>(false);
   
@@ -80,18 +76,6 @@ export const CameraProvider = ({
       window.removeEventListener('camera-state-update', handler);
     };
   }, [localParticipantId]);
-  
-  // Эффект для синхронизации состояния камеры через WebSocket
-  useEffect(() => {
-    if (isConnected) {
-      // Отправляем текущее состояние камеры на сервер
-      console.log(`[CameraContext] Синхронизация состояния камеры через WebSocket: ${cameraEnabled}`);
-      sendMessage({
-        type: 'setCameraState',
-        isEnabled: cameraEnabled
-      });
-    }
-  }, [cameraEnabled, isConnected, sendMessage]);
   
   // Функции для управления камерой
   const enableCamera = () => {

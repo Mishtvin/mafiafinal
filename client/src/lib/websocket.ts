@@ -2,63 +2,6 @@
  * WebSocket сервис для поддержания одного соединения на все приложение
  */
 
-// Базовый интерфейс WebSocket сообщения
-export interface WebSocketMessage {
-  type: string;
-  [key: string]: any;
-}
-
-// Типы сообщений для слотов
-export interface SlotAssignmentMessage extends WebSocketMessage {
-  type: 'slotAssignment';
-  slots: Array<{
-    userId: string;
-    slotNumber: number;
-  }>;
-}
-
-// Типы сообщений для камеры
-export interface CameraStateMessage extends WebSocketMessage {
-  type: 'cameraState';
-  userId: string;
-  isEnabled: boolean;
-}
-
-export interface CameraStatesMessage extends WebSocketMessage {
-  type: 'cameraStates';
-  states: Record<string, boolean>;
-}
-
-// Служебные сообщения
-export interface PingMessage extends WebSocketMessage {
-  type: 'ping';
-}
-
-export interface PongMessage extends WebSocketMessage {
-  type: 'pong';
-  timestamp: number;
-}
-
-export interface ErrorMessage extends WebSocketMessage {
-  type: 'error';
-  message: string;
-}
-
-// Тип для объединения всех возможных сообщений
-export type ServerMessage = 
-  | SlotAssignmentMessage
-  | CameraStateMessage
-  | CameraStatesMessage
-  | PongMessage
-  | ErrorMessage;
-
-export type ClientMessage = 
-  | PingMessage
-  | { type: 'requestSlot'; slotNumber: number }
-  | { type: 'releaseSlot' }
-  | { type: 'setCameraState'; isEnabled: boolean };
-
-// Типы слушателей
 type MessageListener = (event: MessageEvent) => void;
 type StatusListener = (status: 'connected' | 'disconnected' | 'connecting' | 'reconnecting') => void;
 

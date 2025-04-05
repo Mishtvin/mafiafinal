@@ -7,14 +7,12 @@ import NotFound from "@/pages/not-found";
 import VideoConference from "@/pages/VideoConference";
 import DirectConnection from "@/pages/DirectConnection";
 import { WebSocketProvider } from "./contexts/WebSocketContext";
-import { CameraProvider } from "./contexts/CameraContext";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/conference" component={VideoConference} />
-      <Route path="/direct-connect" component={DirectConnection} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -66,17 +64,6 @@ function Home() {
               </div>
             </div>
           </Link>
-          
-          <Link href="/direct-connect">
-            <div className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors block cursor-pointer">
-              <div className="flex items-center justify-center">
-                <svg className="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Прямое подключение</span>
-              </div>
-            </div>
-          </Link>
         </div>
         
         <div className="mt-10 text-sm text-gray-500">
@@ -91,10 +78,8 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <WebSocketProvider>
-        <CameraProvider>
-          <Router />
-          <Toaster />
-        </CameraProvider>
+        <Router />
+        <Toaster />
       </WebSocketProvider>
     </QueryClientProvider>
   );
