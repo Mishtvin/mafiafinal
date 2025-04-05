@@ -92,7 +92,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                     <path d="M23 7 16 12 23 17z"></path>
                     <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
                   </svg>
-                  <span>Камера вкл.</span>
+                  <span>Выкл. камеру</span>
                 </>
               ) : (
                 <>
@@ -101,7 +101,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                     <path d="M9 9a3 3 0 0 1 5.12-2.12"></path>
                     <path d="M22 12 A10 10 0 0 0 12 2v0a10 10 0 0 0-2 19.5"></path>
                   </svg>
-                  <span>Камера выкл.</span>
+                  <span>Вкл. камеру</span>
                 </>
               )}
             </button>

@@ -56,12 +56,13 @@
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
   border-top: 1px solid rgba(30, 41, 59, 0.8);
   border-radius: 12px 12px 0 0;
-  padding: 16px;
+  padding: 0; /* Убираем отступы для более компактного вида */
+  max-height: 100px; /* Ограничиваем высоту панели */
+  height: auto; /* Позволяем высоте адаптироваться к содержимому */
 }
 
 .control-drawer.open {
   transform: translateY(0);
-  padding-bottom: 60px; /* Дополнительное пространство внизу */
 }
 
 /* Левые и правые контролы для разделения элементов */
@@ -78,7 +79,7 @@
 /* Обертка для кнопки-триггер */
 .drawer-trigger-container {
   position: fixed;
-  bottom: 12px;
+  bottom: 6px; /* Подняли немного выше */
   left: 0;
   right: 0;
   display: flex;
@@ -123,8 +124,8 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 20px;
-  margin-top: 20px;
+  padding: 12px 20px;
+  height: 72px; /* Фиксированная компактная высота */
 }
 
 /* Стиль кнопок управления в панели */
