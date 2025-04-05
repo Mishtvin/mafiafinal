@@ -104,48 +104,45 @@ export default function VideoConference() {
 
   // Room configuration options - максимально стабильная версия (рекомендации от Apple)
   const roomOptions: RoomOptions = {
-    // Полностью отключаем адаптивный стриминг - известная причина проблем на Safari
-    adaptiveStream: false,
+    // Включаем адаптивный стриминг, как в оригинальной версии MafiaLive
+    adaptiveStream: { pixelDensity: 'screen' },
 
-    // Отключаем Dynacast - частая причина проблем с видеотреками в Safari
-    dynacast: false,
+    // Включаем Dynacast, как в оригинальной версии MafiaLive
+    dynacast: true,
 
     // Настройки публикации видео
     publishDefaults: {
-      // Полностью отключаем Simulcast для максимальной стабильности видео
-      simulcast: false,
+      // Включаем Simulcast с пресетами, как в оригинальной версии MafiaLive
+      simulcast: true,
+      videoSimulcastLayers: [VideoPresets.h540, VideoPresets.h216],
       
-      // RED пакеты могут вызывать дополнительные проблемы
-      red: false,
+      // Включаем RED пакеты, если не используется E2EE, как в оригинальной версии
+      red: !isE2EEEnabled,
       
       // Никогда не останавливаем треки при mute - только приостанавливаем
       stopMicTrackOnMute: false,
-      
-      // Устанавливаем минимальные параметры кодирования видео для стабильности
-      videoEncoding: {
-        maxBitrate: 800_000,  // Снижаем до 800 kbps для большей стабильности
-        maxFramerate: 20,     // Снижаем до 20fps для уменьшения нагрузки
-      },
       
       // Используем VP8 кодек - подтвержденная стабильность в WebRTC
       videoCodec: 'vp8'
     },
     
-    // Настройки захвата видео
+    // Настройки захвата видео с улучшенным разрешением
     videoCaptureDefaults: {
       facingMode: 'user',
-      // Используем минимальное разрешение для стабильности (рекомендация Apple)
+      // Используем разрешение 540p (доминантное в simulcast пресетах)
       resolution: {
-        width: 480,
-        height: 360,
-        frameRate: 20,
+        width: 960,
+        height: 540,
+        frameRate: 30, // Стандартный фреймрейт для видеоконференций
       },
       deviceId: undefined,
     },
     
+    // Настройки для E2EE шифрования
+    e2ee: undefined, // E2EE будет настроен в другом месте, если необходимо
+    
     // Критически важные параметры для стабильности
     disconnectOnPageLeave: false,
-
   };
 
   // Улучшенная обработка событий комнаты с предотвращением множественных вызовов
@@ -245,10 +242,10 @@ export default function VideoConference() {
           // Параметры захвата камеры - используем те же параметры, что и в roomOptions
           const videoCaptureOptions = {
             resolution: {
-              width: 480,
-              height: 360,
-              frameRate: 20,
-            }, // Используем минимальное разрешение как в roomOptions
+              width: 960,
+              height: 540,
+              frameRate: 30,
+            }, // Соответствует улучшенному разрешению из roomOptions
             facingMode: 'user' as 'user',
           };
           
