@@ -360,19 +360,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Проверяем, не занят ли выбранный слот
             const currentOccupant = slotAssignments.get(selectedSlot);
             if (currentOccupant && currentOccupant !== userId) {
-              // Слот занят другим пользователем
-              sendToClient({
-                type: 'slot_busy',
-                slotNumber: selectedSlot
-              });
-              return;
+              // Слот занят другим пользователем - при обычном клике сообщаем, что занято
+              if (!data.dragAndDrop) {
+                sendToClient({
+                  type: 'slot_busy',
+                  slotNumber: selectedSlot
+                });
+                return;
+              }
+              
+              // При перетаскивании - меняем пользователей местами
+              console.log(`Меняем местами: ${userId} из слота ${previousSlot} и ${currentOccupant} из слота ${selectedSlot}`);
+              
+              // Получаем WebSocket второго пользователя, если он подключен
+              const otherUserWs = connections.get(currentOccupant);
+              
+              // Перемещаем другого пользователя в предыдущий слот текущего пользователя
+              if (previousSlot !== undefined) {
+                slotAssignments.set(previousSlot, currentOccupant);
+                userSlots.set(currentOccupant, previousSlot);
+              }
             }
             
             // Занимаем новый слот
             slotAssignments.set(selectedSlot, userId);
             userSlots.set(userId, selectedSlot);
             
-            console.log(`Пользователь ${userId} выбрал слот ${selectedSlot}`);
+            console.log(`Пользователь ${userId} ${data.dragAndDrop ? "перетащил себя в" : "выбрал"} слот ${selectedSlot}`);
             
             // Отправляем обновление всем подключенным клиентам
             broadcastSlotUpdate();

@@ -47,10 +47,11 @@ export function useSlots(userId: string) {
   }, [sendMessage]);
 
   // Выбор слота
-  const selectSlot = useCallback((slotNumber: number) => {
+  const selectSlot = useCallback((slotNumber: number, dragAndDrop: boolean = false) => {
     return sendMessage({
       type: 'select_slot',
-      slotNumber
+      slotNumber,
+      dragAndDrop
     });
   }, [sendMessage]);
 

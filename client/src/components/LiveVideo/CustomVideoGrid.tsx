@@ -130,8 +130,55 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
   
   const hasVideo = videoTracks.length > 0;
   
+  // Для поддержки drag-n-drop
+  const slotsManager = useSlots(participant.identity);
+  const [isDragging, setIsDragging] = useState(false);
+  
+  // Обработчики для drag and drop
+  const handleDragStart = (e: React.DragEvent) => {
+    // Сохраняем информацию о перетаскиваемом слоте
+    e.dataTransfer.setData('text/plain', String(slotNumber));
+    e.dataTransfer.effectAllowed = 'move';
+    setIsDragging(true);
+  };
+  
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+  
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+  
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedSlotNumber = Number(e.dataTransfer.getData('text/plain'));
+    
+    // Только текущий пользователь может инициировать обмен
+    if (participant.isLocal) {
+      console.log(`Перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber}`);
+      // Вызываем API для обмена местами с флагом dragAndDrop=true
+      slotsManager.selectSlot(slotNumber, true);
+    } else if (draggedSlotNumber !== slotNumber) {
+      // Если перетаскивание выполнено другим пользователем на наш слот
+      console.log(`Получено перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber}`);
+    }
+    
+    setIsDragging(false);
+  };
+
   return (
-    <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
+    <div 
+      className={`video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700 ${
+        isDragging ? 'opacity-60' : ''
+      }`}
+      draggable={true}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {hasVideo ? (
         <div className="h-full w-full relative flex items-center justify-center">
           {/* Здесь мы используем первый найденный трек */}
@@ -179,10 +226,39 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
  * Компонент для отображения пустого слота
  */
 function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) {
+  // Для поддержки drag-n-drop пустых слотов
+  const [isDragOver, setIsDragOver] = useState(false);
+  
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+  };
+  
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+  
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedSlotNumber = Number(e.dataTransfer.getData('text/plain'));
+    console.log(`Перетаскивание из слота ${draggedSlotNumber} в пустой слот ${index + 1}`);
+    
+    // Перенаправляем на стандартный обработчик клика
+    if (onClick) onClick();
+    
+    setIsDragOver(false);
+  };
+  
   return (
     <div 
-      className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 cursor-pointer"
+      className={`video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border ${
+        isDragOver ? 'border-purple-500/50 ring-2 ring-purple-500/30' : 'border-slate-700/30'
+      } cursor-pointer`}
       onClick={onClick}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center">
