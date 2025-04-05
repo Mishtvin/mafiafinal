@@ -170,13 +170,15 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
     };
   }, []);
   
+  // Используем ref вне useEffect для отслеживания инициализации между рендерами
+  const cameraInitializedRef = React.useRef(false);
+  
   // Обновляем статус камеры при изменении состояния локального участника
   useEffect(() => {
     if (!room || !room.localParticipant) return;
     
-    // Флаги для контроля инициализации камеры - используем ref для сохранения между рендерами
-    const initialized = React.useRef(false);
-    let cameraInitialized = false; // Нужно для проверок внутри функции initializeCamera
+    // Локальные флаги для контроля инициализации
+    let cameraInitialized = false; // Для локальных проверок внутри функций
     let cameraInitializationTimer: NodeJS.Timeout | null = null;
     
     // Обработчик события подключения к комнате
@@ -184,13 +186,13 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       console.log('СОБЫТИЕ: Комната подключена, планируем инициализацию камеры');
       
       // Проверяем, инициализировали ли мы уже камеру для этого экземпляра
-      if (initialized.current) {
+      if (cameraInitializedRef.current) {
         console.log('Камера уже была инициализирована для этого экземпляра, пропускаем');
         return;
       }
       
       // Устанавливаем флаг инициализации, чтобы предотвратить повторные вызовы
-      initialized.current = true;
+      cameraInitializedRef.current = true;
       
       // Отменяем любые предыдущие таймеры перед установкой нового
       if (cameraInitializationTimer) {
@@ -332,7 +334,7 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
               
               // Попытка очистки текущего состояния треков
               try {
-                const tracks = room.localParticipant.getTracks();
+                const tracks = room.localParticipant.getTrackPublications();
                 if (tracks.length > 0) {
                   console.log('Очищаем существующие треки для сброса состояния...');
                   for (const publication of tracks) {
@@ -379,7 +381,7 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
     // Обработчик событий изменения состояния треков
     const handleTrackChange = () => {
       // Вызываем синхронизацию только если камера уже инициализирована
-      if (cameraInitialized) {
+      if (cameraInitializedRef.current) {
         syncCameraState();
       }
     };
