@@ -217,3 +217,26 @@
   background-color: rgba(248, 113, 113, 0.1);
 }
 
+/* Стили для боковой кнопки камеры */
+.sidebar-button {
+  background-color: rgba(30, 41, 59, 0.8);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: none;
+}
+
+.sidebar-button:hover {
+  background-color: rgba(51, 65, 85, 0.9);
+}
+
+.sidebar-button-active {
+  background-color: rgba(59, 130, 246, 0.9);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: none;
+}
+
+.sidebar-button-active:hover {
+  background-color: rgba(37, 99, 235, 0.9);
+}
+

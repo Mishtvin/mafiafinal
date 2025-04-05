@@ -3,7 +3,7 @@ import { useWebSocketContext } from '../../contexts/WebSocketContext';
 import { useCameraContext } from '../../contexts/CameraContext';
 
 /**
- * Компонент для переключения состояния камеры
+ * Компонент для переключения состояния камеры в боковой панели
  */
 export const CameraToggle: React.FC = () => {
   // Получаем доступ к состоянию и функциям из контекстов
@@ -24,12 +24,7 @@ export const CameraToggle: React.FC = () => {
     // Запускаем анимацию
     setAnimating(true);
     
-    // Новое состояние (инвертируем текущее)
-    const newState = !cameraEnabled;
-    console.log('[CameraToggle] Переключение камеры на:', newState);
-    
     // Обновляем состояние камеры в контексте
-    // (это запустит эффект в CameraContext, который отправит WebSocket сообщение)
     toggleCamera();
     
     // Останавливаем анимацию после завершения
@@ -38,28 +33,22 @@ export const CameraToggle: React.FC = () => {
     }, 300);
   };
   
-  // Определяем классы в зависимости от состояния
+  // Определяем классы для боковой панели
   const buttonClass = cameraEnabled 
-    ? 'bg-blue-600 hover:bg-blue-700' 
-    : 'bg-slate-700 hover:bg-slate-800';
-  
-  const iconClass = cameraEnabled 
-    ? '' 
-    : 'opacity-50';
+    ? 'sidebar-button-active' 
+    : 'sidebar-button';
   
   return (
     <button 
       onClick={handleToggle}
       disabled={!isConnected || animating}
-      className={`${buttonClass} ${animating ? 'scale-95' : 'scale-100'} 
-        transition-all duration-200 rounded-full p-3 focus:outline-none 
-        focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 
-        text-white shadow-lg`}
+      className={`${buttonClass} ${animating ? 'scale-95' : 'scale-100'} fixed left-4 top-1/2 -translate-y-1/2
+        z-50 p-3 rounded-r-lg shadow-lg transition-all duration-200`}
       aria-label={cameraEnabled ? "Выключить камеру" : "Включить камеру"}
     >
       <svg 
         xmlns="http://www.w3.org/2000/svg" 
-        className={`h-6 w-6 ${iconClass}`}
+        className="h-7 w-7"
         fill="none" 
         viewBox="0 0 24 24" 
         stroke="currentColor"

@@ -88,10 +88,8 @@ export const IsolatedVideoGrid = React.memo(() => {
       {/* Индикатор соединения */}
       <ConnectionIndicator />
       
-      {/* Кнопка переключения камеры */}
-      <div className="absolute bottom-4 right-4 z-20">
-        <CameraToggle />
-      </div>
+      {/* Кнопка переключения камеры в боковой панели */}
+      <CameraToggle />
       
       {/* Сетка видео */}
       <div className="h-full w-full p-4">
