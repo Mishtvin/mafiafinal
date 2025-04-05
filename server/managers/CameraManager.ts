@@ -47,9 +47,12 @@ export class CameraManager {
     this.cameraStates.set(userId, isEnabled);
     console.log(`Камера пользователя ${userId} ${isEnabled ? 'включена' : 'выключена'}`);
     
-    // Отправляем событие об изменении состояния камеры
+    // Отправляем ТОЛЬКО событие об индивидуальном изменении состояния камеры
+    // и НЕ отправляем массовое обновление, которое может сбросить состояния других камер
     globalEvents.emit("camera_state_changed", userId, isEnabled);
-    globalEvents.emit("camera_states_updated", this.getAllCameraStates());
+    
+    // Логируем состояние для отладки
+    console.log('Текущие состояния камер:', JSON.stringify(this.getAllCameraStates()));
   }
 
   /**
@@ -69,11 +72,16 @@ export class CameraManager {
    */
   removeCameraState(userId: string): void {
     if (this.cameraStates.has(userId)) {
+      const wasEnabled = this.cameraStates.get(userId);
       this.cameraStates.delete(userId);
       console.log(`Удалена информация о камере пользователя ${userId}`);
       
-      // Отправляем событие об обновлении состояний камер
-      globalEvents.emit("camera_states_updated", this.getAllCameraStates());
+      // Отправляем событие об изменении состояния только для этого пользователя
+      // Устанавливаем false, так как камера больше не используется
+      globalEvents.emit("camera_state_changed", userId, false);
+      
+      // Логируем состояние для отладки
+      console.log('Текущие состояния камер после удаления:', JSON.stringify(this.getAllCameraStates()));
     }
   }
 
@@ -87,18 +95,12 @@ export class CameraManager {
       this.cameraStates.set(userId, false);
       console.log(`Инициализировано состояние камеры для нового пользователя ${userId} (выключена)`);
       
-      // Отправляем обновление только для этого пользователя, не трогая остальных
-      // Создаем объект только с обновлением для нового пользователя
-      const updateForUser: Record<string, boolean> = {};
-      updateForUser[userId] = false;
-      
       // Отправляем индивидуальное обновление через событие
+      // только для конкретного пользователя
       globalEvents.emit("camera_state_changed", userId, false);
       
-      // Для поддержки совместимости с существующими подписчиками
-      // отправляем полное состояние, но не обновляем всех
-      const allStates = this.getAllCameraStates();
-      globalEvents.emit("camera_states_updated", allStates);
+      // Логируем состояние для отладки
+      console.log('Текущие состояния камер после инициализации:', JSON.stringify(this.getAllCameraStates()));
     }
   }
 }
