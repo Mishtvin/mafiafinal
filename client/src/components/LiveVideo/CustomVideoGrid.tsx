@@ -151,13 +151,24 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
     // Сохраняем информацию о перетаскиваемом слоте
     e.dataTransfer.setData('text/plain', String(slotNumber));
     e.dataTransfer.effectAllowed = 'move';
-    setIsDragging(true);
     
     // Добавляем информацию, что это локальный пользователь
-    e.dataTransfer.setData('application/json', JSON.stringify({
-      isLocal: true,
-      identity: participant.identity
-    }));
+    try {
+      e.dataTransfer.setData('application/json', JSON.stringify({
+        isLocal: true,
+        identity: participant.identity
+      }));
+    } catch (error) {
+      console.error('Ошибка сохранения JSON данных:', error);
+    }
+    
+    // Визуальный отклик для пользователя
+    setIsDragging(true);
+    
+    // Важно: вызываем stopPropagation, чтобы предотвратить другие обработчики
+    e.stopPropagation();
+    
+    console.log(`Начато перетаскивание из слота ${slotNumber} для пользователя ${participant.identity}`);
   };
   
   const handleDragEnd = () => {
@@ -171,9 +182,19 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
   
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     
     try {
-      const draggedSlotNumber = Number(e.dataTransfer.getData('text/plain'));
+      // Получаем данные о перетаскиваемом слоте
+      const slotData = e.dataTransfer.getData('text/plain');
+      console.log('Получены данные о перетаскивании:', slotData);
+      
+      if (!slotData) {
+        console.error('Не удалось получить данные о перетаскиваемом слоте');
+        return;
+      }
+      
+      const draggedSlotNumber = Number(slotData);
       
       // Игнорируем перетаскивание на тот же слот
       if (draggedSlotNumber === slotNumber) {
@@ -184,10 +205,12 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
       // Только текущий пользователь может инициировать обмен
       if (participant.isLocal) {
         console.log(`Перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber}`);
+        
         // Вызываем API для обмена местами с флагом dragAndDrop=true
-        slotsManager.selectSlot(slotNumber, true);
+        const success = slotsManager.selectSlot(slotNumber, true);
+        console.log(`Результат запроса смены слота: ${success ? 'успешно' : 'неудачно'}`);
       } else {
-        console.log(`Получено перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber} - игнорируем`);
+        console.log(`Получено перетаскивание из слота ${draggedSlotNumber} в слот ${slotNumber} - игнорируем, т.к. целевой участник не локальный`);
       }
     } catch (error) {
       console.error('Ошибка при обработке drag-and-drop:', error);
@@ -269,23 +292,48 @@ function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) 
   
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     
     try {
-      const draggedSlotNumber = Number(e.dataTransfer.getData('text/plain'));
+      // Получаем данные о перетаскиваемом слоте
+      const slotData = e.dataTransfer.getData('text/plain');
+      console.log('Получены данные о перетаскивании в пустой слот:', slotData);
+      
+      if (!slotData) {
+        console.error('Не удалось получить данные о перетаскиваемом слоте');
+        return;
+      }
+      
+      const draggedSlotNumber = Number(slotData);
       console.log(`Перетаскивание из слота ${draggedSlotNumber} в пустой слот ${index + 1}`);
       
-      // Проверяем, является ли перетаскиваемый элемент локальным пользователем
-      const jsonData = e.dataTransfer.getData('application/json');
-      if (jsonData) {
-        const data = JSON.parse(jsonData);
-        if (data.isLocal) {
-          // Если это локальный пользователь, то вызываем стандартный обработчик клика
-          if (onClick) onClick();
+      // Обычно при перетаскивании в пустой слот мы просто вызываем onClick
+      // Но сначала проверим, что это локальный пользователь
+      try {
+        const jsonData = e.dataTransfer.getData('application/json');
+        if (jsonData) {
+          const data = JSON.parse(jsonData);
+          if (data.isLocal) {
+            console.log('Перетаскивание локального пользователя в пустой слот');
+            // Если это локальный пользователь, то вызываем стандартный обработчик клика
+            if (onClick) {
+              onClick();
+              console.log('Обработчик клика вызван для пустого слота');
+            }
+          } else {
+            console.log('Перетаскивание не-локального пользователя - игнорируем');
+          }
         } else {
-          console.log('Перетаскивание не-локального пользователя - игнорируем');
+          // Если нет дополнительных данных, считаем что перетаскивание допустимо
+          console.log('Нет данных о локальности пользователя, выполняем перетаскивание');
+          if (onClick) {
+            onClick();
+            console.log('Обработчик клика вызван для пустого слота (без доп. данных)');
+          }
         }
-      } else {
-        // Если нет дополнительных данных, то это тоже обрабатываем
+      } catch (jsonError) {
+        console.error('Ошибка при обработке JSON данных:', jsonError);
+        // При ошибке парсинга JSON все равно пытаемся обработать
         if (onClick) onClick();
       }
     } catch (error) {

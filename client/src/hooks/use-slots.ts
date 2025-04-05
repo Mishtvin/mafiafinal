@@ -196,6 +196,16 @@ export function useSlots(userId: string) {
               break;
             }
             
+            case 'slot_selection_result': {
+              // Результат выбора слота
+              if (data.success) {
+                console.log(`Успешно выбран слот ${data.slotNumber}`);
+              } else {
+                console.log(`Ошибка выбора слота: ${data.message}`);
+              }
+              break;
+            }
+            
             case 'ping': {
               // Ответ на пинг от сервера с текущим временем для измерения задержки
               sendMessage({ 

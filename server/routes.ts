@@ -347,10 +347,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
           case 'select_slot':
             // Пользователь выбирает слот
-            if (!userId) break;
+            if (!userId) {
+              console.log('Попытка выбора слота без ID пользователя');
+              break;
+            }
             
             const selectedSlot = data.slotNumber;
             const previousSlot = userSlots.get(userId);
+            
+            console.log(`Запрос на выбор слота ${selectedSlot} от ${userId}, предыдущий слот: ${previousSlot}, dragAndDrop: ${!!data.dragAndDrop}`);
             
             // Проверяем, не занят ли выбранный слот
             const currentOccupant = slotAssignments.get(selectedSlot);
@@ -358,10 +363,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Проверяем валидность операции
             if (selectedSlot === previousSlot) {
               console.log(`Игнорирую выбор того же слота ${selectedSlot} пользователем ${userId}`);
+              
+              // Сообщаем клиенту, что операция не нужна
+              sendToClient({
+                type: 'slot_selection_result',
+                success: false,
+                message: 'same_slot'
+              });
               break;
             }
             
             if (currentOccupant && currentOccupant !== userId) {
+              console.log(`Слот ${selectedSlot} уже занят пользователем ${currentOccupant}`);
+              
               // Слот занят другим пользователем - при обычном клике сообщаем, что занято
               if (!data.dragAndDrop) {
                 sendToClient({
@@ -378,6 +392,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (previousSlot !== undefined) {
                 slotAssignments.set(previousSlot, currentOccupant);
                 userSlots.set(currentOccupant, previousSlot);
+                console.log(`Пользователь ${currentOccupant} перемещен в слот ${previousSlot}`);
               } else {
                 // Если у текущего пользователя нет предыдущего слота, просто освободим слот другого пользователя
                 slotAssignments.delete(selectedSlot);
@@ -397,6 +412,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userSlots.set(userId, selectedSlot);
             
             console.log(`Пользователь ${userId} ${data.dragAndDrop ? "перетащил себя в" : "выбрал"} слот ${selectedSlot}`);
+            
+            // Сообщаем клиенту, что операция успешна
+            sendToClient({
+              type: 'slot_selection_result',
+              success: true,
+              slotNumber: selectedSlot
+            });
             
             // Отправляем обновление всем подключенным клиентам
             broadcastSlotUpdate();
