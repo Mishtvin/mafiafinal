@@ -2,7 +2,8 @@ import {
   ParticipantTile, 
   useParticipants, 
   useTracks,
-  VideoTrack
+  VideoTrack,
+  TrackReferenceOrPlaceholder
 } from '@livekit/components-react';
 import { Track, Participant, Room } from 'livekit-client';
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
@@ -149,7 +150,10 @@ const MemoizedVideoGrid = React.memo(
     
     // Проверка изменения слотов (поверхностное сравнение объектов)
     const slotsEqual = Object.keys(prevProps.slots).length === Object.keys(nextProps.slots).length &&
-      Object.keys(prevProps.slots).every(key => prevProps.slots[key] === nextProps.slots[key]);
+      Object.keys(prevProps.slots).every(k => {
+        const key = Number(k); // Преобразуем строковый ключ к числу
+        return prevProps.slots[key] === nextProps.slots[key];
+      });
     
     // Проверка изменения userSlot
     const userSlotEqual = prevProps.userSlot === nextProps.userSlot;
@@ -174,14 +178,14 @@ const MemoizedVideoGrid = React.memo(
         !localParticipantEqual ? 'изменился локальный участник' : 'неизвестная причина');
     }
     
-    return shouldNotUpdate;
+    // Обязательно возвращаем boolean (не undefined!)
+    return shouldNotUpdate === true;
   }
 );
 
 /**
- * Компонент для отображения видеотрека
- * Отдельный компонент для минимизации перерисовок
- * Использует строгий компаратор для максимальной изоляции
+ * Стабильный компонент для отображения видеотрека участника
+ * Оптимизирован для минимизации перерисовок
  */
 const StableVideoTrack = React.memo(
   ({ participant }: { participant: Participant }) => {
@@ -195,37 +199,65 @@ const StableVideoTrack = React.memo(
     ).filter(track => track.participant.identity === identity);
     
     const hasVideo = videoTracks.length > 0;
-    console.log(`[TRACK] Статус видео для ${identity}: ${hasVideo ? 'включено' : 'выключено'}`);
     
-    return hasVideo ? (
-      <div className="h-full w-full relative flex items-center justify-center">
-        <VideoTrack 
-          trackRef={videoTracks[0]}
-          className="h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 ring-1 ring-white/10"></div>
-      </div>
-    ) : (
-      <div className="flex items-center justify-center h-full">
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          className="h-12 w-12 text-slate-500" 
-          fill="none" 
-          viewBox="0 0 24 24" 
-          stroke="currentColor"
-        >
-          <path 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            strokeWidth={1} 
-            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+    // Используем useRef для предотвращения перерисовки при изменении
+    // состояния трека, но сохраняем последнее состояние для отладки
+    const lastTrackState = React.useRef<{hasVideo: boolean, trackId: string}>({
+      hasVideo: false,
+      trackId: '',
+    });
+    
+    // Логируем изменения состояния трека, но только если оно изменилось
+    const currentTrackId = hasVideo ? videoTracks[0].trackSid : '';
+    if (lastTrackState.current.hasVideo !== hasVideo || 
+        lastTrackState.current.trackId !== currentTrackId) {
+      console.log(`[TRACK] Изменение статуса видео для ${identity}: ${hasVideo ? 'включено' : 'выключено'} (trackId: ${currentTrackId})`);
+      
+      lastTrackState.current = {
+        hasVideo,
+        trackId: currentTrackId
+      };
+    }
+    
+    // Используем React.useMemo для кеширования и предотвращения перерисовки
+    const videoContent = React.useMemo(() => {
+      return hasVideo ? (
+        <div className="h-full w-full relative flex items-center justify-center">
+          <VideoTrack 
+            track={videoTracks[0]}
+            className="h-full w-full object-cover"
           />
-        </svg>
-      </div>
+          <div className="absolute inset-0 ring-1 ring-white/10"></div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-center h-full">
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className="h-12 w-12 text-slate-500" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={1} 
+              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+            />
+          </svg>
+        </div>
+      );
+    }, [hasVideo, videoTracks]);
+    
+    return (
+      <React.Fragment>
+        {videoContent}
+      </React.Fragment>
     );
   },
-  // Компаратор для сравнения только идентификаторов участников
+  // Строгий компаратор для предотвращения перерисовки
   (prevProps, nextProps) => {
+    // Сравниваем только идентификаторы - это единственное, что мы используем из props
     return prevProps.participant.identity === nextProps.participant.identity;
   }
 );
