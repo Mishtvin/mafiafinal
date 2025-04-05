@@ -200,9 +200,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       broadcastCameraStates();
     }
     
-    // Тихая периодическая проверка без вывода логов
+    // Регулярно выводим информацию о состоянии комнаты для отладки
+    console.log(`Периодическая проверка: пользователей=${connections.size}, слотов=${slotAssignments.size}, камер=${cameraStates.size}`);
     
-      // Периодически отправляем обновление всем клиентам для синхронизации
+    // Выводим текущие назначения слотов
+    console.log('Текущие назначения слотов:');
+    slotAssignments.forEach((userId, slot) => {
+      console.log(`- Слот ${slot}: ${userId}`);
+    });
+    
+    // Периодически отправляем обновление всем клиентам для синхронизации
     broadcastSlotUpdate();
     broadcastCameraStates();
   }, 5000); // каждые 5 секунд
@@ -257,7 +264,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
-    // Тихие пинги без логирования состояния
+    // Статистика активных соединений и слотов
+    console.log(`Активные соединения: ${connections.size}, активные слоты: ${slotAssignments.size}`)
   }, pingInterval);
   
   // Обработчик подключений WebSocket
@@ -398,10 +406,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Проверяем, не занят ли целевой слот
             const targetSlotOccupant = slotAssignments.get(targetSlot);
             if (targetSlotOccupant && targetSlotOccupant !== targetUserId) {
+              console.log(`[MOVE USER] Целевой слот ${targetSlot} занят пользователем ${targetSlotOccupant}`);
+              
               // Если целевой слот занят, выполняем обмен слотами
               if (targetSlotOccupant) {
                 const occupantCurrentSlot = userSlots.get(targetSlotOccupant);
                 if (occupantCurrentSlot !== undefined) {
+                  console.log(`[MOVE USER] Выполняем обмен слотами между ${targetUserId} (${currentUserSlot}) и ${targetSlotOccupant} (${targetSlot})`);
+                  
                   // Устанавливаем перемещаемого пользователя на новый слот
                   slotAssignments.set(targetSlot, targetUserId);
                   userSlots.set(targetUserId, targetSlot);
@@ -409,13 +421,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Перемещаем текущего владельца слота на слот перемещаемого пользователя
                   slotAssignments.set(currentUserSlot, targetSlotOccupant);
                   userSlots.set(targetSlotOccupant, currentUserSlot);
+                  
+                  console.log(`[MOVE USER] Успешно: пользователи ${targetUserId} и ${targetSlotOccupant} поменялись слотами`);
                 }
               }
             } else {
               // Если целевой слот свободен, просто перемещаем пользователя
+              console.log(`[MOVE USER] Целевой слот ${targetSlot} свободен, перемещаем пользователя ${targetUserId}`);
               slotAssignments.delete(currentUserSlot);
               slotAssignments.set(targetSlot, targetUserId);
               userSlots.set(targetUserId, targetSlot);
+              console.log(`[MOVE USER] Успешно: пользователь ${targetUserId} перемещен из слота ${currentUserSlot} в слот ${targetSlot}`);
             }
             
             // Отправляем обновление всем подключенным клиентам
@@ -464,8 +480,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Проверка активности соединения
     const connectionCheckInterval = setInterval(() => {
       const now = Date.now();
-      if (now - lastPongTime > 15000) { // 15 секунд без ответа
-        console.log(`Соединение неактивно более 15 секунд для ${userId || 'неизвестного пользователя'}`);
+      if (now - lastPongTime > 30000) { // 30 секунд без ответа
+        console.log(`Соединение неактивно более 30 секунд для ${userId || 'неизвестного пользователя'}`);
         
         // Очищаем все ресурсы пользователя
         if (userId) {
