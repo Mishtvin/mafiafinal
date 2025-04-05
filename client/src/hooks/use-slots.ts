@@ -204,6 +204,43 @@ export function useSlots(userId: string) {
               break;
             }
             
+            // Обработка индивидуального обновления состояния камеры
+            case 'individual_camera_update': {
+              const { userId, enabled } = data;
+              console.log(`Получено индивидуальное обновление камеры: ${userId} -> ${enabled}`);
+              
+              setState(prev => {
+                // Получаем текущий ID пользователя
+                const currentUserId = userIdRef.current;
+                const globalId = window.currentUserIdentity;
+                
+                // Создаем копию текущего состояния камер
+                const newCameraStates = { ...prev.cameraStates };
+                
+                // Если это НЕ текущий пользователь, обновляем состояние
+                // Для текущего пользователя сохраняем его собственное состояние
+                if (userId !== currentUserId && userId !== globalId) {
+                  console.log(`Обновляем состояние чужой камеры: ${userId} -> ${enabled}`);
+                  newCameraStates[userId] = enabled;
+                } else {
+                  // Для текущего пользователя сохраняем текущее состояние, если оно уже установлено
+                  if (userId in newCameraStates) {
+                    console.log(`Сохраняем текущее состояние своей камеры: ${userId} -> ${newCameraStates[userId]}`);
+                  } else {
+                    // Если нет текущего состояния, используем полученное
+                    console.log(`Устанавливаем начальное состояние своей камеры: ${userId} -> ${enabled}`);
+                    newCameraStates[userId] = enabled;
+                  }
+                }
+                
+                return {
+                  ...prev,
+                  cameraStates: newCameraStates
+                };
+              });
+              break;
+            }
+            
             case 'camera_states_update': {
               // Обновление информации о состоянии камер
               const newCameraStates = data.cameraStates || {};

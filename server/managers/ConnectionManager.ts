@@ -413,12 +413,15 @@ export class ConnectionManager {
           const updateData: Record<string, boolean> = {};
           updateData[changedUserId] = isEnabled;
           
+          // Отправляем специальное событие individual_camera_update вместо camera_states_update
+          // Это позволит клиенту понять, что нужно обновить только одну камеру, а не все
           ws.send(JSON.stringify({
-            type: 'camera_states_update',
-            cameraStates: updateData
+            type: 'individual_camera_update',
+            userId: changedUserId,
+            enabled: isEnabled
           }));
           
-          console.log(`Отправлено обновление состояния камеры для ${changedUserId} (${isEnabled}) клиенту ${userId}`);
+          console.log(`Отправлено индивидуальное обновление состояния камеры для ${changedUserId} (${isEnabled}) клиенту ${userId}`);
         } catch (error) {
           console.error(`Ошибка отправки обновления состояния камеры ${changedUserId} пользователю ${userId}:`, error);
         }
