@@ -31,9 +31,9 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
   const savedState = typeof window !== 'undefined' ? 
     window.sessionStorage.getItem('camera-state') : null;
     
-  // Инициализируем камеру как выключенную по умолчанию
+  // Инициализируем камеру как ВКЛЮЧЕННУЮ по умолчанию
   // или используем сохраненное состояние, если оно есть
-  const initialCameraState = savedState === 'true';
+  const initialCameraState = savedState !== null ? savedState === 'true' : true;
   
   console.log('Инициализация состояния камеры:', initialCameraState, 
               'на основе сохраненного значения:', savedState);
@@ -195,8 +195,8 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
           effectiveState = savedCameraState === 'true';
           console.log('Использую сохраненное состояние камеры:', effectiveState);
         } else if (isFirstConnection) {
-          // При первом подключении камера выключена
-          effectiveState = false;
+          // При первом подключении камера ВКЛЮЧЕНА
+          effectiveState = true;
         } else {
           // Иначе используем текущее API состояние
           effectiveState = apiCameraEnabled;
@@ -249,11 +249,12 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       room.localParticipant.on('trackPublished', updateCameraState);
       room.localParticipant.on('trackUnpublished', updateCameraState);
       
-      // ПРИНУДИТЕЛЬНО устанавливаем камеру как выключенную при инициализации,
-      // но только если нет сохраненного состояния
+      // Проверяем сохраненное состояние, иначе используем камеру ВКЛЮЧЕННОЙ при инициализации
       const savedState = window.sessionStorage.getItem('camera-state');
-      if (savedState !== 'true') {
+      if (savedState === 'false') {
         setCameraEnabled(false);
+      } else {
+        setCameraEnabled(true);
       }
       
       // Вызываем немедленно для обновления состояния

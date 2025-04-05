@@ -113,13 +113,13 @@ export class CameraManager {
    */
   initializeUserCamera(userId: string): void {
     if (!this.cameraStates.has(userId)) {
-      // По умолчанию камера выключена
-      this.cameraStates.set(userId, false);
+      // По умолчанию камера ВКЛЮЧЕНА при подключении нового пользователя
+      this.cameraStates.set(userId, true);
       
       // Устанавливаем метку времени начальной инициализации
       this.lastCameraUpdates.set(userId, Date.now());
       
-      console.log(`Инициализировано состояние камеры для нового пользователя ${userId} (выключена)`);
+      console.log(`Инициализировано состояние камеры для нового пользователя ${userId} (включена)`);
       
       // При инициализации НЕ отправляем уведомление о состоянии камеры всем клиентам
       // Только сохраняем локальное значение. Обновления для других клиентов будут 
