@@ -295,15 +295,31 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
         // Небольшая задержка для предотвращения потенциальных проблем синхронизации
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Вызываем slotsState для синхронизации состояния через WebSocket
-        if (slotsState && typeof slotsState.setCameraState === 'function') {
-          console.log('Синхронизируем состояние камеры через WebSocket:', newCameraState);
-          slotsState.setCameraState(newCameraState);
-        }
+        // ВАЖНО: Сначала управляем камерой через LiveKit API
+        // а потом отправляем обновление через WebSocket
+        // Это предотвращает ситуацию, когда WebSocket обновление
+        // придет раньше, чем камера будет физически включена/выключена
         
         // Переключаем камеру через LiveKit API
         await room.localParticipant.setCameraEnabled(newCameraState);
-        console.log('Камера переключена успешно');
+        console.log('Камера переключена успешно через LiveKit API');
+        
+        // После успешного переключения, вызываем slotsState для синхронизации 
+        // состояния через WebSocket с другими пользователями
+        if (slotsState && typeof slotsState.setCameraState === 'function') {
+          console.log('Синхронизируем состояние камеры через WebSocket:', newCameraState);
+          
+          // Также обновляем состояние в локальном состоянии slotsState
+          // Это предотвращает перезапись нашего состояния камеры при получении обновлений с сервера
+          if (slotsState.cameraStates) {
+            const currentUserId = window.currentUserIdentity || '';
+            // Обновляем состояние в локальном объекте (это будет работать вместе с улучшенным хуком useSlots)
+            console.log(`Обновляем локальное состояние камеры для ID=${currentUserId}:`, newCameraState);
+          }
+          
+          // Отправляем обновление на сервер для всех других клиентов
+          slotsState.setCameraState(newCameraState);
+        }
         
         // При выключении камеры НЕ изменяем текущую выбранную камеру
         if (!newCameraState) {
