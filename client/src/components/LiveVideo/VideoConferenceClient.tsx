@@ -213,9 +213,24 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
       // Устанавливаем UI состояние сразу
       setCameraEnabled(shouldEnableCamera);
       
-      // Обновляем реальное состояние камеры через LiveKit API с задержкой
-      setTimeout(() => {
-        console.log('ИНИЦИАЛИЗАЦИЯ: Применяем состояние камеры через LiveKit API');
+      // Улучшенная стратегия с несколькими попытками и прогрессивными задержками
+      const attemptEnableCamera = (attempt = 1, maxAttempts = 5) => {
+        // Проверка состояния комнаты перед попыткой
+        if (!room || !room.localParticipant || room.state !== 'connected') {
+          console.warn(`Отложено включение камеры: комната ${room?.state || 'не определена'}`);
+          
+          // Планируем повторную попытку
+          if (attempt < maxAttempts) {
+            const delay = Math.min(1000 * attempt, 5000);
+            console.log(`Повторная попытка через ${delay}ms (${attempt}/${maxAttempts})`);
+            setTimeout(() => attemptEnableCamera(attempt + 1, maxAttempts), delay);
+          } else {
+            console.error(`Не удалось настроить камеру после ${maxAttempts} попыток: комната не в правильном состоянии`);
+          }
+          return;
+        }
+        
+        console.log(`ИНИЦИАЛИЗАЦИЯ: Применяем состояние камеры через LiveKit API (попытка ${attempt}/${maxAttempts})`);
         
         room.localParticipant.setCameraEnabled(shouldEnableCamera)
           .then(() => {
@@ -230,15 +245,29 @@ const ControlDrawer = ({ room, slotsState }: { room: Room; slotsState: ReturnTyp
             setTimeout(syncCameraState, 1000);
           })
           .catch(err => {
-            console.error('ОШИБКА ИНИЦИАЛИЗАЦИИ КАМЕРЫ:', err);
-            // Если произошла ошибка, пробуем еще раз через некоторое время
-            setTimeout(() => {
-              console.log('ПОВТОРНАЯ ПОПЫТКА настройки камеры');
-              room.localParticipant.setCameraEnabled(shouldEnableCamera)
-                .catch(err => console.error('ПОВТОРНАЯ ОШИБКА настройки камеры:', err));
-            }, 2000);
+            console.error(`ОШИБКА ИНИЦИАЛИЗАЦИИ КАМЕРЫ (попытка ${attempt}/${maxAttempts}):`, err);
+            
+            // Если произошла ошибка и не исчерпаны попытки, пробуем еще раз через прогрессивную задержку
+            if (attempt < maxAttempts) {
+              // Экспоненциальная задержка между попытками
+              const delay = Math.min(1000 * Math.pow(1.5, attempt), 5000);
+              console.log(`ПОВТОРНАЯ ПОПЫТКА настройки камеры через ${delay}ms (${attempt + 1}/${maxAttempts})`);
+              
+              setTimeout(() => attemptEnableCamera(attempt + 1, maxAttempts), delay);
+            } else {
+              console.error(`Не удалось настроить камеру после ${maxAttempts} попыток, последняя ошибка:`, err);
+              
+              // Изменяем UI-состояние, если не удалось включить камеру
+              if (shouldEnableCamera) {
+                setCameraEnabled(false);
+                console.log('Сбрасываем UI-состояние камеры из-за ошибок');
+              }
+            }
           });
-      }, 1500);
+      };
+      
+      // Начинаем с небольшой задержкой для стабилизации соединения
+      setTimeout(() => attemptEnableCamera(1, 5), 800);
     };
     
     // Функция для синхронизации состояния UI с реальным состоянием камеры

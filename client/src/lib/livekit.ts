@@ -13,13 +13,9 @@ function generateUniqueIdentity(baseIdentity: string): string {
 }
 
 /**
- * Глобальный тип для window, добавляем свойство для хранения идентификатора пользователя
+ * Глобальный тип для window объявлен в main.tsx
+ * чтобы избежать конфликтов типов
  */
-declare global {
-  interface Window {
-    currentUserIdentity: string;
-  }
-}
 
 /**
  * Fetches a LiveKit token from the token service
