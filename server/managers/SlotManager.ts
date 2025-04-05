@@ -278,9 +278,9 @@ export class SlotManager {
       return false;
     }
     
-    // Если пытаемся переместить ведущего, запрещаем это
-    if (this.isUserHost(userIdToMove)) {
-      console.log(`Нельзя переместить ведущего из слота ${HOST_SLOT}`);
+    // Если пытаемся переместить ведущего или целевой слот - слот ведущего, запрещаем это
+    if (this.isUserHost(userIdToMove) || targetSlot === HOST_SLOT) {
+      console.log(`Нельзя переместить ведущего из слота ${HOST_SLOT} или назначить кого-либо на слот ведущего`);
       return false;
     }
     
@@ -291,11 +291,7 @@ export class SlotManager {
       return false;
     }
     
-    // Если целевой слот - слот ведущего (12), запрещаем перемещение
-    if (targetSlot === HOST_SLOT) {
-      console.log(`Нельзя переместить пользователя в слот ведущего (${HOST_SLOT})`);
-      return false;
-    }
+    // Проверка на слот ведущего уже выполнена выше
     
     // Проверяем, не занят ли целевой слот другим пользователем
     const currentOccupant = this.slotAssignments.get(targetSlot);

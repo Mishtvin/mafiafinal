@@ -160,19 +160,19 @@ export function CustomVideoGrid() {
               slotNumber={slotNumber}
               isHost={isHost}
               onDragStart={(e: DragEvent<HTMLDivElement>) => handleDragStart(e, participant.identity, slotNumber)}
-              onDragOver={handleDragOver}
-              onDrop={(e: DragEvent<HTMLDivElement>) => handleDrop(e, slotNumber)}
+              onDragOver={slotNumber !== 12 ? handleDragOver : undefined} // Запрещаем дроп в слот 12
+              onDrop={slotNumber !== 12 ? (e: DragEvent<HTMLDivElement>) => handleDrop(e, slotNumber) : undefined}
               onDragEnd={handleDragEnd}
-              isDraggable={isHost && slotNumber !== 12} // Запрещаем перетаскивать ведущего
+              isDraggable={isHost && slotNumber !== 12} // Запрещаем перетаскивать из слота 12
             />
           ) : (
             <EmptySlot 
               key={`empty-${slotNumber}`} 
               index={slotNumber - 1}
               onClick={() => handleSlotClick(slotNumber)}
-              onDragOver={isHost ? handleDragOver : undefined}
-              onDrop={isHost ? (e: DragEvent<HTMLDivElement>) => handleDrop(e, slotNumber) : undefined}
-              isDragTarget={isHost}
+              onDragOver={isHost && slotNumber !== 12 ? handleDragOver : undefined} // Запрещаем дроп в слот 12
+              onDrop={isHost && slotNumber !== 12 ? (e: DragEvent<HTMLDivElement>) => handleDrop(e, slotNumber) : undefined}
+              isDragTarget={isHost && slotNumber !== 12} // Визуальный индикатор только для разрешенных слотов
             />
           );
         })}
