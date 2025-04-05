@@ -330,6 +330,37 @@ function ParticipantSlot({
           >
             <span>❤️</span>
           </button>
+          <button
+            className="bg-blue-600/80 hover:bg-blue-700/90 text-white p-1 rounded-md shadow-md"
+            onClick={() => {
+              // Получаем текущее имя без префикса
+              let currentName = participant.identity;
+              if (currentName.startsWith('Player-')) {
+                currentName = currentName.substring(7);
+              } else if (currentName.startsWith('Host-')) {
+                currentName = currentName.substring(5);
+              }
+              
+              // Запрашиваем новое имя
+              const newName = prompt(`Введите новое имя для ${currentName}:`, currentName);
+              
+              // Если имя не пустое и изменилось
+              if (newName && newName !== currentName && newName.trim() !== '') {
+                // Проверяем, что WebSocket соединение активно
+                if (playerStatesManager.wsRef?.current?.readyState === WebSocket.OPEN) {
+                  // Отправляем запрос на переименование
+                  playerStatesManager.wsRef.current.send(JSON.stringify({
+                    type: 'rename_user',
+                    targetUserId: participant.identity,
+                    newName: newName.trim()
+                  }));
+                }
+              }
+            }}
+            title="Изменить имя пользователя"
+          >
+            <span>✏️</span>
+          </button>
         </div>
       )}
       
@@ -341,9 +372,13 @@ function ParticipantSlot({
         {slotNumber === 12 ? "Ведущий" : slotNumber}
       </div>
       
-      {/* Имя пользователя рядом с номером слота */}
+      {/* Имя пользователя рядом с номером слота (без префикса) */}
       <div className="absolute bottom-2 left-8 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm">
-        {participant.identity}
+        {participant.identity.startsWith('Player-') 
+          ? participant.identity.substring(7) 
+          : participant.identity.startsWith('Host-')
+            ? participant.identity.substring(5)
+            : participant.identity}
       </div>
     </div>
   );

@@ -411,7 +411,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
             {/* Кнопка перемешивания пользователей (только для ведущего) */}
             {userSlot === 12 && shuffleAllUsers && (
               <button 
-                className="control-button" 
+                className="control-button dice-button" 
                 aria-label="Shuffle Users"
                 onClick={() => {
                   if (shuffleAllUsers) {
@@ -429,6 +429,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                   <circle cx="16" cy="8" r="1.5"></circle>
                   <circle cx="8" cy="16" r="1.5"></circle>
                 </svg>
+                <span>Перемешать игроков</span>
               </button>
             )}
             

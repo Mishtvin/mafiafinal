@@ -35,6 +35,15 @@
   position: relative;
 }
 
+/* Средние экраны (планшеты) */
+@media (max-width: 1200px) {
+  .video-grid {
+    grid-template-columns: repeat(3, 1fr); /* 3 колонки */
+    grid-template-rows: repeat(4, 1fr); /* 4 ряда */
+    height: calc(100vh - 80px);
+  }
+}
+
 /* На мобильных устройствах */
 @media (max-width: 768px) {
   /* Улучшаем поддержку скроллинга на iOS */
@@ -59,6 +68,7 @@
     max-height: none; /* Снимаем ограничение на максимальную высоту */
     overflow-y: visible; /* Делаем контент видимым вне контейнера */
     padding-bottom: 80px; /* Отступ внизу, чтобы учесть панель управления */
+    grid-gap: 8px; /* Уменьшаем отступы между ячейками */
   }
   
   .video-slot {
@@ -66,6 +76,50 @@
     height: calc((100vh - 150px) / 3);
     min-height: calc((100vh - 150px) / 3);
     aspect-ratio: 4/3; /* Сохраняем соотношение сторон как в десктопной сетке */
+  }
+}
+
+/* Малые мобильные устройства */
+@media (max-width: 480px) {
+  .video-grid {
+    padding: 6px; /* Уменьшаем отступы */
+    grid-gap: 6px; /* Еще сильнее уменьшаем отступы между ячейками */
+  }
+  
+  .video-slot {
+    height: calc((100vh - 130px) / 3); /* Немного увеличиваем высоту для лучшего отображения */
+    min-height: calc((100vh - 130px) / 3);
+  }
+  
+  /* Делаем имя пользователя и номер слота компактнее */
+  .video-slot .absolute.bottom-2 {
+    font-size: 0.7rem; /* Уменьшаем размер шрифта */
+    padding: 1px 4px; /* Уменьшаем отступы */
+  }
+}
+
+/* Специфичные стили для iPhone и устройств с высокой плотностью экрана */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  /* Оптимизируем SVG-иконки для ретина дисплеев */
+  .control-button svg {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  
+  /* Дополнительные улучшения для работы с сенсорными экранами */
+  .video-slot {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  }
+  
+  /* Улучшаем поведение скроллинга для устройств с ретина дисплеями */
+  .mobile-scroller {
+    -webkit-overflow-scrolling: touch;
+    overflow-scrolling: touch;
+  }
+  
+  /* Улучшаем отображение кнопок для touch-устройств */
+  .control-button {
+    touch-action: manipulation;
   }
 }
 
@@ -208,6 +262,61 @@
   font-weight: 500;
 }
 
+/* Адаптивные стили для контролов на мобильных устройствах */
+@media (max-width: 768px) {
+  .controls-container {
+    padding: 12px 10px;
+    height: auto; /* Высота подстраивается под содержимое */
+    flex-wrap: wrap; /* Разрешаем элементам переноситься на новую строку */
+    gap: 8px;
+  }
+  
+  .left-controls, .right-controls {
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  
+  .control-button {
+    padding: 8px 12px;
+  }
+  
+  .control-button svg {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .control-button span {
+    font-size: 12px;
+  }
+}
+
+/* Дополнительные стили для очень маленьких экранов */
+@media (max-width: 480px) {
+  .controls-container {
+    padding: 8px 6px;
+    justify-content: center; /* Центрируем элементы */
+  }
+  
+  .control-button {
+    padding: 6px 8px;
+  }
+  
+  .left-controls, .right-controls {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  /* Для очень маленьких экранов убираем текст и оставляем только иконки */
+  .control-button span {
+    display: none;
+  }
+  
+  .control-button svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
 /* Стили для разных типов кнопок */
 .control-button.danger {
   color: rgb(248, 113, 113);
@@ -218,6 +327,26 @@
 }
 
 /* Стиль для кнопки игральных костей (перемешивание) */
+.dice-button {
+  background-color: rgba(91, 33, 182, 0.2); /* Светло-фиолетовый фон для кнопки */
+  border-radius: 8px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.dice-button:hover {
+  background-color: rgba(91, 33, 182, 0.3);
+}
+
+.dice-button span {
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: 14px;
+}
+
 .control-button svg rect,
 .control-button svg circle {
   transition: all 0.2s ease;
@@ -237,5 +366,28 @@
   stroke-width: 2.5;
   transform-origin: center center;
   transform: scale(0.95);
+}
+
+/* Визуально выделяем кнопку игральных костей для мобильных устройств */
+@media (max-width: 768px) {
+  .dice-button {
+    margin: 0 auto; /* Центрируем кнопку на мобильных */
+    position: relative;
+    z-index: 5;
+  }
+  
+  /* Делаем кнопку игральных костей более заметной на мобильных устройствах */
+  .dice-button svg {
+    width: 24px;
+    height: 24px;
+  }
+  
+  /* На очень маленьких экранах */
+  @media (max-width: 480px) {
+    .dice-button span {
+      display: block !important; /* Переопределяем скрытие текста для этой кнопки */
+      font-size: 12px;
+    }
+  }
 }
 
