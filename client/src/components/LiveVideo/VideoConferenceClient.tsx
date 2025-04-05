@@ -16,112 +16,88 @@ import {
 import { decodePassphrase } from '../../lib/utils';
 import { CustomVideoGrid } from './CustomVideoGrid';
 
-// Отдельный компонент для контроля панели
-const ControlPanel = ({ 
-  room, 
-  isOpen, 
-  onToggle 
-}: { 
-  room: Room; 
-  isOpen: boolean; 
-  onToggle: (open: boolean) => void;
-}) => {
-  // Render outside of LiveKitRoom для избежания проблем
+// Фиксированные кнопки управления
+const FixedControls = ({ room }: { room: Room }) => {
+  // Состояние для отображения текущего статуса камеры
+  const [cameraEnabled, setCameraEnabled] = useState(true);
+  
+  // Обновляем статус при изменении состояния локального участника
   useEffect(() => {
-    // Вставляем глобальный обработчик для закрытия панели по Escape
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onToggle(false);
+    const updateCameraState = () => {
+      if (room && room.localParticipant) {
+        setCameraEnabled(room.localParticipant.isCameraEnabled);
       }
     };
     
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onToggle]);
-
+    // Слушаем изменения состояния
+    if (room && room.localParticipant) {
+      room.localParticipant.on('trackMuted', updateCameraState);
+      room.localParticipant.on('trackUnmuted', updateCameraState);
+      
+      // Инициализируем начальное состояние
+      setCameraEnabled(room.localParticipant.isCameraEnabled);
+    }
+    
+    return () => {
+      if (room && room.localParticipant) {
+        room.localParticipant.off('trackMuted', updateCameraState);
+        room.localParticipant.off('trackUnmuted', updateCameraState);
+      }
+    }
+  }, [room]);
+  
   return (
     <>
-      {/* Выдвижная панель управления */}
-      <div 
-        className={`control-drawer ${isOpen ? 'open' : ''}`}
-        onClick={(e) => e.stopPropagation()} 
-      >
-        <div className="controls-container" style={{ marginTop: '60px' }}>
-          <div className="left-controls">
-            <button 
-              className="control-button" 
-              aria-label="Toggle Camera"
-              onClick={(e) => {
-                e.stopPropagation();
-                // Используем функцию переключения камеры
-                if (room && room.localParticipant) {
-                  room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled);
-                }
-              }}
-            >
-              {room?.localParticipant?.isCameraEnabled ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 7 16 12 23 17z"></path>
-                    <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
-                  </svg>
-                  <span>Камера вкл.</span>
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="m2 2 20 20"></path>
-                    <path d="M9 9a3 3 0 0 1 5.12-2.12"></path>
-                    <path d="M22 12 A10 10 0 0 0 12 2v0a10 10 0 0 0-2 19.5"></path>
-                  </svg>
-                  <span>Камера выкл.</span>
-                </>
-              )}
-            </button>
-          </div>
-          
-          <div className="right-controls">
-            <button 
-              className="control-button danger" 
-              aria-label="Leave Room"
-              onClick={(e) => {
-                e.stopPropagation();
-                // Выход из комнаты
-                if (room) {
-                  room.disconnect();
-                }
-              }}
-            >
+      {/* Кнопка управления камерой */}
+      <div className="fixed-camera-control">
+        <button 
+          className="control-button"
+          onClick={() => {
+            // Плавное переключение через setTimeout
+            setTimeout(() => {
+              if (room && room.localParticipant) {
+                room.localParticipant.setCameraEnabled(!cameraEnabled);
+              }
+            }, 10);
+          }}
+        >
+          {cameraEnabled ? (
+            <>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" x2="9" y1="12" y2="12"></line>
+                <path d="M23 7 16 12 23 17z"></path>
+                <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
               </svg>
-              <span>Выйти</span>
-            </button>
-          </div>
-        </div>
+              <div className="control-tooltip">Выключить камеру</div>
+            </>
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m2 2 20 20"></path>
+                <path d="M9 9a3 3 0 0 1 5.12-2.12"></path>
+                <path d="M22 12 A10 10 0 0 0 12 2v0a10 10 0 0 0-2 19.5"></path>
+              </svg>
+              <div className="control-tooltip">Включить камеру</div>
+            </>
+          )}
+        </button>
       </div>
       
-      {/* Кнопка-триггер отдельно */}
-      <div className="drawer-trigger-wrapper">
+      {/* Кнопка выхода из комнаты */}
+      <div className="fixed-exit-control">
         <button 
-          className="drawer-trigger"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle(!isOpen);
+          className="control-button danger"
+          onClick={() => {
+            if (room) {
+              room.disconnect();
+            }
           }}
-          aria-label="Toggle Controls"
         >
-          {isOpen ? (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="18 15 12 9 6 15"></polyline>
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          )}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" x2="9" y1="12" y2="12"></line>
+          </svg>
+          <div className="control-tooltip">Выйти</div>
         </button>
       </div>
     </>
@@ -137,8 +113,7 @@ export function VideoConferenceClient(props: {
   token: string;
   codec: VideoCodec | undefined;
 }) {
-  // Состояние для открытия/закрытия панели управления
-  const [controlsOpen, setControlsOpen] = useState(false);
+  // Удалили неиспользуемое состояние для панели
   
   // Создаем Worker для E2EE
   const worker =
@@ -204,12 +179,8 @@ export function VideoConferenceClient(props: {
         </div>
       </LiveKitRoom>
       
-      {/* Рендерим панель управления отдельно */}
-      <ControlPanel 
-        room={room} 
-        isOpen={controlsOpen} 
-        onToggle={setControlsOpen} 
-      />
+      {/* Рендерим фиксированные элементы управления отдельно */}
+      <FixedControls room={room} />
     </>
   );
 }
