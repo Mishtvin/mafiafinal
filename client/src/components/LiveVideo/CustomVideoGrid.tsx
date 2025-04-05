@@ -5,7 +5,7 @@ import {
   VideoTrack
 } from '@livekit/components-react';
 import { Track, Participant, Room } from 'livekit-client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, DragEvent } from 'react';
 import { useSlots } from '../../hooks/use-slots';
 
 /**
@@ -19,6 +19,12 @@ export function CustomVideoGrid() {
   const userIdentity = currentLocalParticipant?.identity || 'unknown-user';
   console.log('Local participant identity:', userIdentity);
   const slotsManager = useSlots(userIdentity);
+  
+  // Состояние для drag and drop
+  const [draggedUser, setDraggedUser] = useState<{userId: string, slotNumber: number} | null>(null);
+  
+  // Проверяем, является ли текущий пользователь ведущим
+  const isHost = slotsManager.userSlot === 12;
   
   // Принудительное обновление компонента при изменении слотов
   const [forceUpdate, setForceUpdate] = useState<number>(0);
@@ -34,6 +40,54 @@ export function CustomVideoGrid() {
     if (slotsManager.connected) {
       slotsManager.selectSlot(slotNumber);
     }
+  };
+  
+  // Обработчики для drag and drop
+  const handleDragStart = (e: DragEvent<HTMLDivElement>, userId: string, slotNumber: number) => {
+    // Проверяем, является ли текущий пользователь ведущим и разрешено ли ему перемещать участников
+    if (isHost) {
+      console.log(`Начато перетаскивание пользователя ${userId} из слота ${slotNumber}`);
+      setDraggedUser({ userId, slotNumber });
+      
+      // Устанавливаем данные перетаскивания
+      if (e.dataTransfer) {
+        e.dataTransfer.setData('userId', userId);
+        e.dataTransfer.setData('slotNumber', slotNumber.toString());
+        e.dataTransfer.effectAllowed = 'move';
+      }
+    } else {
+      // Если не ведущий, отменяем перетаскивание
+      e.preventDefault();
+      console.log('Только ведущий может перемещать участников');
+    }
+  };
+  
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (isHost && draggedUser) {
+      e.preventDefault(); // Разрешаем сброс
+      e.dataTransfer.dropEffect = 'move';
+    }
+  };
+  
+  const handleDrop = (e: DragEvent<HTMLDivElement>, targetSlot: number) => {
+    e.preventDefault();
+    
+    if (!isHost || !draggedUser) return;
+    
+    const userId = e.dataTransfer.getData('userId');
+    const sourceSlot = parseInt(e.dataTransfer.getData('slotNumber'));
+    
+    if (userId && targetSlot !== sourceSlot) {
+      console.log(`Перемещение пользователя ${userId} из слота ${sourceSlot} в слот ${targetSlot}`);
+      slotsManager.moveUserToSlot(userId, targetSlot);
+    }
+    
+    // Очищаем состояние перетаскивания
+    setDraggedUser(null);
+  };
+  
+  const handleDragEnd = () => {
+    setDraggedUser(null);
   };
   
   // Автоматически выбираем слот для локального участника при подключении
@@ -104,12 +158,21 @@ export function CustomVideoGrid() {
               key={`slot-${slotNumber}`}
               participant={participant}
               slotNumber={slotNumber}
+              isHost={isHost}
+              onDragStart={(e: DragEvent<HTMLDivElement>) => handleDragStart(e, participant.identity, slotNumber)}
+              onDragOver={handleDragOver}
+              onDrop={(e: DragEvent<HTMLDivElement>) => handleDrop(e, slotNumber)}
+              onDragEnd={handleDragEnd}
+              isDraggable={isHost && slotNumber !== 12} // Запрещаем перетаскивать ведущего
             />
           ) : (
             <EmptySlot 
               key={`empty-${slotNumber}`} 
               index={slotNumber - 1}
               onClick={() => handleSlotClick(slotNumber)}
+              onDragOver={isHost ? handleDragOver : undefined}
+              onDrop={isHost ? (e: DragEvent<HTMLDivElement>) => handleDrop(e, slotNumber) : undefined}
+              isDragTarget={isHost}
             />
           );
         })}
@@ -121,7 +184,27 @@ export function CustomVideoGrid() {
 /**
  * Компонент для отображения одного участника
  */
-function ParticipantSlot({ participant, slotNumber }: { participant: Participant, slotNumber: number }) {
+interface ParticipantSlotProps {
+  participant: Participant;
+  slotNumber: number;
+  isHost?: boolean;
+  isDraggable?: boolean;
+  onDragStart?: (e: DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (e: DragEvent<HTMLDivElement>) => void;
+  onDrop?: (e: DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
+}
+
+function ParticipantSlot({ 
+  participant, 
+  slotNumber,
+  isHost = false,
+  isDraggable = false,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd
+}: ParticipantSlotProps) {
   // Получаем список видеотреков
   const videoTracks = useTracks(
     [Track.Source.Camera],
@@ -130,8 +213,30 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
   
   const hasVideo = videoTracks.length > 0;
   
+  // Добавляем стили и атрибуты для drag and drop, но только если пользователь - ведущий
+  const dragProps = isDraggable ? {
+    draggable: true,
+    onDragStart,
+    onDragEnd,
+  } : {};
+  
+  // Все слоты могут быть целью для дропа, если пользователь - ведущий
+  const dropProps = isHost ? {
+    onDragOver,
+    onDrop
+  } : {};
+  
+  // Визуальное отображение возможности перетаскивания
+  const dragIndicatorClass = isDraggable 
+    ? 'ring-2 ring-blue-500/50 hover:ring-blue-500 cursor-grab active:cursor-grabbing' 
+    : '';
+  
   return (
-    <div className="video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700">
+    <div 
+      className={`video-slot relative overflow-hidden rounded-xl shadow-md bg-slate-800 border border-slate-700 ${dragIndicatorClass}`}
+      {...dragProps}
+      {...dropProps}
+    >
       {hasVideo ? (
         <div className="h-full w-full relative flex items-center justify-center">
           {/* Здесь мы используем первый найденный трек */}
@@ -159,6 +264,27 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
           </svg>
         </div>
       )}
+      
+      {/* Индикатор возможности перетаскивания */}
+      {isDraggable && (
+        <div className="absolute top-2 right-2 bg-blue-500/80 text-white rounded-full p-1 shadow-md">
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className="h-4 w-4" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" 
+            />
+          </svg>
+        </div>
+      )}
+      
       {/* Номер слота в левом нижнем углу */}
       <div 
         className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
@@ -178,11 +304,26 @@ function ParticipantSlot({ participant, slotNumber }: { participant: Participant
 /**
  * Компонент для отображения пустого слота
  */
-function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) {
+interface EmptySlotProps {
+  index: number;
+  onClick?: () => void;
+  onDragOver?: (e: DragEvent<HTMLDivElement>) => void;
+  onDrop?: (e: DragEvent<HTMLDivElement>) => void;
+  isDragTarget?: boolean;
+}
+
+function EmptySlot({ index, onClick, onDragOver, onDrop, isDragTarget = false }: EmptySlotProps) {
+  // Визуальное отображение возможности дропа
+  const dropIndicatorClass = isDragTarget 
+    ? 'ring-2 ring-blue-500/30 hover:ring-blue-500/70 hover:bg-blue-500/10' 
+    : '';
+  
   return (
     <div 
-      className="video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 cursor-pointer"
+      className={`video-slot relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 cursor-pointer ${dropIndicatorClass}`}
       onClick={onClick}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center">
@@ -202,9 +343,29 @@ function EmptySlot({ index, onClick }: { index: number, onClick?: () => void }) 
               />
             </svg>
           </div>
-
         </div>
       </div>
+      
+      {/* Если слот может быть целью для дропа, показываем индикатор */}
+      {isDragTarget && (
+        <div className="absolute top-2 right-2 bg-blue-500/50 text-white rounded-full p-1">
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className="h-4 w-4" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M19 13l-7 7-7-7m14-8l-7 7-7-7" 
+            />
+          </svg>
+        </div>
+      )}
+      
       {/* Только номер слота для пустого слота */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
         {index + 1 === 12 ? "Ведучий" : index + 1}

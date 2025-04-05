@@ -238,6 +238,89 @@ export class SlotManager {
       console.log(`- Слот ${slot}: ${userId}`);
     });
   }
+  
+  /**
+   * Освободить конкретный слот (если он занят)
+   * @param slotNumber Номер слота для освобождения
+   * @returns true, если слот был освобожден
+   */
+  private releaseSlot(slotNumber: number): boolean {
+    const userId = this.slotAssignments.get(slotNumber);
+    if (!userId) {
+      return false; // Слот и так свободен
+    }
+    
+    // Удаляем слот из обеих карт
+    this.slotAssignments.delete(slotNumber);
+    this.userSlots.delete(userId);
+    
+    console.log(`Освобожден слот ${slotNumber}, ранее занимаемый пользователем ${userId}`);
+    return true;
+  }
+  
+  /**
+   * Переместить пользователя из одного слота в другой (для ведущего)
+   * @param hostId ID ведущего, который выполняет перемещение
+   * @param userIdToMove ID пользователя, которого нужно переместить
+   * @param targetSlot Целевой слот для перемещения
+   * @returns true, если перемещение успешно выполнено
+   */
+  moveUserToSlot(hostId: string, userIdToMove: string, targetSlot: number): boolean {
+    // Проверяем, является ли исполнитель ведущим
+    if (!this.isUserHost(hostId)) {
+      console.log(`Отказано в перемещении: ${hostId} не является ведущим`);
+      return false;
+    }
+    
+    // Проверяем валидность целевого слота
+    if (targetSlot < 1 || targetSlot > this.maxSlots) {
+      console.log(`Недопустимый номер слота: ${targetSlot}`);
+      return false;
+    }
+    
+    // Если пытаемся переместить ведущего, запрещаем это
+    if (this.isUserHost(userIdToMove)) {
+      console.log(`Нельзя переместить ведущего из слота ${HOST_SLOT}`);
+      return false;
+    }
+    
+    // Проверяем, что пользователь существует и имеет назначенный слот
+    const currentSlot = this.userSlots.get(userIdToMove);
+    if (currentSlot === undefined) {
+      console.log(`Пользователь ${userIdToMove} не имеет назначенного слота`);
+      return false;
+    }
+    
+    // Если целевой слот - слот ведущего (12), запрещаем перемещение
+    if (targetSlot === HOST_SLOT) {
+      console.log(`Нельзя переместить пользователя в слот ведущего (${HOST_SLOT})`);
+      return false;
+    }
+    
+    // Проверяем, не занят ли целевой слот другим пользователем
+    const currentOccupant = this.slotAssignments.get(targetSlot);
+    if (currentOccupant && currentOccupant !== userIdToMove) {
+      // Слот занят другим пользователем, освобождаем его
+      this.releaseSlot(targetSlot);
+    }
+    
+    // Освобождаем текущий слот пользователя
+    this.releaseSlot(currentSlot);
+    
+    // Назначаем новый слот
+    this.slotAssignments.set(targetSlot, userIdToMove);
+    this.userSlots.set(userIdToMove, targetSlot);
+    
+    console.log(`Ведущий ${hostId} переместил пользователя ${userIdToMove} из слота ${currentSlot} в слот ${targetSlot}`);
+    
+    // Проверяем целостность для уверенности
+    this.validateIntegrity();
+    
+    // Отправляем событие об изменении слотов
+    globalEvents.emit("slots_updated", this.getAllSlotAssignments());
+    
+    return true;
+  }
 }
 
 // Создаем глобальный экземпляр менеджера слотов

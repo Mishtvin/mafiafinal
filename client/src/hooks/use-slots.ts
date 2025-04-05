@@ -217,10 +217,20 @@ export function useSlots(userId: string) {
     };
   }, [userId, sendMessage]);
 
+  // Функция для перемещения пользователя в другой слот (только для ведущего)
+  const moveUserToSlot = useCallback((userIdToMove: string, targetSlot: number) => {
+    return sendMessage({
+      type: 'move_user',
+      userIdToMove,
+      targetSlot
+    });
+  }, [sendMessage]);
+
   return {
     ...state,
     selectSlot,
     releaseSlot,
-    setCameraState
+    setCameraState,
+    moveUserToSlot
   };
 }

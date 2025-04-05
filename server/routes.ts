@@ -253,6 +253,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
             broadcastCameraStates();
             break;
             
+          case 'move_user':
+            // Ведущий перемещает пользователя в другой слот
+            if (!userId) break;
+            
+            const userIdToMove = data.userIdToMove as string;
+            const targetSlot = Number(data.targetSlot);
+            
+            if (!userIdToMove || isNaN(targetSlot)) {
+              console.error('Некорректные параметры для перемещения пользователя');
+              break;
+            }
+            
+            const moveSuccess = slotManager.moveUserToSlot(userId, userIdToMove, targetSlot);
+            
+            if (moveSuccess) {
+              console.log(`Ведущий ${userId} успешно переместил пользователя ${userIdToMove} в слот ${targetSlot}`);
+              // Обновление слотов будет отправлено через событие slots_updated
+            } else {
+              console.log(`Ведущему ${userId} не удалось переместить пользователя ${userIdToMove} в слот ${targetSlot}`);
+              // Можно также отправить сообщение о неудаче конкретно этому ведущему
+              connectionManager.sendToUser(userId, {
+                type: 'move_failed',
+                userIdToMove,
+                targetSlot,
+                reason: 'Не удалось выполнить перемещение пользователя'
+              });
+            }
+            break;
+            
           case 'pong':
             // Клиент отвечает на ping - отмечаем активность
             if (userId) {
