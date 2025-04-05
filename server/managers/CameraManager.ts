@@ -129,6 +129,20 @@ export class CameraManager {
       console.log('Текущие состояния камер после инициализации:', JSON.stringify(this.getAllCameraStates()));
     }
   }
+  
+  /**
+   * Получить количество активных камер (включенных)
+   * @returns Количество активных камер
+   */
+  getActiveCamerasCount(): number {
+    let count = 0;
+    this.cameraStates.forEach((isEnabled) => {
+      if (isEnabled) {
+        count++;
+      }
+    });
+    return count;
+  }
 }
 
 // Создаем глобальный экземпляр менеджера камер

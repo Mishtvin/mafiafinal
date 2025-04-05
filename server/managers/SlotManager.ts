@@ -1,6 +1,11 @@
 import { SlotInfo } from '@shared/schema';
 import { globalEvents } from './EventEmitter';
 
+// Константы для слотов
+const HOST_SLOT = 12;
+const HOST_PREFIX = 'Host-';
+const PLAYER_PREFIX = 'Player-';
+
 /**
  * Менеджер слотов - управляет распределением пользователей по слотам
  */
@@ -21,6 +26,15 @@ export class SlotManager {
     setInterval(() => {
       this.validateIntegrity();
     }, 30000);
+  }
+  
+  /**
+   * Проверить, является ли пользователь ведущим
+   * @param userId ID пользователя
+   * @returns true, если пользователь - ведущий
+   */
+  isUserHost(userId: string): boolean {
+    return userId.startsWith(HOST_PREFIX);
   }
   
   /**
@@ -127,17 +141,40 @@ export class SlotManager {
       return existingSlot;
     }
     
-    // Ищем первый свободный слот
-    for (let i = 1; i <= this.maxSlots; i++) {
-      if (!this.slotAssignments.has(i)) {
-        this.assignSlot(userId, i);
-        return i;
-      }
-    }
+    // Проверяем роль пользователя
+    const isHost = this.isUserHost(userId);
     
-    // Свободных слотов нет
-    console.warn(`Не удалось найти свободный слот для ${userId}`);
-    return undefined;
+    if (isHost) {
+      // Ведущему назначаем специальный слот 12
+      console.log(`Автоматическое назначение слота для ведущего: ${userId}`);
+      
+      // Если слот 12 занят, освобождаем его
+      const currentHostUser = this.slotAssignments.get(HOST_SLOT);
+      if (currentHostUser) {
+        console.log(`Слот ведущего ${HOST_SLOT} уже занят пользователем ${currentHostUser}, освобождаем`);
+        this.releaseUserSlot(currentHostUser);
+      }
+      
+      // Назначаем слот ведущего
+      this.assignSlot(userId, HOST_SLOT);
+      return HOST_SLOT;
+    } else {
+      // Игроку ищем первый свободный слот (кроме слота ведущего)
+      console.log(`Занятые слоты перед назначением для ${userId}: [${Array.from(this.slotAssignments.keys())}]`);
+      
+      // Ищем свободные слоты для обычных игроков (1-11)
+      for (let i = 1; i < HOST_SLOT; i++) {
+        if (!this.slotAssignments.has(i)) {
+          console.log(`Автоматически назначен слот ${i} для ${userId}`);
+          this.assignSlot(userId, i);
+          return i;
+        }
+      }
+      
+      // Свободных слотов нет
+      console.warn(`Не удалось найти свободный слот для ${userId}`);
+      return undefined;
+    }
   }
   
   /**

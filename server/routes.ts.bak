@@ -1,24 +1,19 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { AccessToken, VideoGrant } from "livekit-server-sdk";
 import { WebSocketServer } from "ws";
 import { WebSocket } from "ws";
+import { slotManager } from "./managers/SlotManager";
+import { cameraManager } from "./managers/CameraManager";
+import { connectionManager } from "./managers/ConnectionManager";
+import { SlotInfo } from "@shared/schema";
+import { globalEvents } from "./managers/EventEmitter";
 
 // LiveKit настройки
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = 'wss://livekit.nyavkin.site/'; // URL сервера LiveKit со слешем в конце
-
-// Структура данных для хранения информации о слотах
-interface SlotInfo {
-  userId: string;
-  slotNumber: number;
-}
-
-// Хранилище данных о слотах
-const slotAssignments = new Map<number, string>(); // slotNumber -> userId
-const userSlots = new Map<string, number>(); // userId -> slotNumber
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API endpoints
@@ -183,6 +178,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
+    // Проверяем целостность данных между slotAssignments и userSlots
+    userSlots.forEach((slotNumber, userId) => {
+      const assignedUserId = slotAssignments.get(slotNumber);
+      if (!assignedUserId || assignedUserId !== userId) {
+        console.log(`Исправляем несоответствие: слот ${slotNumber} для пользователя ${userId}`);
+        slotAssignments.set(slotNumber, userId);
+        needsUpdate = true;
+      }
+    });
+    
     // Если были изменения - рассылаем обновление
     if (needsUpdate) {
       console.log('Очистка неактивных соединений вызвала рассылку обновлений');
@@ -191,9 +196,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     console.log(`Периодическая проверка: соединения=${connections.size}, слоты=${slotAssignments.size}, присвоено=${userSlots.size}, камеры=${cameraStates.size}`);
-  }, 10000); // каждые 10 секунд
+    
+    // Проверяем корректность назначения слотов
+    // Отладка: показываем все текущие слоты
+    console.log('Текущие назначения слотов:');
+    slotAssignments.forEach((userId, slot) => {
+      console.log(`- Слот ${slot}: ${userId}`);
+    });
+    
+    // Периодически отправляем обновление всем клиентам для синхронизации
+    broadcastSlotUpdate();
+    broadcastCameraStates();
+  }, 5000); // каждые 5 секунд
 
-  // Интервал для проверки соединений (pings)
   const pingInterval = 5000; // 5 секунд
   const pingIntervalId = setInterval(() => {
     // Проверяем и удаляем любые устаревшие соединения
@@ -279,52 +294,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Регистрация пользователя
             userId = data.userId;
             if (userId) {
-              connections.set(userId, ws);
+              // Регистрируем соединение для пользователя
+              connectionManager.registerConnection(userId, ws);
               console.log(`Пользователь зарегистрирован: ${userId}`);
               
-              // Устанавливаем начальное состояние камеры (выключена по умолчанию)
-              if (!cameraStates.has(userId)) {
-                cameraStates.set(userId, false);
-              }
+              // Инициализируем состояние камеры (выключена по умолчанию)
+              cameraManager.initializeUserCamera(userId);
               
-              // Если пользователь не занял слот, назначаем свободный
-              if (!userSlots.has(userId)) {
-                // Находим первый свободный слот
-                for (let i = 1; i <= 12; i++) {
-                  if (!slotAssignments.has(i)) {
-                    slotAssignments.set(i, userId);
-                    userSlots.set(userId, i);
-                    console.log(`Автоматически назначен слот ${i} для ${userId}`);
-                    break;
-                  }
-                }
+              // Назначаем слот для пользователя (автоматически назначается слот по роли)
+              const assignedSlot = slotManager.assignFirstAvailableSlot(userId);
+              
+              if (assignedSlot) {
+                console.log(`Автоматически назначен слот ${assignedSlot} для ${userId}`);
+              } else {
+                console.warn(`Не удалось найти свободный слот для ${userId}`);
               }
             } else {
               console.error('Ошибка: получен пустой userId при регистрации');
             }
             
-            // Отправляем текущее состояние слотов
-            const currentSlots: SlotInfo[] = [];
-            slotAssignments.forEach((userId, slotNumber) => {
-              currentSlots.push({ userId, slotNumber });
-            });
+            // Отправляем текущее состояние слотов всем клиентам для синхронизации
+            broadcastSlotUpdate();
             
-            // Отправляем состояние слотов
-            sendToClient({
-              type: 'slots_update',
-              slots: currentSlots
-            });
-            
-            // Отправляем состояние камер
-            const currentCameraStates: Record<string, boolean> = {};
-            cameraStates.forEach((enabled, userId) => {
-              currentCameraStates[userId] = enabled;
-            });
-            
-            sendToClient({
-              type: 'camera_states_update',
-              cameraStates: currentCameraStates
-            });
+            // Отправляем состояние камер всем клиентам для синхронизации
+            broadcastCameraStates();
             break;
             
           case 'select_slot':
@@ -466,10 +459,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Функция для отправки обновления слотов всем подключенным клиентам
   function broadcastSlotUpdate() {
-    const currentSlots: SlotInfo[] = [];
-    slotAssignments.forEach((userId, slotNumber) => {
-      currentSlots.push({ userId, slotNumber });
-    });
+    const currentSlots = slotManager.getAllSlotAssignments();
     
     const updateMessage = JSON.stringify({
       type: 'slots_update',
@@ -489,10 +479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Функция для отправки обновления состояния камер всем клиентам
   function broadcastCameraStates() {
-    const currentCameraStates: Record<string, boolean> = {};
-    cameraStates.forEach((enabled, userId) => {
-      currentCameraStates[userId] = enabled;
-    });
+    const currentCameraStates = cameraManager.getAllCameraStates();
     
     const updateMessage = JSON.stringify({
       type: 'camera_states_update',

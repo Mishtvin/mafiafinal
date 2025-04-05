@@ -15,3 +15,11 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+/**
+ * Интерфейс для информации о слоте пользователя
+ */
+export interface SlotInfo {
+  userId: string;
+  slotNumber: number;
+}
