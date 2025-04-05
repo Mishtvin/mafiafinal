@@ -102,43 +102,50 @@ export default function VideoConference() {
     setConnectionState('disconnected');
   };
 
-  // Room configuration options - улучшенная версия со стабилизацией качества
+  // Room configuration options - максимально стабильная версия (рекомендации от Apple)
   const roomOptions: RoomOptions = {
-    adaptiveStream: {
-      pauseVideoInBackground: false, // Не останавливать видео при потере фокуса окна
-      // Установка минимального качества, чтобы избежать сильной деградации видео
-      pixelDensity: 1.0, // Поддерживать высокое качество изображения
-    },
-    dynacast: false, // Отключаем dynacast для большей стабильности
+    // Полностью отключаем адаптивный стриминг - известная причина проблем на Safari
+    adaptiveStream: false,
+
+    // Отключаем Dynacast - частая причина проблем с видеотреками в Safari
+    dynacast: false,
+
+    // Настройки публикации видео
     publishDefaults: {
-      // Фиксируем один слой для предотвращения проблем качества
-      simulcast: false, // Отключаем simulcast для большей стабильности
-      // Полностью отключаем все оптимизации для достижения максимальной стабильности
-      red: !isE2EEEnabled, // Redundant video packets, should be disabled for E2EE
-      stopMicTrackOnMute: false, // Не останавливать треки при заглушивании
-      // Новые параметры для улучшения стабильности потока видео
+      // Полностью отключаем Simulcast для максимальной стабильности видео
+      simulcast: false,
+      
+      // RED пакеты могут вызывать дополнительные проблемы
+      red: false,
+      
+      // Никогда не останавливаем треки при mute - только приостанавливаем
+      stopMicTrackOnMute: false,
+      
+      // Устанавливаем минимальные параметры кодирования видео для стабильности
       videoEncoding: {
-        maxBitrate: 1_000_000, // 1 Mbps
-        maxFramerate: 30,      // 30fps
+        maxBitrate: 800_000,  // Снижаем до 800 kbps для большей стабильности
+        maxFramerate: 20,     // Снижаем до 20fps для уменьшения нагрузки
       },
-      // Используем фиксированный кодек для большей стабильности
-      videoCodec: 'vp8'        // Более стабильный кодек
+      
+      // Используем VP8 кодек - подтвержденная стабильность в WebRTC
+      videoCodec: 'vp8'
     },
+    
+    // Настройки захвата видео
     videoCaptureDefaults: {
-      facingMode: 'user',      // Фронтальная камера
-      // Важно: указываем более низкое разрешение для большей стабильности
+      facingMode: 'user',
+      // Используем минимальное разрешение для стабильности (рекомендация Apple)
       resolution: {
-        width: 640,
-        height: 480,
-        frameRate: 30,
+        width: 480,
+        height: 360,
+        frameRate: 20,
       },
-      // Дополнительные параметры для устойчивости видеотрека
-      deviceId: undefined,     // Автоматический выбор устройства
+      deviceId: undefined,
     },
-    // Важные параметры для стабильности
-    disconnectOnPageLeave: false, // Предотвращает отключение при потере фокуса
-    // Отключаем дополнительные WebRTC конфигурации, используем только
-    // стандартные настройки от LiveKit сервера
+    
+    // Критически важные параметры для стабильности
+    disconnectOnPageLeave: false,
+
   };
 
   // Улучшенная обработка событий комнаты с предотвращением множественных вызовов
@@ -237,9 +244,12 @@ export default function VideoConference() {
           
           // Параметры захвата камеры - используем те же параметры, что и в roomOptions
           const videoCaptureOptions = {
-            resolution: VideoPresets.h540, // Согласуем с настройками из roomOptions
+            resolution: {
+              width: 480,
+              height: 360,
+              frameRate: 20,
+            }, // Используем минимальное разрешение как в roomOptions
             facingMode: 'user' as 'user',
-            // Для ограничения FPS используем встроенные параметры пресета
           };
           
           // Включаем камеру с оптимальными настройками для захвата

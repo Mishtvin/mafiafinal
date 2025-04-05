@@ -32,14 +32,18 @@ export default function VideoProvider({ children, enabled }: VideoProviderProps)
         return;
       }
       
-      // Используем настройки, максимально близкие к примеру LiveKit meet
+      // Используем настройки с низким разрешением для максимальной стабильности
       const videoOptions = {
-        resolution: VideoPresets.h540,
+        resolution: {
+          width: 480,
+          height: 360,
+          frameRate: 20,
+        },
         facingMode: 'user' as 'user',
-        // Важно: не используем simulcast, это может вызывать проблемы
+        // Полностью отключаем simulcast для стабильности
         simulcast: false,
         // Ограничиваем FPS для большей стабильности
-        frameRate: 24,
+        frameRate: 20,
       };
       
       // Отключаем и заново включаем камеру через API LiveKit
@@ -71,11 +75,12 @@ export default function VideoProvider({ children, enabled }: VideoProviderProps)
       // Проверяем разрешения через getUserMedia напрямую
       try {
         // Это дополнительная проверка доступности камеры без создания треков в LiveKit
+        // Используем точно такое же низкое разрешение для теста
         const testStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 24, max: 30 },
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 20, max: 20 },
             facingMode: 'user'
           }
         });
@@ -145,10 +150,14 @@ export default function VideoProvider({ children, enabled }: VideoProviderProps)
       console.log('VIDEO PROVIDER: Recreating camera after track ended');
       
       const videoOptions = {
-        resolution: VideoPresets.h540,
+        resolution: {
+          width: 480,
+          height: 360,
+          frameRate: 20,
+        },
         facingMode: 'user' as 'user',
         simulcast: false,
-        frameRate: 24,
+        frameRate: 20,
       };
       
       const videoTrack = await room.localParticipant.setCameraEnabled(true, videoOptions);
