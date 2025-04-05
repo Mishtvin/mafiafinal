@@ -117,9 +117,99 @@ export function CustomVideoGrid() {
 }
 
 /**
- * Мемоизированный компонент самой сетки - изолирует перерисовки
- * Этот компонент перерисовывается только при изменении слотов или участников,
- * но не при изменении состояния камер
+ * Мемоизированный компонент каждого слота, который обновляется отдельно
+ * Эта оптимизация предотвращает перерисовку всей сетки при изменении состояния одной камеры
+ */
+const MemoizedSlot = React.memo(
+  function SingleSlot({
+    slotNumber,
+    userId,
+    isCurrentUserSlot,
+    currentLocalParticipant,
+    participantsMap,
+    cameraStates,
+    localCameraEnabled,
+    lastUpdatedCamera,
+    cameraUpdateTimestamp,
+    onSlotClick
+  }: {
+    slotNumber: number;
+    userId?: string;
+    isCurrentUserSlot: boolean;
+    currentLocalParticipant?: Participant;
+    participantsMap: Map<string, Participant>;
+    cameraStates: Record<string, boolean>;
+    localCameraEnabled: boolean;
+    lastUpdatedCamera?: string;
+    cameraUpdateTimestamp?: number;
+    onSlotClick: (slotNumber: number) => void;
+  }) {
+    // Получаем объект участника по ID или локального участника для его слота
+    const participant = isCurrentUserSlot 
+      ? currentLocalParticipant 
+      : (userId ? participantsMap.get(userId) : undefined);
+
+    // Определяем, включена ли камера
+    // Особый случай для локального участника: используем локальное состояние
+    const cameraOn = isCurrentUserSlot 
+      ? localCameraEnabled 
+      : (userId ? cameraStates[userId] || false : false);
+          
+    // Проверяем, требуется ли обновление этой камеры
+    const needsUpdate = userId && lastUpdatedCamera === userId && cameraUpdateTimestamp;
+    const updateKey = needsUpdate ? `update-${cameraUpdateTimestamp}` : '';
+    
+    // Для отладки - показываем, когда слот был перерисован
+    // console.log(`[RENDER] MemoizedSlot ${slotNumber} ${participant ? 'с участником' : 'пустой'}`);
+
+    if (participant) {
+      return (
+        <ParticipantSlot 
+          key={`slot-${slotNumber}-${updateKey}`}
+          participant={participant}
+          slotNumber={slotNumber}
+          cameraOn={cameraOn}
+        />
+      );
+    } else {
+      return (
+        <EmptySlot 
+          key={`empty-${slotNumber}`}
+          index={slotNumber - 1}
+          onClick={() => onSlotClick(slotNumber)}
+        />
+      );
+    }
+  },
+  // Оптимизированный компаратор для отдельного слота
+  (prevProps, nextProps) => {
+    // Если изменился номер слота или участника - обновляем
+    if (prevProps.slotNumber !== nextProps.slotNumber) return false;
+    
+    // Если в одном случае есть ID, а в другом нет - обновляем
+    if (Boolean(prevProps.userId) !== Boolean(nextProps.userId)) return false;
+    
+    // Если ID разные - обновляем
+    if (prevProps.userId !== nextProps.userId) return false;
+    
+    // Если это локальный слот и изменилось состояние локальной камеры - обновляем
+    if (prevProps.isCurrentUserSlot && prevProps.localCameraEnabled !== nextProps.localCameraEnabled) return false;
+
+    // Для этого конкретного слота обновляем, если его камера изменилась
+    if (prevProps.userId && nextProps.userId && 
+        prevProps.userId === nextProps.lastUpdatedCamera) {
+      const prevCameraState = prevProps.cameraStates[prevProps.userId] || false;
+      const nextCameraState = nextProps.cameraStates[nextProps.userId] || false;
+      if (prevCameraState !== nextCameraState) return false;
+    }
+    
+    // По умолчанию не обновляем
+    return true;
+  }
+);
+
+/**
+ * Мемоизированный компонент самой сетки - теперь использует мемоизированные слоты
  */
 const MemoizedVideoGrid = React.memo(
   function VideoGrid({
@@ -157,40 +247,27 @@ const MemoizedVideoGrid = React.memo(
           const userId = slots[slotNumber];
           // Проверяем, является ли этот слот слотом текущего локального участника
           const isCurrentUserSlot = userSlot === slotNumber && currentLocalParticipant;
-          // Получаем объект участника по ID или локального участника для его слота
-          const participant = isCurrentUserSlot 
-            ? currentLocalParticipant 
-            : (userId ? participantsMap.get(userId) : undefined);
-            
-          // Проверяем, требуется ли обновление этой камеры
-          const needsUpdate = userId && lastUpdatedCamera === userId && cameraUpdateTimestamp;
-          const updateKey = needsUpdate ? `update-${cameraUpdateTimestamp}` : '';
           
-          // Определяем, включена ли камера
-          // Особый случай для локального участника: используем локальное состояние
-          const cameraOn = isCurrentUserSlot 
-            ? localCameraEnabled 
-            : (userId ? cameraStates[userId] || false : false);
-            
-          return participant ? (
-            <ParticipantSlot 
-              key={`slot-${slotNumber}-${updateKey}`}
-              participant={participant}
+          return (
+            <MemoizedSlot
+              key={`slot-container-${slotNumber}`}
               slotNumber={slotNumber}
-              cameraOn={cameraOn}
-            />
-          ) : (
-            <EmptySlot 
-              key={`empty-${slotNumber}`} 
-              index={slotNumber - 1}
-              onClick={() => onSlotClick(slotNumber)}
+              userId={userId}
+              isCurrentUserSlot={isCurrentUserSlot}
+              currentLocalParticipant={currentLocalParticipant}
+              participantsMap={participantsMap}
+              cameraStates={cameraStates}
+              localCameraEnabled={localCameraEnabled}
+              lastUpdatedCamera={lastUpdatedCamera}
+              cameraUpdateTimestamp={cameraUpdateTimestamp}
+              onSlotClick={onSlotClick}
             />
           );
         })}
       </div>
     );
   },
-  // Специальный компаратор, который игнорирует изменения только в cameraStates
+  // Специальный компаратор, который теперь проверяет только базовые изменения структуры сетки
   (prevProps, nextProps) => {
     // Проверяем изменения в слотах
     const slotsEqual = Object.keys(prevProps.slots).length === Object.keys(nextProps.slots).length &&
@@ -211,12 +288,8 @@ const MemoizedVideoGrid = React.memo(
       (prevProps.currentLocalParticipant && nextProps.currentLocalParticipant &&
        prevProps.currentLocalParticipant.identity === nextProps.currentLocalParticipant.identity);
     
-    // Проверяем изменение состояния локальной камеры
-    const localCameraEqual = prevProps.localCameraEnabled === nextProps.localCameraEnabled;
-    
-    // Если все ключевые значения равны, то не перерисовываем
-    const shouldNotUpdate = slotsEqual && userSlotEqual && participantsMapSizeEqual && 
-                            localParticipantEqual && localCameraEqual;
+    // Теперь перерисовываем только при структурных изменениях сетки
+    const shouldNotUpdate = slotsEqual && userSlotEqual && participantsMapSizeEqual && localParticipantEqual;
     
     if (!shouldNotUpdate) {
       console.log('[GRID CHANGE] Причина перерисовки сетки:', 
@@ -224,11 +297,10 @@ const MemoizedVideoGrid = React.memo(
         !userSlotEqual ? 'изменился userSlot' : 
         !participantsMapSizeEqual ? 'изменилось количество участников' : 
         !localParticipantEqual ? 'изменился локальный участник' : 
-        !localCameraEqual ? 'изменилось состояние локальной камеры' : 
         'неизвестная причина');
     }
     
-    // Перерисовываем, если изменилось базовое расположение участников
+    // Перерисовываем только при структурных изменениях
     return shouldNotUpdate === true;
   }
 );
@@ -317,14 +389,30 @@ const ParticipantSlot = React.memo(
       </div>
     );
   },
-  // Сравниваем только необходимые пропсы
+  // Сравниваем только необходимые пропсы, включая состояние камеры
+  // Этот компаратор определяет, когда компонент должен обновиться
   (prevProps, nextProps) => {
-    return (
-      prevProps.slotNumber === nextProps.slotNumber &&
-      prevProps.participant.identity === nextProps.participant.identity &&
-      prevProps.participant.isLocal === nextProps.participant.isLocal &&
-      prevProps.cameraOn === nextProps.cameraOn
-    );
+    // Базовое сравнение идентификации слота
+    const slotSame = prevProps.slotNumber === nextProps.slotNumber;
+    const idSame = prevProps.participant.identity === nextProps.participant.identity;
+    const localSame = prevProps.participant.isLocal === nextProps.participant.isLocal;
+    
+    // Самое главное сравнение - состояние камеры
+    const cameraSame = prevProps.cameraOn === nextProps.cameraOn;
+    
+    // Если что-то изменилось - перерисовываем
+    const shouldUpdate = !(slotSame && idSame && localSame && cameraSame);
+    
+    if (shouldUpdate) {
+      console.log(`[SLOT UPDATE] ${prevProps.slotNumber} - причина:`, 
+        !slotSame ? 'изменился номер слота' :
+        !idSame ? 'изменился идентификатор участника' :
+        !localSame ? 'изменился статус local' :
+        !cameraSame ? 'изменилось состояние камеры' : 'неизвестная причина');
+    }
+    
+    // В React.memo true означает "НЕ обновлять", false - "обновить"
+    return !shouldUpdate;
   }
 );
 
