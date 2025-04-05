@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   formatChatMessageLinks,
   LiveKitRoom,
@@ -25,6 +25,9 @@ export function VideoConferenceClient(props: {
   token: string;
   codec: VideoCodec | undefined;
 }) {
+  // Состояние для открытия/закрытия панели управления
+  const [controlsOpen, setControlsOpen] = useState(false);
+  
   // Создаем Worker для E2EE
   const worker =
     typeof window !== 'undefined' &&
@@ -84,32 +87,58 @@ export function VideoConferenceClient(props: {
         {/* Main content with custom grid */}
         <main className="flex-1 relative overflow-hidden">
           <CustomVideoGrid />
-        </main>
-        
-        {/* Footer with controls */}
-        <footer className="bg-slate-800 px-4 border-t border-slate-700">
-          <div className="control-bar-container">
-            <div className="lk-control-bar">
+          
+          {/* Кнопка-триггер для открытия панели управления */}
+          <button 
+            className="drawer-trigger"
+            onClick={() => setControlsOpen(!controlsOpen)}
+            aria-label="Toggle Controls"
+          >
+            {controlsOpen ? (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15"></polyline>
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            )}
+          </button>
+          
+          {/* Выдвижная панель управления */}
+          <div className={`control-drawer ${controlsOpen ? 'open' : ''}`}>
+            <div className="controls-container">
               <button 
-                className="lk-button" 
+                className="control-button" 
                 aria-label="Toggle Camera"
                 onClick={() => room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled)}
               >
-                <div className="lk-button-indicator"></div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                  <path d="M23 7 16 12 23 17z"></path>
-                  <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
-                </svg>
-                <span>Камера</span>
+                {room.localParticipant.isCameraEnabled ? (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 7 16 12 23 17z"></path>
+                      <rect width="15" height="14" x="1" y="5" rx="2" ry="2"></rect>
+                    </svg>
+                    <span>Камера вкл.</span>
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m2 2 20 20"></path>
+                      <path d="M9 9a3 3 0 0 1 5.12-2.12"></path>
+                      <path d="M22 12 A10 10 0 0 0 12 2v0a10 10 0 0 0-2 19.5"></path>
+                    </svg>
+                    <span>Камера выкл.</span>
+                  </>
+                )}
               </button>
               
               <button 
-                className="lk-button" 
+                className="control-button danger" 
                 aria-label="Leave Room"
                 onClick={() => room.disconnect()}
               >
-                <div className="lk-button-indicator"></div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                   <polyline points="16 17 21 12 16 7"></polyline>
                   <line x1="21" x2="9" y1="12" y2="12"></line>
@@ -118,7 +147,7 @@ export function VideoConferenceClient(props: {
               </button>
             </div>
           </div>
-        </footer>
+        </main>
       </div>
     </LiveKitRoom>
   );
