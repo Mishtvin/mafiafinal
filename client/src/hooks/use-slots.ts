@@ -206,13 +206,26 @@ export function useSlots(userId: string) {
             
             case 'camera_states_update': {
               // Обновление информации о состоянии камер
-              const cameraStates = data.cameraStates || {};
-              console.log('Получены обновления состояния камер:', cameraStates);
+              const newCameraStates = data.cameraStates || {};
+              console.log('Получены обновления состояния камер:', newCameraStates);
               
-              setState(prev => ({
-                ...prev,
-                cameraStates
-              }));
+              setState(prev => {
+                // Объединяем существующие состояния с новыми
+                // Важно: НЕ заменяем весь объект, а только обновляем полученные состояния
+                const mergedCameraStates = { ...prev.cameraStates };
+                
+                // Добавляем только те состояния, которые получили в обновлении
+                Object.entries(newCameraStates).forEach(([userId, enabled]) => {
+                  mergedCameraStates[userId] = enabled as boolean;
+                });
+                
+                console.log('Объединенные состояния камер:', mergedCameraStates);
+                
+                return {
+                  ...prev,
+                  cameraStates: mergedCameraStates
+                };
+              });
               break;
             }
             
