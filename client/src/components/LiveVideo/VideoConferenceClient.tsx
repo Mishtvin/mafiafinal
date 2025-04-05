@@ -24,7 +24,8 @@ import { CustomVideoGrid } from './CustomVideoGrid';
 const ControlDrawer = ({ room }: { room: Room }) => {
   const [isOpen, setIsOpen] = useState(false);
   
-  // Следим за состоянием камеры
+  // Принудительно устанавливаем начальное состояние камеры как включенное
+  // Это состояние управляет отображением иконки
   const [cameraEnabled, setCameraEnabled] = useState(true);
   
   // Состояние для выбора камеры
@@ -164,14 +165,25 @@ const ControlDrawer = ({ room }: { room: Room }) => {
           .getTrackPublications()
           .some(track => track.kind === 'video' && !track.isMuted && track.track);
         
-        // Обновляем состояние UI на основе реального состояния треков или API LiveKit
-        // В начале подключения у нас может еще не быть треков, но камера уже может быть включена
-        const effectiveState = hasActiveVideoTracks || room.localParticipant.isCameraEnabled;
+        // При самом первом подключении всегда устанавливаем камеру как включенную,
+        // так как это соответствует реальному поведению LiveKit
+        // За исключением случаев, когда явно детектируем выключенную камеру
+        const isFirstConnection = !window.sessionStorage.getItem('camera-state-initialized');
+        
+        // Определяем эффективное состояние камеры
+        let effectiveState = hasActiveVideoTracks || room.localParticipant.isCameraEnabled;
+        
+        // Принудительно устанавливаем камеру как включенную при первой загрузке
+        if (isFirstConnection && !hasActiveVideoTracks && effectiveState === false) {
+          effectiveState = true;
+          window.sessionStorage.setItem('camera-state-initialized', 'true');
+        }
         
         console.log('Состояние камеры обновлено:', 
                     'треки:', hasActiveVideoTracks, 
                     'API:', room.localParticipant.isCameraEnabled,
-                    'итоговое:', effectiveState);
+                    'итоговое:', effectiveState,
+                    'первое подключение:', isFirstConnection);
         
         setCameraEnabled(effectiveState);
         
@@ -408,6 +420,8 @@ export function VideoConferenceClient(props: {
   codec: VideoCodec | undefined;
 }) {
   // Удалили неиспользуемое состояние для панели
+  
+
   
   // Создаем Worker для E2EE
   const worker =
