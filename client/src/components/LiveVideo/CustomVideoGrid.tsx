@@ -25,7 +25,7 @@ export function CustomVideoGrid() {
   
   // Пересоздаем функцию обновления при изменении слотов
   useEffect(() => {
-    console.log('Сработал эффект принудительного обновления', slotsManager.slots.size);
+    console.log('Сработал эффект принудительного обновления', Object.keys(slotsManager.slots).length);
     setForceUpdate(prev => prev + 1);
   }, [slotsManager.slots, slotsManager.userSlot]);
   
@@ -41,8 +41,9 @@ export function CustomVideoGrid() {
     if (currentLocalParticipant && slotsManager.connected && !slotsManager.userSlot) {
       // Находим первый свободный слот
       for (let i = 0; i < 12; i++) {
-        if (!slotsManager.slots.has(i + 1)) {
-          slotsManager.selectSlot(i + 1);
+        const slotNumber = i + 1;
+        if (!slotsManager.slots[slotNumber]) {
+          slotsManager.selectSlot(slotNumber);
           break;
         }
       }
@@ -61,7 +62,7 @@ export function CustomVideoGrid() {
   // Debug
   useEffect(() => {
     if (slotsManager.connected) {
-      console.log('Slots state:', Array.from(slotsManager.slots.entries()));
+      console.log('Slots state:', Object.entries(slotsManager.slots));
       console.log('User slot:', slotsManager.userSlot);
     }
   }, [slotsManager.slots, slotsManager.userSlot, slotsManager.connected]);
@@ -71,7 +72,7 @@ export function CustomVideoGrid() {
       <div className="video-grid">
         {slotNumbers.map(slotNumber => {
           // Получаем ID пользователя, занимающего слот
-          const userId = slotsManager.slots.get(slotNumber);
+          const userId = slotsManager.slots[slotNumber];
           // Получаем объект участника по ID
           const participant = userId ? participantsMap.get(userId) : undefined;
           

@@ -6,7 +6,7 @@ export interface SlotInfo {
 }
 
 export interface SlotsState {
-  slots: Map<number, string>; // slotNumber -> userId
+  slots: Record<number, string>; // slotNumber -> userId
   userSlot: number | null;
   loading: boolean;
   connected: boolean;
@@ -17,7 +17,7 @@ export function useSlots(userId: string) {
   console.log('useSlots hook initialized with userId:', userId);
   
   const [state, setState] = useState<SlotsState>({
-    slots: new Map(),
+    slots: {},
     userSlot: null,
     loading: true,
     connected: false,
@@ -113,12 +113,12 @@ export function useSlots(userId: string) {
           switch (data.type) {
             case 'slots_update': {
               // Обновление информации о слотах
-              const slots = new Map<number, string>();
+              const slots: Record<number, string> = {};
               let userSlot: number | null = null;
               
-              // Заполняем Map слотов из массива
+              // Заполняем объект слотов из массива
               data.slots.forEach((slot: SlotInfo) => {
-                slots.set(slot.slotNumber, slot.userId);
+                slots[slot.slotNumber] = slot.userId;
                 console.log(`Слот ${slot.slotNumber} занят пользователем ${slot.userId}`);
                 
                 // Если это слот текущего пользователя
@@ -130,7 +130,7 @@ export function useSlots(userId: string) {
               
               console.log('Обновляем состояние слотов:', 
                           'текущий userSlot =', userSlot, 
-                          'всего слотов =', slots.size);
+                          'всего слотов =', Object.keys(slots).length);
               
               setState(prev => {
                 const newState = { 
