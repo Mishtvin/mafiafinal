@@ -35,10 +35,24 @@
   position: relative;
 }
 
+/* На мобильных устройствах */
 @media (max-width: 768px) {
   .video-grid {
-    grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: repeat(6, 1fr);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 2 колонки */
+    grid-auto-rows: minmax(calc((100vh - 120px) / 3), auto); /* Высота каждой ячейки */
+    grid-auto-flow: row; /* Автоматическое добавление новых рядов */
+    height: auto; /* Автоматическая высота для поддержки скроллинга */
+    max-height: none; /* Снимаем ограничение на максимальную высоту */
+    overflow-y: auto; /* Включаем вертикальный скроллинг */
+    padding-bottom: 80px; /* Отступ внизу, чтобы учесть панель управления */
+  }
+  
+  .video-slot {
+    /* Фиксированная высота для ячейки, чтобы на экране помещалось 6 камер (2x3) */
+    height: calc((100vh - 150px) / 3);
+    min-height: calc((100vh - 150px) / 3);
+    aspect-ratio: 4/3; /* Сохраняем соотношение сторон как в десктопной сетке */
   }
 }
 

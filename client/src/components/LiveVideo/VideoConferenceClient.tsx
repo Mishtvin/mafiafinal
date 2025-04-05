@@ -504,7 +504,7 @@ export function VideoConferenceClient(props: {
       >
         <div className="flex flex-col h-screen bg-slate-900">        
           {/* Main content with custom grid */}
-          <main className="flex-1 relative overflow-hidden">
+          <main className="flex-1 relative overflow-y-auto">
             <CustomVideoGrid />
           </main>
         </div>
