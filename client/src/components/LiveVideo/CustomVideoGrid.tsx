@@ -46,8 +46,8 @@ export function CustomVideoGrid() {
   }, [participants]);
 
   return (
-    <div className="h-full p-4">
-      <div className="grid grid-cols-4 grid-rows-3 gap-4 h-full">
+    <div className="h-full p-5">
+      <div className="grid grid-cols-4 grid-rows-3 gap-5 h-full">
         {slots}
       </div>
     </div>
@@ -58,22 +58,30 @@ export function CustomVideoGrid() {
  * Компонент для отображения одного участника
  */
 function ParticipantSlot({ participant }: { participant: Participant }) {
-  // Получаем видеотрек камеры участника
-  const videoTrack = useTracks([Track.Source.Camera], { participantIdentity: participant.identity })[0];
+  // Получаем список видеотреков
+  const videoTracks = useTracks(
+    [Track.Source.Camera],
+    { onlySubscribed: true }
+  ).filter(track => track.participant.identity === participant.identity);
+  
+  const hasVideo = videoTracks.length > 0;
   
   return (
-    <div className="relative overflow-hidden rounded-lg bg-slate-800 h-full">
-      {videoTrack ? (
-        <VideoTrack 
-          trackRef={videoTrack}
-          className="h-full w-full object-cover"
-          participantIdentity={participant.identity}
-        />
+    <div className="relative overflow-hidden rounded-xl shadow-md bg-slate-800 h-full border border-slate-700">
+      {hasVideo ? (
+        <div className="h-full w-full relative">
+          {/* Здесь мы используем первый найденный трек */}
+          <VideoTrack 
+            trackRef={videoTracks[0]}
+            className="h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 ring-1 ring-white/10"></div>
+        </div>
       ) : (
         <div className="flex items-center justify-center h-full">
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
-            className="h-12 w-12 text-slate-600" 
+            className="h-14 w-14 text-slate-500" 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -87,7 +95,7 @@ function ParticipantSlot({ participant }: { participant: Participant }) {
           </svg>
         </div>
       )}
-      <div className="absolute bottom-2 left-2 bg-slate-900/70 py-1 px-2 rounded text-xs text-white">
+      <div className="absolute bottom-3 left-3 bg-slate-900/80 py-1 px-3 rounded-md text-sm text-white font-medium backdrop-blur-sm">
         {participant.identity}
       </div>
     </div>
@@ -99,24 +107,28 @@ function ParticipantSlot({ participant }: { participant: Participant }) {
  */
 function EmptySlot({ index }: { index: number }) {
   return (
-    <div className="relative overflow-hidden rounded-lg bg-slate-800/30 border border-slate-700/50 h-full">
+    <div className="relative overflow-hidden rounded-xl shadow-inner bg-slate-800/20 border border-slate-700/30 h-full">
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex flex-col items-center justify-center text-slate-600">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            className="h-10 w-10 mb-2" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={1} 
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
-            />
-          </svg>
-          <span className="text-xs">Слот {index + 1}</span>
+        <div className="flex flex-col items-center justify-center">
+          <div className="bg-slate-800/40 p-3 rounded-full mb-2">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-12 w-12 text-slate-500" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={1} 
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" 
+              />
+            </svg>
+          </div>
+          <div className="bg-slate-800/60 px-3 py-1 rounded-md">
+            <span className="text-sm font-medium text-slate-400">Слот {index + 1}</span>
+          </div>
         </div>
       </div>
     </div>
