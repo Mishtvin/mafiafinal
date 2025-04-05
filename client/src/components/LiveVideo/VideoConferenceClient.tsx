@@ -82,6 +82,33 @@ const ControlDrawer = ({ room }: { room: Room }) => {
     const updateCameraState = () => {
       if (room && room.localParticipant) {
         setCameraEnabled(room.localParticipant.isCameraEnabled);
+        
+        // Получаем информацию о текущем активном треке камеры
+        const videoTracks = room.localParticipant.getTrackPublications().filter(
+          track => track.kind === 'video' && !track.isMuted
+        );
+        
+        // Если есть активный трек, получаем его deviceId
+        if (videoTracks.length > 0 && videoTracks[0].track) {
+          // Используем source для получения информации о MediaStreamTrack
+          const mediaStreamTrack = videoTracks[0].track.mediaStreamTrack;
+          
+          // Получаем список устройств для сравнения
+          navigator.mediaDevices.enumerateDevices().then(devices => {
+            // Находим соответствие по groupId (более надежный способ идентификации)
+            const matchingDevice = devices.find(device => 
+              device.kind === 'videoinput' && 
+              device.groupId === mediaStreamTrack.getSettings().groupId
+            );
+            
+            if (matchingDevice && matchingDevice.deviceId) {
+              console.log('Определена активная камера:', matchingDevice.deviceId);
+              setSelectedCamera(matchingDevice.deviceId);
+            }
+          }).catch(err => {
+            console.error('Ошибка при получении текущей камеры:', err);
+          });
+        }
       }
     };
     
@@ -89,15 +116,22 @@ const ControlDrawer = ({ room }: { room: Room }) => {
     if (room && room.localParticipant) {
       room.localParticipant.on('trackMuted', updateCameraState);
       room.localParticipant.on('trackUnmuted', updateCameraState);
+      room.localParticipant.on('trackPublished', updateCameraState);
+      room.localParticipant.on('trackUnpublished', updateCameraState);
       
       // Инициализируем начальное состояние
       setCameraEnabled(room.localParticipant.isCameraEnabled);
+      
+      // Вызываем немедленно для обновления состояния селекта
+      updateCameraState();
     }
     
     return () => {
       if (room && room.localParticipant) {
         room.localParticipant.off('trackMuted', updateCameraState);
         room.localParticipant.off('trackUnmuted', updateCameraState);
+        room.localParticipant.off('trackPublished', updateCameraState);
+        room.localParticipant.off('trackUnpublished', updateCameraState);
       }
     }
   }, [room]);
