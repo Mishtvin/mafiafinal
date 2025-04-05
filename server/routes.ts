@@ -378,6 +378,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
             broadcastSlotUpdate();
             break;
             
+          case 'move_user':
+            // Перемещение другого пользователя на указанный слот
+            if (!userId) break;
+            
+            const targetUserId = data.userId;
+            const targetSlot = data.targetSlot;
+            
+            // Проверяем, что пользователь существует
+            if (!connections.has(targetUserId)) {
+              console.log(`Невозможно переместить: пользователь ${targetUserId} не найден`);
+              break;
+            }
+            
+            // Получаем текущий слот перемещаемого пользователя
+            const currentUserSlot = userSlots.get(targetUserId);
+            if (currentUserSlot === undefined) {
+              console.log(`Невозможно переместить: пользователь ${targetUserId} не имеет слота`);
+              break;
+            }
+            
+            // Проверяем, не занят ли целевой слот
+            const targetSlotOccupant = slotAssignments.get(targetSlot);
+            if (targetSlotOccupant && targetSlotOccupant !== targetUserId) {
+              // Если целевой слот занят, выполняем обмен слотами
+              if (targetSlotOccupant) {
+                const occupantCurrentSlot = userSlots.get(targetSlotOccupant);
+                if (occupantCurrentSlot !== undefined) {
+                  // Устанавливаем перемещаемого пользователя на новый слот
+                  slotAssignments.set(targetSlot, targetUserId);
+                  userSlots.set(targetUserId, targetSlot);
+                  
+                  // Перемещаем текущего владельца слота на слот перемещаемого пользователя
+                  slotAssignments.set(currentUserSlot, targetSlotOccupant);
+                  userSlots.set(targetSlotOccupant, currentUserSlot);
+                  
+                  console.log(`Пользователи ${targetUserId} и ${targetSlotOccupant} обменялись слотами ${currentUserSlot} и ${targetSlot}`);
+                }
+              }
+            } else {
+              // Если целевой слот свободен, просто перемещаем пользователя
+              slotAssignments.delete(currentUserSlot);
+              slotAssignments.set(targetSlot, targetUserId);
+              userSlots.set(targetUserId, targetSlot);
+              console.log(`Пользователь ${targetUserId} перемещен из слота ${currentUserSlot} в слот ${targetSlot}`);
+            }
+            
+            // Отправляем обновление всем подключенным клиентам
+            broadcastSlotUpdate();
+            break;
+            
           case 'release_slot':
             // Пользователь освобождает слот
             if (!userId) break;

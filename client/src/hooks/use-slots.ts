@@ -28,6 +28,17 @@ export function useSlots(userId: string) {
 
   const socketRef = useRef<WebSocket | null>(null);
   const userIdRef = useRef(userId);
+  
+  // Добавляем поддержку для операции обмена слотами
+  const moveUserToSlot = useCallback((targetSlot: number, userId: string) => {
+    if (targetSlot < 1 || targetSlot > 12) return false;
+    
+    return sendMessage({
+      type: 'move_user',
+      userId,
+      targetSlot
+    });
+  }, []);
 
   // Функция для отправки сообщения через WebSocket
   const sendMessage = useCallback((message: any) => {
@@ -221,6 +232,7 @@ export function useSlots(userId: string) {
     ...state,
     selectSlot,
     releaseSlot,
-    setCameraState
+    setCameraState,
+    moveUserToSlot
   };
 }
