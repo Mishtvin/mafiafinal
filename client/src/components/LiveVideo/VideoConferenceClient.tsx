@@ -83,36 +83,35 @@ const ControlDrawer = ({ room }: { room: Room }) => {
       if (room && room.localParticipant) {
         setCameraEnabled(room.localParticipant.isCameraEnabled);
         
-        // Получаем текущее активное устройство ввода через LiveKit API
-        room.getActiveDevice('videoinput')
-          .then(activeDevice => {
-            if (activeDevice) {
-              console.log('Активное устройство через LiveKit API:', activeDevice);
-              setSelectedCamera(activeDevice);
-            } else {
-              // Запасной вариант - получение через media tracks
-              const videoTracks = room.localParticipant.getTrackPublications().filter(
-                track => track.kind === 'video' && !track.isMuted
-              );
-              
-              if (videoTracks.length > 0 && videoTracks[0].track) {
-                try {
-                  const mediaStreamTrack = videoTracks[0].track.mediaStreamTrack;
-                  const currentSettings = mediaStreamTrack.getSettings();
-                  
-                  if (currentSettings.deviceId) {
-                    console.log('Определена активная камера через settings:', currentSettings.deviceId);
-                    setSelectedCamera(currentSettings.deviceId);
-                  }
-                } catch (err) {
-                  console.error('Ошибка при определении ID камеры через медиатрек:', err);
+        try {
+          // Получаем текущее активное устройство ввода напрямую (не Promise)
+          const activeDevice = room.getActiveDevice('videoinput');
+          if (activeDevice) {
+            console.log('Активное устройство через LiveKit API:', activeDevice);
+            setSelectedCamera(activeDevice);
+          } else {
+            // Запасной вариант - получение через media tracks
+            const videoTracks = room.localParticipant.getTrackPublications().filter(
+              track => track.kind === 'video' && !track.isMuted
+            );
+            
+            if (videoTracks.length > 0 && videoTracks[0].track) {
+              try {
+                const mediaStreamTrack = videoTracks[0].track.mediaStreamTrack;
+                const currentSettings = mediaStreamTrack.getSettings();
+                
+                if (currentSettings.deviceId) {
+                  console.log('Определена активная камера через settings:', currentSettings.deviceId);
+                  setSelectedCamera(currentSettings.deviceId);
                 }
+              } catch (err) {
+                console.error('Ошибка при определении ID камеры через медиатрек:', err);
               }
             }
-          })
-          .catch(err => {
-            console.error('Ошибка при получении активного устройства:', err);
-          });
+          }
+        } catch (err) {
+          console.error('Ошибка при получении активного устройства:', err);
+        }
       }
     };
     
