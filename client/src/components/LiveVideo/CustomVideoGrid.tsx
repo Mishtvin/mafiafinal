@@ -219,17 +219,18 @@ const StableVideoTrack = React.memo(
       };
     }
     
-    // Используем React.useMemo для кеширования и предотвращения перерисовки
-    const videoContent = React.useMemo(() => {
-      return hasVideo ? (
+    if (hasVideo) {
+      return (
         <div className="h-full w-full relative flex items-center justify-center">
           <VideoTrack 
-            track={videoTracks[0]}
+            trackRef={videoTracks[0]}
             className="h-full w-full object-cover"
           />
           <div className="absolute inset-0 ring-1 ring-white/10"></div>
         </div>
-      ) : (
+      );
+    } else {
+      return (
         <div className="flex items-center justify-center h-full">
           <svg 
             xmlns="http://www.w3.org/2000/svg" 
@@ -247,13 +248,7 @@ const StableVideoTrack = React.memo(
           </svg>
         </div>
       );
-    }, [hasVideo, videoTracks]);
-    
-    return (
-      <React.Fragment>
-        {videoContent}
-      </React.Fragment>
-    );
+    }
   },
   // Строгий компаратор для предотвращения перерисовки
   (prevProps, nextProps) => {
