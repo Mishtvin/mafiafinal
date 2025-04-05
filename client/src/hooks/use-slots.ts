@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-// Ключ для хранения слота в localStorage
-const SLOT_STORAGE_KEY = 'mafia_user_slot';
-
 export interface SlotInfo {
   userId: string;
   slotNumber: number;
@@ -18,7 +15,8 @@ export interface SlotsState {
 }
 
 export function useSlots(userId: string) {
-  // Состояние хука
+  console.log('useSlots hook initialized with userId:', userId);
+  
   const [state, setState] = useState<SlotsState>({
     slots: {},
     userSlot: null,
@@ -30,114 +28,6 @@ export function useSlots(userId: string) {
 
   const socketRef = useRef<WebSocket | null>(null);
   const userIdRef = useRef(userId);
-  
-  // Функция для сохранения информации о слоте в localStorage
-  const saveSlotToStorage = useCallback((slotNumber: number) => {
-    try {
-      // Важное изменение: добавляем проверку на наличие localStorage
-      if (typeof localStorage === 'undefined') {
-        console.error('localStorage недоступен в данной среде');
-        return;
-      }
-      
-      // Явно задаем тип данных и расширяем для отладки
-      const storageData = {
-        userId: userId,
-        slotNumber: slotNumber,
-        timestamp: Date.now(),
-        // Добавляем дополнительные данные для диагностики
-        origin: window.location.origin,
-        userAgent: navigator.userAgent.substring(0, 50),
-        isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-      };
-      
-      // Создаем строку данных и сохраняем
-      const jsonData = JSON.stringify(storageData);
-      localStorage.setItem(SLOT_STORAGE_KEY, jsonData);
-      
-      // Подтверждаем в консоли
-      console.log(`СЛОТ СОХРАНЕН: ${slotNumber} для ${userId}`, jsonData.substring(0, 100));
-      
-      // Проверяем сохранение, считывая данные сразу после записи
-      const savedData = localStorage.getItem(SLOT_STORAGE_KEY);
-      if (savedData) {
-        try {
-          const parsedData = JSON.parse(savedData);
-          console.log(`ПРОВЕРКА СЛОТА: сохранено ${parsedData.slotNumber} для ${parsedData.userId}`);
-        } catch (e) {
-          console.error('Ошибка при проверке сохраненных данных:', e);
-        }
-      } else {
-        console.error('ОШИБКА: Проверка слота не удалась, данные не найдены в localStorage');
-      }
-    } catch (error) {
-      console.error('КРИТИЧЕСКАЯ ОШИБКА при сохранении слота:', error);
-    }
-  }, [userId]);
-  
-  // Получение сохраненного слота для пользователя из localStorage
-  const getSavedSlot = useCallback(() => {
-    try {
-      console.log(`[ПОЛУЧЕНИЕ СЛОТА] Пытаемся получить сохраненный слот для ${userId}`);
-      
-      // Важное изменение: проверяем доступность localStorage
-      if (typeof localStorage === 'undefined') {
-        console.error('[ПОЛУЧЕНИЕ СЛОТА] localStorage недоступен в данной среде');
-        return null;
-      }
-      
-      // Читаем данные из localStorage
-      const savedData = localStorage.getItem(SLOT_STORAGE_KEY);
-      if (!savedData) {
-        console.warn('[ПОЛУЧЕНИЕ СЛОТА] Нет сохраненных данных о слоте в localStorage');
-        return null;
-      }
-      
-      // Пытаемся распарсить данные
-      console.log(`[ПОЛУЧЕНИЕ СЛОТА] Найдены сохраненные данные: ${savedData.substring(0, 100)}...`);
-      const data = JSON.parse(savedData);
-      
-      // Проверяем корректность данных
-      if (!data || typeof data !== 'object' || !data.slotNumber) {
-        console.error('[ПОЛУЧЕНИЕ СЛОТА] Неверный формат данных в localStorage:', data);
-        return null;
-      }
-      
-      // Проверяем соответствие по userId или по глобальному идентификатору
-      const globalId = window.currentUserIdentity;
-      console.log(`[ПОЛУЧЕНИЕ СЛОТА] Сравниваем ${data.userId} с текущим ${userId} и глобальным ${globalId || 'отсутствует'}`);
-      
-      if ((data.userId === userId || (globalId && data.userId === globalId)) && data.slotNumber) {
-        console.log(`[СЛОТ ВОССТАНОВЛЕН!] ${data.slotNumber} для пользователя ${userId} из localStorage`);
-        
-        // Повторно сохраняем слот для "обновления" информации
-        try {
-          saveSlotToStorage(data.slotNumber);
-        } catch (e) {
-          console.error('[ПОЛУЧЕНИЕ СЛОТА] Ошибка при повторном сохранении слота:', e);
-        }
-        
-        return data.slotNumber;
-      } else {
-        console.log(`[ПОЛУЧЕНИЕ СЛОТА] Данные в localStorage не соответствуют: ${data.userId} != ${userId} и ${globalId || 'отсутствует'}`);
-      }
-    } catch (error) {
-      console.error('[КРИТИЧЕСКАЯ ОШИБКА] При чтении сохраненного слота:', error);
-    }
-    return null;
-  }, [userId, saveSlotToStorage]);
-
-  // Очистка информации о слоте в localStorage
-  const clearSlotStorage = useCallback(() => {
-    try {
-      localStorage.removeItem(SLOT_STORAGE_KEY);
-      console.log(`Информация о слоте для пользователя ${userId} удалена из localStorage`);
-      return true;
-    } catch (error) {
-      console.error('Ошибка при удалении информации о слоте:', error);
-      return false;
-    }
-  }, [userId]);
 
   // Функция для отправки сообщения через WebSocket
   const sendMessage = useCallback((message: any) => {
@@ -158,68 +48,18 @@ export function useSlots(userId: string) {
 
   // Выбор слота
   const selectSlot = useCallback((slotNumber: number) => {
-    // Сохраняем выбранный слот в localStorage
-    console.log(`Выбор слота ${slotNumber}, сразу сохраняем в localStorage`);
-    saveSlotToStorage(slotNumber);
-    
-    // Отправляем запрос на сервер
     return sendMessage({
       type: 'select_slot',
       slotNumber
     });
-  }, [saveSlotToStorage, sendMessage]);
-  
+  }, [sendMessage]);
+
   // Освобождение слота
   const releaseSlot = useCallback(() => {
-    // Удаляем информацию о слоте из localStorage
-    clearSlotStorage();
-    
-    // Отправляем запрос на сервер
     return sendMessage({
       type: 'release_slot'
     });
-  }, [clearSlotStorage, sendMessage]);
-  
-  // Эффект для отслеживания изменения userSlot и сохранения в localStorage
-  useEffect(() => {
-    console.log('Обнаружено изменение userSlot:', state.userSlot);
-    if (state.userSlot) {
-      console.log(`Сохраняем слот ${state.userSlot} для пользователя ${userId} в localStorage (из эффекта)`);
-      saveSlotToStorage(state.userSlot);
-    }
-  }, [state.userSlot, saveSlotToStorage, userId]);
-
-  // Эффект для обработки закрытия вкладки/окна
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      console.log('Страница закрывается, сохраняем текущий слот в localStorage');
-      try {
-        // Сохраняем текущий слот пользователя при закрытии
-        if (state.userSlot) {
-          console.log(`Принудительно сохраняем слот ${state.userSlot} для ${userId} перед закрытием`);
-          saveSlotToStorage(state.userSlot);
-        }
-      } catch (error) {
-        console.error('Ошибка при сохранении слота перед закрытием:', error);
-      }
-    };
-    
-    // Добавляем обработчик события закрытия страницы
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('pagehide', handleBeforeUnload); // Добавляем для iOS
-    
-    // Удаляем обработчик при размонтировании компонента
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('pagehide', handleBeforeUnload);
-      
-      // Сохраняем слот при размонтировании компонента
-      if (state.userSlot) {
-        console.log('Компонент размонтируется, сохраняем данные о слоте в localStorage');
-        saveSlotToStorage(state.userSlot);
-      }
-    };
-  }, [state.userSlot, saveSlotToStorage, userId]);
+  }, [sendMessage]);
 
   // Эффект для установки WebSocket соединения
   useEffect(() => {
@@ -251,15 +91,11 @@ export function useSlots(userId: string) {
           console.log('Использую глобальный идентификатор:', effectiveUserId);
         }
 
-        // Получаем предпочтительный слот из localStorage
-        const preferredSlot = getSavedSlot();
-        
-        // Регистрируем пользователя на сервере, включая предпочтительный слот
-        console.log('Регистрируем пользователя:', effectiveUserId, preferredSlot ? `с предпочтительным слотом ${preferredSlot}` : 'без предпочтительного слота');
+        // Регистрируем пользователя на сервере
+        console.log('Регистрируем пользователя:', effectiveUserId);
         sendMessage({
           type: 'register',
-          userId: effectiveUserId,
-          preferredSlot: preferredSlot
+          userId: effectiveUserId
         });
       };
 
@@ -379,7 +215,7 @@ export function useSlots(userId: string) {
         socketRef.current = null;
       }
     };
-  }, [userId, sendMessage, getSavedSlot]);
+  }, [userId, sendMessage]);
 
   return {
     ...state,

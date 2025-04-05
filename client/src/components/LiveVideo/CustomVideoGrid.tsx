@@ -53,6 +53,7 @@ export function CustomVideoGrid() {
   // Создаем сетку из 12 слотов
   const slotNumbers = Array.from({ length: 12 }, (_, i) => i + 1);
   
+  // Создаем мапу для участников в нужных слотах
   // Создаем мапу для всех участников
   const participantsMap = new Map<string, Participant>();
   participants.forEach(p => {
@@ -65,14 +66,6 @@ export function CustomVideoGrid() {
     console.log(
       `Принудительно добавляем локального участника в слот ${slotsManager.userSlot}: ${currentLocalParticipant.identity}`
     );
-    
-    // Гарантируем, что локальный участник всегда присутствует в мапе
-    participantsMap.set(currentLocalParticipant.identity, currentLocalParticipant);
-    
-    // Дополнительная проверка - принудительное обновление слота локального участника
-    if (slotsManager.slots[slotsManager.userSlot] !== currentLocalParticipant.identity) {
-      slotsManager.slots[slotsManager.userSlot] = currentLocalParticipant.identity;
-    }
   }
   
   // Debug
@@ -101,29 +94,10 @@ export function CustomVideoGrid() {
           const userId = slotsManager.slots[slotNumber];
           // Проверяем, является ли этот слот слотом текущего локального участника
           const isCurrentUserSlot = slotsManager.userSlot === slotNumber && currentLocalParticipant;
-          // Получаем участника из идентификатора или используем локального участника
-          let participant = undefined;
-          
-          // Улучшенная логика определения участника для слота
-          if (isCurrentUserSlot) {
-            // Если это слот текущего пользователя, используем локального участника
-            participant = currentLocalParticipant;
-          } else if (userId && participantsMap.has(userId)) {
-            // Если участник существует в списке участников
-            participant = participantsMap.get(userId);
-          } else if (userId) {
-            // Если участник указан в слоте, но его нет в списке
-            // Пробуем найти его по части ID (часто проблема с suffixed-ID)
-            const entries = Array.from(participantsMap.entries());
-            for (let i = 0; i < entries.length; i++) {
-              const [key, value] = entries[i];
-              if (key.includes(userId) || userId.includes(key)) {
-                console.log(`🔍 Найдено соответствие: слот ${slotNumber}, ID в слоте: ${userId}, ID участника: ${key}`);
-                participant = value;
-                break;
-              }
-            }
-          }
+          // Получаем объект участника по ID или локального участника для его слота
+          const participant = isCurrentUserSlot 
+            ? currentLocalParticipant 
+            : (userId ? participantsMap.get(userId) : undefined);
           
           return participant ? (
             <ParticipantSlot 

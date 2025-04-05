@@ -39,44 +39,9 @@ export default function VideoConferencePage() {
     }
   }, [hasJoined, username, roomId]);
 
-  // Генерируем или используем имя пользователя из глобального ID при входе
+  // Генерируем случайное имя пользователя при входе
   const handleJoin = () => {
-    // Проверяем наличие и создаем sessionId
-    let sessionId = localStorage.getItem('mafia_session_id');
-    if (!sessionId) {
-      const timestamp = Date.now();
-      const random = Math.floor(Math.random() * 1000000);
-      const devicePart = navigator.userAgent.slice(0, 5)
-        .split('')
-        .map(c => c.charCodeAt(0))
-        .join('');
-      
-      sessionId = `session-${timestamp}-${random}-${devicePart}`;
-      localStorage.setItem('mafia_session_id', sessionId);
-      console.log(`🔑 Создан новый идентификатор сессии: ${sessionId}`);
-    } else {
-      console.log(`🔑 Найден существующий идентификатор сессии: ${sessionId}`);
-    }
-
-    // Если в window уже есть глобальный идентификатор, используем его
-    if (window.currentUserIdentity && window.currentUserIdentity !== 'undefined') {
-      console.log('🔄 Используем глобальный ID для подключения:', window.currentUserIdentity);
-      setUsername(window.currentUserIdentity);
-    } else {
-      // Если нет, то создаём стабильный ID на основе sessionId
-      // Это важно, чтобы пользователь сохранял тот же ID между перезагрузками
-      const stableId = 'User-' + sessionId.split('-')
-        .slice(2, 4)
-        .map(part => part.substring(0, 4))
-        .join('-');
-      
-      console.log('🆕 Создаём стабильный ID для подключения:', stableId);
-      setUsername(stableId);
-      
-      // Сохраняем этот ID как глобальный для следующих подключений
-      window.currentUserIdentity = stableId;
-    }
-    
+    setUsername('User-' + Math.floor(Math.random() * 10000));
     setHasJoined(true);
   };
 
