@@ -38,7 +38,7 @@ export default function VideoConferencePage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-900 text-white">
+    <div className="flex flex-col min-h-screen bg-slate-900 text-white">
       {!hasJoined ? (
         <div className="flex items-center justify-center min-h-screen px-4 py-8 sm:px-6">
           <div className="w-full max-w-md mx-auto">
