@@ -27,30 +27,6 @@ function Home() {
           Відеоконференції для гри у Мафію
         </p>
         
-        <div className="mb-8 bg-slate-800/50 p-5 rounded-lg border border-slate-700">
-          <h2 className="text-xl font-medium mb-3">Особливості додатку</h2>
-          <ul className="text-left text-sm space-y-2">
-            <li className="flex items-start">
-              <svg className="h-5 w-5 text-green-500 mr-2 mt-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>Спеціальна сітка для 12 учасників гри</span>
-            </li>
-            <li className="flex items-start">
-              <svg className="h-5 w-5 text-green-500 mr-2 mt-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>Високоякісне відео з адаптивним бітрейтом</span>
-            </li>
-            <li className="flex items-start">
-              <svg className="h-5 w-5 text-green-500 mr-2 mt-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>Оптимізовано для гри "Мафія" та спільних активностей</span>
-            </li>
-          </ul>
-        </div>
-        
         <div className="flex flex-col space-y-4">
           <Link href="/conference">
             <div className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors block cursor-pointer">
@@ -62,10 +38,6 @@ function Home() {
               </div>
             </div>
           </Link>
-        </div>
-        
-        <div className="mt-10 text-sm text-gray-500">
-          На основі LiveKit та React
         </div>
       </div>
     </div>
