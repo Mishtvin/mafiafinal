@@ -446,7 +446,7 @@ export class ConnectionManager {
         break;
         
       case 'rename_user':
-        // Пользователь (ведущий) изменяет имя другого пользователя
+        // Пользователь (ведущий) изменяет имя другого пользователя для отображения
         // Проверяем, что текущий пользователь - ведущий (слот 12)
         const isHostSlot = slotManager.getUserSlot(userId) === 12;
         
@@ -465,64 +465,24 @@ export class ConnectionManager {
             break;
           }
           
-          // Получаем тип пользователя (Host/Player)
-          const userPrefix = data.targetUserId.startsWith('Host-') ? 'Host-' : 'Player-';
+          // Вместо создания нового ID и переназначения слотов,
+          // просто рассылаем всем клиентам уведомление о новом отображаемом имени
+          // и продолжаем использовать тот же ID пользователя для всей внутренней логики
           
-          // Создаем новый ID пользователя с тем же префиксом
-          const newUserId = `${userPrefix}${data.newName}`;
-          
-          // Переносим данные на новый ID
-          const cameraState = cameraManager.getCameraState(data.targetUserId);
-          
-          // Освобождаем слот для старого ID и назначаем для нового
-          console.log(`Переназначение слота ${targetSlot} с ${data.targetUserId} на ${newUserId}`);
-          slotManager.releaseUserSlot(data.targetUserId);
-          slotManager.assignSlot(newUserId, targetSlot);
-          
-          // Переносим состояние камеры
-          if (cameraState !== undefined) {
-            console.log(`Перенос состояния камеры для ${newUserId}: ${cameraState}`);
-            cameraManager['cameraStates'].set(newUserId, cameraState);
-            cameraManager.removeCameraState(data.targetUserId);
-          }
-          
-          // Переносим состояние игрока (убит/жив)
-          const isKilled = playerStateManager.isPlayerKilled(data.targetUserId);
-          if (isKilled) {
-            playerStateManager.markPlayerAsKilled(userId, newUserId);
-            playerStateManager.clearPlayerState(data.targetUserId);
-          }
-          
-          // Отправляем обновленное состояние всем пользователям
-          const currentSlots = slotManager.getAllSlotAssignments();
+          // Отправляем broadcast о новом отображаемом имени
           this.broadcastToAll({
-            type: 'slots_update',
-            slots: currentSlots
+            type: 'display_name_update',
+            userId: data.targetUserId,
+            displayName: data.newName
           });
           
-          // Обновляем состояния камер, если необходимо
-          if (cameraState !== undefined) {
-            const allCameraStates = cameraManager.getAllCameraStates();
-            this.broadcastToAll({
-              type: 'camera_states_update',
-              cameraStates: allCameraStates
-            });
-          }
-          
-          // Обновляем состояния игроков, если необходимо
-          if (isKilled) {
-            const playerStates = playerStateManager.getPlayerStates();
-            this.broadcastToAll({
-              type: 'player_states_update',
-              playerStates
-            });
-          }
+          console.log(`Имя пользователя ${data.targetUserId} изменено на ${data.newName} (только отображение)`);
           
           // Отправляем уведомление об успехе
           this.sendToUser(userId, {
             type: 'rename_success',
-            oldUserId: data.targetUserId,
-            newUserId: newUserId
+            userId: data.targetUserId,
+            displayName: data.newName
           });
         } else {
           // Если пользователь не ведущий или не указано имя/целевой пользователь

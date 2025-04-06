@@ -333,40 +333,19 @@ function ParticipantSlot({
           <button
             className="bg-blue-600/80 hover:bg-blue-700/90 text-white p-1 rounded-md shadow-md"
             onClick={() => {
-              // Получаем текущее имя без префикса и суффикса
-              let currentName = participant.identity;
+              // Получаем хук для работы с именами
+              const { getDisplayName, renameUser } = useSlots(participant.identity);
               
-              // Убираем префикс Player- или Host-
-              if (currentName.startsWith('Player-')) {
-                currentName = currentName.substring(7);
-              } else if (currentName.startsWith('Host-')) {
-                currentName = currentName.substring(5);
-              }
-              
-              // Убираем суффикс с цифрами (ID) в конце имени
-              const lastDashIndex = currentName.lastIndexOf('-');
-              if (lastDashIndex > 0) {
-                const afterDash = currentName.substring(lastDashIndex + 1);
-                // Проверяем, что после тире идут только цифры
-                if (/^\d+$/.test(afterDash)) {
-                  currentName = currentName.substring(0, lastDashIndex);
-                }
-              }
+              // Получаем текущее отображаемое имя
+              let currentName = getDisplayName(participant.identity);
               
               // Запрашиваем новое имя
               const newName = prompt(`Введите новое имя для ${currentName}:`, currentName);
               
               // Если имя не пустое и изменилось
               if (newName && newName !== currentName && newName.trim() !== '') {
-                // Проверяем, что WebSocket соединение активно
-                if (playerStatesManager.wsRef?.current?.readyState === WebSocket.OPEN) {
-                  // Отправляем запрос на переименование
-                  playerStatesManager.wsRef.current.send(JSON.stringify({
-                    type: 'rename_user',
-                    targetUserId: participant.identity,
-                    newName: newName.trim()
-                  }));
-                }
+                // Используем функцию renameUser для переименования
+                renameUser(participant.identity, newName.trim());
               }
             }}
             title="Изменить имя пользователя"
@@ -384,31 +363,17 @@ function ParticipantSlot({
         {slotNumber === 12 ? "Ведущий" : slotNumber}
       </div>
       
-      {/* Имя пользователя рядом с номером слота (без префикса) */}
+      {/* Имя пользователя рядом с номером слота (с поддержкой отображаемых имен) */}
       <div className={`absolute bottom-2 ${slotNumber === 12 ? 'right-2' : 'left-8'} bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm`}>
+        {/* Используем хук useSlots непосредственно для получения актуального имени */}
         {(() => {
-          // Функция для очистки имени от всех служебных префиксов и суффиксов
-          let cleanName = participant.identity;
+          // Импортируем хук useSlots
+          const { getDisplayName } = useSlots(participant.identity);
           
-          // Убираем префикс Player- или Host-
-          if (cleanName.startsWith('Player-')) {
-            cleanName = cleanName.substring(7);
-          } else if (cleanName.startsWith('Host-')) {
-            cleanName = cleanName.substring(5);
-          }
+          // Получаем отображаемое имя
+          const displayName = getDisplayName(participant.identity);
           
-          // Убираем суффикс с цифрами (ID) в конце имени
-          // Находим последнее тире и цифры после него
-          const lastDashIndex = cleanName.lastIndexOf('-');
-          if (lastDashIndex > 0) {
-            const afterDash = cleanName.substring(lastDashIndex + 1);
-            // Проверяем, что после тире идут только цифры
-            if (/^\d+$/.test(afterDash)) {
-              cleanName = cleanName.substring(0, lastDashIndex);
-            }
-          }
-          
-          return cleanName;
+          return displayName;
         })()}
       </div>
     </div>

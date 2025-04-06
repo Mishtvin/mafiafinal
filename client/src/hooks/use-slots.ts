@@ -12,6 +12,7 @@ export interface SlotsState {
   connected: boolean;
   error: string | null;
   cameraStates: Record<string, boolean>; // userId -> cameraOn
+  displayNames: Record<string, string>; // userId -> displayName
 }
 
 export function useSlots(userId: string) {
@@ -23,7 +24,8 @@ export function useSlots(userId: string) {
     loading: true,
     connected: false,
     error: null,
-    cameraStates: {}
+    cameraStates: {},
+    displayNames: {}
   });
 
   const socketRef = useRef<WebSocket | null>(null);
@@ -194,6 +196,19 @@ export function useSlots(userId: string) {
               break;
             }
             
+            case 'display_name_update': {
+              // Обновление отображаемого имени пользователя
+              if (data.userId && data.displayName) {
+                console.log(`Получено обновление отображаемого имени: ${data.userId} -> ${data.displayName}`);
+                setState(prev => {
+                  // Клонируем текущие отображаемые имена и добавляем/обновляем новое
+                  const displayNames = { ...prev.displayNames, [data.userId]: data.displayName };
+                  return { ...prev, displayNames };
+                });
+              }
+              break;
+            }
+            
             default:
               console.log('Получено неизвестное сообщение:', data);
           }
@@ -233,6 +248,51 @@ export function useSlots(userId: string) {
       type: 'shuffle_users'
     });
   }, [sendMessage]);
+  
+  // Функция для переименования пользователя (только для ведущего)
+  const renameUser = useCallback((targetUserId: string, newName: string) => {
+    console.log(`Запрос на переименование пользователя ${targetUserId} -> ${newName}`);
+    return sendMessage({
+      type: 'rename_user',
+      targetUserId,
+      newName
+    });
+  }, [sendMessage]);
+
+  // Функция получения отображаемого имени для пользователя
+  const getDisplayName = useCallback((userId: string): string => {
+    // Если для этого пользователя есть отображаемое имя, возвращаем его
+    if (state.displayNames[userId]) {
+      return state.displayNames[userId];
+    }
+    
+    // Если нет отображаемого имени, извлекаем имя из userId
+    // Формат userId: "Player-name-1234" или "Host-name-1234"
+    if (userId) {
+      // Проверяем наличие префикса
+      const isHost = userId.startsWith('Host-');
+      const isPlayer = userId.startsWith('Player-');
+      
+      if (isHost || isPlayer) {
+        // Удаляем префикс "Host-" или "Player-"
+        const withoutPrefix = isHost
+          ? userId.substring(5)
+          : userId.substring(7);
+        
+        // Находим индекс последнего дефиса, который разделяет имя и ID
+        const lastDashIndex = withoutPrefix.lastIndexOf('-');
+        
+        if (lastDashIndex !== -1) {
+          // Возвращаем только имя без ID
+          return withoutPrefix.substring(0, lastDashIndex);
+        }
+        return withoutPrefix;
+      }
+    }
+    
+    // В крайнем случае возвращаем оригинальный userId
+    return userId;
+  }, [state.displayNames]);
 
   return {
     ...state,
@@ -241,6 +301,8 @@ export function useSlots(userId: string) {
     setCameraState,
     moveUserToSlot,
     shuffleAllUsers,
+    renameUser,
+    getDisplayName,
     wsRef: socketRef // Экспортируем ссылку на WebSocket для использования в других хуках
   };
 }
