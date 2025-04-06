@@ -10,7 +10,7 @@ import { useSlots } from '../../hooks/use-slots';
 import { usePlayerStates } from '../../hooks/use-player-states';
 
 /**
- * Компонент сетки видео 4x3 для отображения до 12 участников
+ * Компонент сітки відео 4x3 для відображення до 12 учасників
  */
 export function CustomVideoGrid() {
   const participants = useParticipants();
@@ -192,7 +192,7 @@ export function CustomVideoGrid() {
 }
 
 /**
- * Компонент для отображения одного участника
+ * Компонент для відображення одного учасника
  */
 interface ParticipantSlotProps {
   participant: Participant;
@@ -301,35 +301,35 @@ function ParticipantSlot({
         </div>
       )}
       
-      {/* Индикатор "убит" с черепом - разное отображение для своего и чужого видео */}
+      {/* Індикатор "вбито" з черепом - різне відображення для свого та чужого відео */}
       {isKilled && participant.isLocal ? (
-        // Для локального участника: небольшая метка в углу на красном фоне с белым текстом
+        // Для локального учасника: невелика мітка в куті на червоному фоні з білим текстом
         <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 font-bold text-lg rounded-md">
-          УБИТ
+          ВБИТО
         </div>
       ) : isKilled && (
-        // Для остальных участников: большая диагональная надпись на черном фоне
+        // Для інших учасників: велика діагональна надпис на чорному тлі
         <div className="absolute inset-0 bg-black flex items-center justify-center">
           <div className="transform -rotate-45 border-2 border-red-500 text-red-500 text-5xl font-extrabold px-4 py-2">
-            УБИТ
+            ВБИТО
           </div>
         </div>
       )}
       
-      {/* Кнопки управления состоянием игрока (только для ведущего) */}
+      {/* Кнопки керування станом гравця (тільки для ведучого) */}
       {isHost && slotNumber !== 12 && playerStatesManager && (
         <div className="absolute top-2 left-2 flex space-x-1">
           <button
             className="bg-red-600/80 hover:bg-red-700/90 text-white p-1 rounded-md shadow-md"
             onClick={() => playerStatesManager.killPlayer(participant.identity)}
-            title="Отметить как убитого"
+            title="Відмітити як вбитого"
           >
             <span>💀</span>
           </button>
           <button
             className="bg-green-600/80 hover:bg-green-700/90 text-white p-1 rounded-md shadow-md"
             onClick={() => playerStatesManager.revivePlayer(participant.identity)}
-            title="Отметить как живого"
+            title="Відмітити як живого"
           >
             <span>❤️</span>
           </button>
@@ -361,56 +361,56 @@ function ParticipantSlot({
                 }
               }
               
-              // Запрашиваем новое имя
-              const newName = prompt(`Введите новое имя для ${currentName}:`, currentName);
+              // Запитуємо нове ім'я
+              const newName = prompt(`Введіть нове ім'я для ${currentName}:`, currentName);
               
-              // Если имя не пустое и изменилось
+              // Якщо ім'я не пусте і змінилося
               if (newName && newName.trim() !== '' && newName.trim() !== currentName) {
-                console.log(`Переименование пользователя: ${participant.identity} -> ${newName.trim()}`);
+                console.log(`Перейменування користувача: ${participant.identity} -> ${newName.trim()}`);
                 
-                // Используем функцию renameUser из slotsManager вместо прямой отправки сообщения
+                // Використовуємо функцію renameUser із slotsManager замість прямого відправлення повідомлення
                 slotsManager.renameUser(participant.identity, newName.trim());
               }
             }}
-            title="Изменить имя пользователя"
+            title="Змінити ім'я користувача"
           >
             <span>✏️</span>
           </button>
         </div>
       )}
       
-      {/* Номер слота в левом нижнем углу */}
+      {/* Номер слота у лівому нижньому куті */}
       <div 
         className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
           ${participant.isLocal ? 'bg-purple-700/90' : 'bg-slate-900/80'}`}
       >
-        {slotNumber === 12 ? "Ведущий" : slotNumber}
+        {slotNumber === 12 ? "Ведучий" : slotNumber}
       </div>
       
-      {/* Имя пользователя рядом с номером слота (с поддержкой отображаемых имен) */}
+      {/* Ім'я користувача поруч з номером слота (з підтримкою відображуваних імен) */}
       <div className={`absolute bottom-2 ${slotNumber === 12 ? 'right-2' : 'left-8'} bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm`}>
-        {/* Проверяем наличие отображаемого имени в slotsManager или извлекаем имя вручную */}
+        {/* Перевіряємо наявність відображуваного імені в slotsManager або видобуваємо ім'я вручну */}
         {(() => {
-          // Сначала проверяем, есть ли кастомное отображаемое имя
+          // Спочатку перевіряємо, чи є кастомне відображуване ім'я
           if (slotsManager && slotsManager.displayNames && slotsManager.displayNames[participant.identity]) {
             return slotsManager.displayNames[participant.identity];
           }
           
-          // Если нет, извлекаем имя вручную из identity
+          // Якщо ні, видобуваємо ім'я вручну з identity
           let cleanName = participant.identity;
           
-          // Убираем префикс Player- или Host-
+          // Видаляємо префікс Player- або Host-
           if (cleanName.startsWith('Player-')) {
             cleanName = cleanName.substring(7);
           } else if (cleanName.startsWith('Host-')) {
             cleanName = cleanName.substring(5);
           }
           
-          // Убираем суффикс с цифрами (ID) в конце имени
+          // Видаляємо суфікс з цифрами (ID) в кінці імені
           const lastDashIndex = cleanName.lastIndexOf('-');
           if (lastDashIndex > 0) {
             const afterDash = cleanName.substring(lastDashIndex + 1);
-            // Проверяем, что после тире идут только цифры
+            // Перевіряємо, що після тире йдуть тільки цифри
             if (/^\d+$/.test(afterDash)) {
               cleanName = cleanName.substring(0, lastDashIndex);
             }
@@ -424,7 +424,7 @@ function ParticipantSlot({
 }
 
 /**
- * Компонент для отображения пустого слота
+ * Компонент для відображення порожнього слота
  */
 interface EmptySlotProps {
   index: number;
@@ -435,7 +435,7 @@ interface EmptySlotProps {
 }
 
 function EmptySlot({ index, onClick, onDragOver, onDrop, isDragTarget = false }: EmptySlotProps) {
-  // Визуальное отображение возможности дропа
+  // Візуальне відображення можливості дропу
   const dropIndicatorClass = isDragTarget 
     ? 'ring-2 ring-blue-500/30 hover:ring-blue-500/70 hover:bg-blue-500/10' 
     : '';
@@ -468,7 +468,7 @@ function EmptySlot({ index, onClick, onDragOver, onDrop, isDragTarget = false }:
         </div>
       </div>
       
-      {/* Если слот может быть целью для дропа, показываем индикатор */}
+      {/* Якщо слот може бути ціллю для дропу, показуємо індикатор */}
       {isDragTarget && (
         <div className="absolute top-2 right-2 bg-blue-500/50 text-white rounded-full p-1">
           <svg 
@@ -488,9 +488,9 @@ function EmptySlot({ index, onClick, onDragOver, onDrop, isDragTarget = false }:
         </div>
       )}
       
-      {/* Только номер слота для пустого слота */}
+      {/* Тільки номер слота для порожнього слота */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
-        {index + 1 === 12 ? "Ведущий" : index + 1}
+        {index + 1 === 12 ? "Ведучий" : index + 1}
       </div>
     </div>
   );

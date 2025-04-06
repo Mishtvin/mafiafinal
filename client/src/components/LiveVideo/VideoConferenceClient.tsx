@@ -18,39 +18,39 @@ import { useSlots } from '../../hooks/use-slots';
 import { usePlayerStates } from '../../hooks/use-player-states';
 
 /**
- * Контроллер для выдвижной панели управления, размещенный ВНЕ LiveKitRoom
- * для предотвращения проблем с переподключением
+ * Контролер для висувної панелі керування, розміщений ПОЗА LiveKitRoom
+ * для запобігання проблем з перепідключенням
  */ 
 const ControlDrawer = ({ room }: { room: Room }) => {
   const [isOpen, setIsOpen] = useState(false);
   
-  // Принудительно устанавливаем начальное состояние камеры как включенное
-  // Это состояние управляет отображением иконки
+  // Примусово встановлюємо початковий стан камери як увімкнений
+  // Цей стан керує відображенням іконки
   const [cameraEnabled, setCameraEnabled] = useState(true);
   
-  // Состояние для выбора камеры
+  // Стан для вибору камери
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
   
-  // Получение доступа к useState и функции shuffleAllUsers из хука useSlots
-  // Определяем идентификатор текущего пользователя
+  // Отримання доступу до useState та функції shuffleAllUsers з хука useSlots
+  // Визначаємо ідентифікатор поточного користувача
   const userId = room?.localParticipant?.identity || '';
   const { shuffleAllUsers, userSlot, slots, wsRef } = useSlots(userId);
   
-  // Получение доступа к функциям управления состояниями игроков
+  // Отримання доступу до функцій керування станами гравців
   const { resetAllPlayerStates } = usePlayerStates(wsRef, userId);
   
-  // Функция для получения списка доступных камер
+  // Функція для отримання списку доступних камер
   async function getCameras() {
     try {
-      // Запрашиваем разрешение на использование камеры, если его еще нет
+      // Запитуємо дозвіл на використання камери, якщо його ще немає
       await navigator.mediaDevices.getUserMedia({ video: true })
         .then(stream => {
-          // Закрываем потоки после получения разрешения
+          // Закриваємо потоки після отримання дозволу
           stream.getTracks().forEach(track => track.stop());
         })
         .catch(err => {
-          console.error('Пользователь отклонил доступ к камере:', err);
+          console.error('Користувач відхилив доступ до камери:', err);
         });
       
       // Теперь получаем список устройств
@@ -125,15 +125,15 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         }
       }
       
-      // Если до сих пор не смогли определить активную камеру, используем первую доступную
+      // Якщо досі не змогли визначити активну камеру, використовуємо першу доступну
       if (videoDevices.length > 0 && !selectedCamera) {
         setSelectedCamera(videoDevices[0].deviceId);
-        console.log('Выбрана камера по умолчанию:', videoDevices[0].deviceId);
+        console.log('Вибрано камеру за замовчуванням:', videoDevices[0].deviceId);
       }
       
       return videoDevices;
     } catch (err) {
-      console.error('Ошибка при получении списка камер:', err);
+      console.error('Помилка при отриманні списку камер:', err);
       return [];
     }
   }
@@ -342,7 +342,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
 
   return (
     <>
-      {/* Выдвижная панель управления */}
+      {/* Висувна панель керування */}
       <div 
         className={`control-drawer ${isOpen ? 'open' : ''}`}
       >
@@ -350,7 +350,7 @@ const ControlDrawer = ({ room }: { room: Room }) => {
           <div className="left-controls">
             <button 
               className="control-button" 
-              aria-label="Toggle Camera"
+              aria-label="Перемкнути камеру"
               onClick={toggleCamera}
             >
               {cameraEnabled ? (
@@ -365,9 +365,10 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                   <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2"></line>
                 </svg>
               )}
+              <span className="sr-only md:not-sr-only md:ml-2 text-xs">Камера</span>
             </button>
             
-            {/* Селектор камеры */}
+            {/* Селектор камери */}
             {cameras.length > 1 && (
               <div className="camera-selector">
                 <select
@@ -387,17 +388,17 @@ const ControlDrawer = ({ room }: { room: Room }) => {
           </div>
           
           <div className="right-controls">
-            {/* Кнопка сброса всех состояний игроков (только для ведущего) */}
+            {/* Кнопка скидання всіх станів гравців (тільки для ведучого) */}
             {userSlot === 12 && resetAllPlayerStates && (
               <button 
                 className="control-button" 
-                aria-label="Reset Player States"
+                aria-label="Скинути стани гравців"
                 onClick={() => {
                   if (resetAllPlayerStates) {
-                    console.log('Выполняем сброс всех состояний игроков');
+                    console.log('Виконуємо скидання всіх станів гравців');
                     resetAllPlayerStates();
                   } else {
-                    console.error('Функция сброса состояний игроков недоступна');
+                    console.error('Функція скидання станів гравців недоступна');
                   }
                 }}
               >
@@ -405,20 +406,21 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                   <path d="M3 3v5h5"></path>
                 </svg>
+                <span className="sr-only md:not-sr-only md:ml-2 text-xs">Скинути</span>
               </button>
             )}
             
-            {/* Кнопка перемешивания пользователей (только для ведущего) */}
+            {/* Кнопка перемішування користувачів (тільки для ведучого) */}
             {userSlot === 12 && shuffleAllUsers && (
               <button 
                 className="control-button dice-button" 
-                aria-label="Shuffle Users"
+                aria-label="Перемішати гравців"
                 onClick={() => {
                   if (shuffleAllUsers) {
-                    console.log('Запрос на перемешивание пользователей отправлен');
+                    console.log('Запит на перемішування користувачів відправлено');
                     shuffleAllUsers();
                   } else {
-                    console.error('Функция перемешивания недоступна');
+                    console.error('Функція перемішування недоступна');
                   }
                 }}
               >
@@ -429,30 +431,30 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                   <circle cx="16" cy="8" r="1.5"></circle>
                   <circle cx="8" cy="16" r="1.5"></circle>
                 </svg>
-                <span>Перемешать игроков</span>
+                <span className="sr-only md:not-sr-only md:ml-2">Перемішати</span>
               </button>
             )}
             
-            {/* Кнопка выхода */}
+            {/* Кнопка виходу */}
             <button 
               className="control-button exit-button" 
-              aria-label="Exit"
+              aria-label="Вийти"
               onClick={() => {
-                console.log('Выход из комнаты...');
+                console.log('Вихід з кімнати...');
                 
-                // Корректно закрываем соединение с комнатой
+                // Коректно закриваємо з'єднання з кімнатою
                 try {
                   if (room) {
                     room.disconnect();
-                    console.log('Соединение с LiveKit разорвано');
+                    console.log('З\'єднання з LiveKit розірвано');
                   }
                   
-                  // Редирект на главную (на случай, если слушатель событий не сработает)
+                  // Редирект на головну (на випадок, якщо обробник подій не спрацює)
                   setTimeout(() => {
                     window.location.href = '/';
                   }, 300);
                 } catch (err) {
-                  console.error('Ошибка при отключении:', err);
+                  console.error('Помилка при відключенні:', err);
                   window.location.href = '/';
                 }
               }}
@@ -462,20 +464,21 @@ const ControlDrawer = ({ room }: { room: Room }) => {
                 <polyline points="16 17 21 12 16 7"></polyline>
                 <line x1="21" x2="9" y1="12" y2="12"></line>
               </svg>
+              <span className="sr-only md:not-sr-only md:ml-2 text-xs">Вийти</span>
             </button>
           </div>
         </div>
       </div>
       
-      {/* Кнопка-триггер для открытия/закрытия панели */}
+      {/* Кнопка-тригер для відкриття/закриття панелі */}
       <div className="drawer-trigger-container">
         <button 
           className="drawer-trigger"
           onClick={(e) => {
-            e.stopPropagation(); // Предотвращаем всплытие
+            e.stopPropagation(); // Запобігаємо спливанню
             setIsOpen(!isOpen);
           }}
-          aria-label="Toggle Controls"
+          aria-label="Перемкнути панель керування"
         >
           {isOpen ? (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -493,15 +496,15 @@ const ControlDrawer = ({ room }: { room: Room }) => {
 };
 
 /**
- * Компонент для видеоконференции LiveKit
- * Основан на оригинальном коде MafiaLive
+ * Компонент для відеоконференції LiveKit
+ * Базується на оригінальному коді MafiaLive
  */
 export function VideoConferenceClient(props: {
   liveKitUrl: string;
   token: string;
   codec: VideoCodec | undefined;
 }) {
-  // Настраиваем параметры комнаты
+  // Налаштовуємо параметри кімнати
   const roomOptions = useMemo((): RoomOptions => {
     return {
       publishDefaults: {
@@ -514,10 +517,10 @@ export function VideoConferenceClient(props: {
     };
   }, [props.codec]);
 
-  // Создаем комнату с заданными параметрами
+  // Створюємо кімнату з заданими параметрами
   const room = useMemo(() => new Room(roomOptions), [roomOptions]);
   
-  // Параметры подключения к комнате
+  // Параметри підключення до кімнати
   const connectOptions = useMemo((): RoomConnectOptions => {
     return {
       autoSubscribe: true,
@@ -535,14 +538,14 @@ export function VideoConferenceClient(props: {
         video={false}
       >
         <div className="flex flex-col h-screen bg-slate-900 overflow-hidden">        
-          {/* Main content with custom grid */}
+          {/* Основний контент з сіткою відео */}
           <main className="flex-1 relative overflow-y-auto mobile-scroller">
             <CustomVideoGrid />
           </main>
         </div>
       </LiveKitRoom>
       
-      {/* Рендерим элементы управления отдельно */}
+      {/* Рендеримо елементи керування окремо */}
       <ControlDrawer room={room} />
     </>
   );
