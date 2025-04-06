@@ -203,8 +203,19 @@ export function useSlots(userId: string) {
                 setState(prev => {
                   // Клонируем текущие отображаемые имена и добавляем/обновляем новое
                   const displayNames = { ...prev.displayNames, [data.userId]: data.displayName };
+                  console.log('Обновлен объект displayNames:', displayNames);
                   return { ...prev, displayNames };
                 });
+                
+                // Выводим текущие имена через таймаут для проверки
+                setTimeout(() => {
+                  // Получаем текущее состояние из хука
+                  setState(currentState => {
+                    console.log('Текущие отображаемые имена после обновления:', 
+                      JSON.stringify(currentState.displayNames || {}, null, 2));
+                    return currentState; // Возвращаем без изменений
+                  });
+                }, 500);
               }
               break;
             }

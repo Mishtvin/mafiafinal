@@ -173,6 +173,7 @@ export function CustomVideoGrid() {
               isDraggable={isHost && slotNumber !== 12} // Запрещаем перетаскивать из слота 12
               isKilled={playerStatesManager.isPlayerKilled(participant.identity)}
               playerStatesManager={playerStatesManager}
+              slotsManager={slotsManager} // Передаем slotsManager
             />
           ) : (
             <EmptySlot 
@@ -200,6 +201,7 @@ interface ParticipantSlotProps {
   isDraggable?: boolean;
   isKilled?: boolean;
   playerStatesManager?: any;
+  slotsManager?: any; // Добавляем slotsManager
   onDragStart?: (e: DragEvent<HTMLDivElement>) => void;
   onDragOver?: (e: DragEvent<HTMLDivElement>) => void;
   onDrop?: (e: DragEvent<HTMLDivElement>) => void;
@@ -213,6 +215,7 @@ function ParticipantSlot({
   isDraggable = false,
   isKilled = false,
   playerStatesManager,
+  slotsManager, // Добавляем slotsManager
   onDragStart,
   onDragOver,
   onDrop,
@@ -336,20 +339,25 @@ function ParticipantSlot({
               // Получаем текущее имя без префикса и суффикса
               let currentName = participant.identity;
               
-              // Убираем префикс Player- или Host-
-              if (currentName.startsWith('Player-')) {
-                currentName = currentName.substring(7);
-              } else if (currentName.startsWith('Host-')) {
-                currentName = currentName.substring(5);
-              }
-              
-              // Убираем суффикс с цифрами (ID) в конце имени
-              const lastDashIndex = currentName.lastIndexOf('-');
-              if (lastDashIndex > 0) {
-                const afterDash = currentName.substring(lastDashIndex + 1);
-                // Проверяем, что после тире идут только цифры
-                if (/^\d+$/.test(afterDash)) {
-                  currentName = currentName.substring(0, lastDashIndex);
+              // Проверяем, не задано ли уже отображаемое имя через slotsManager
+              if (slotsManager.displayNames && slotsManager.displayNames[participant.identity]) {
+                currentName = slotsManager.displayNames[participant.identity];
+              } else {
+                // Убираем префикс Player- или Host-
+                if (currentName.startsWith('Player-')) {
+                  currentName = currentName.substring(7);
+                } else if (currentName.startsWith('Host-')) {
+                  currentName = currentName.substring(5);
+                }
+                
+                // Убираем суффикс с цифрами (ID) в конце имени
+                const lastDashIndex = currentName.lastIndexOf('-');
+                if (lastDashIndex > 0) {
+                  const afterDash = currentName.substring(lastDashIndex + 1);
+                  // Проверяем, что после тире идут только цифры
+                  if (/^\d+$/.test(afterDash)) {
+                    currentName = currentName.substring(0, lastDashIndex);
+                  }
                 }
               }
               
@@ -357,16 +365,11 @@ function ParticipantSlot({
               const newName = prompt(`Введите новое имя для ${currentName}:`, currentName);
               
               // Если имя не пустое и изменилось
-              if (newName && newName !== currentName && newName.trim() !== '') {
-                // Отправляем запрос на переименование через WebSocket
-                // Используем доступ к WebSocket из slotsManager
-                if (slotsManager.wsRef?.current?.readyState === WebSocket.OPEN) {
-                  slotsManager.wsRef.current.send(JSON.stringify({
-                    type: 'rename_user',
-                    targetUserId: participant.identity,
-                    newName: newName.trim()
-                  }));
-                }
+              if (newName && newName.trim() !== '' && newName.trim() !== currentName) {
+                console.log(`Переименование пользователя: ${participant.identity} -> ${newName.trim()}`);
+                
+                // Используем функцию renameUser из slotsManager вместо прямой отправки сообщения
+                slotsManager.renameUser(participant.identity, newName.trim());
               }
             }}
             title="Изменить имя пользователя"
@@ -386,8 +389,14 @@ function ParticipantSlot({
       
       {/* Имя пользователя рядом с номером слота (с поддержкой отображаемых имен) */}
       <div className={`absolute bottom-2 ${slotNumber === 12 ? 'right-2' : 'left-8'} bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm`}>
-        {/* Извлекаем имя вручную, чтобы избежать проблем с множественными хуками */}
+        {/* Проверяем наличие отображаемого имени в slotsManager или извлекаем имя вручную */}
         {(() => {
+          // Сначала проверяем, есть ли кастомное отображаемое имя
+          if (slotsManager && slotsManager.displayNames && slotsManager.displayNames[participant.identity]) {
+            return slotsManager.displayNames[participant.identity];
+          }
+          
+          // Если нет, извлекаем имя вручную из identity
           let cleanName = participant.identity;
           
           // Убираем префикс Player- или Host-
