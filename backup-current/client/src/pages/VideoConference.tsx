@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { VideoCodec } from 'livekit-client';
 import { fetchToken } from '../lib/livekit';
-import { getOptimalCodec } from '../lib/codecDetector';
 import { decodePassphrase, encodePassphrase, generateRoomId } from '../lib/utils';
 import { VideoConferenceClient } from '../components/LiveVideo/VideoConferenceClient';
 
