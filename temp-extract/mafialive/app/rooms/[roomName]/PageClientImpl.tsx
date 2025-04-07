@@ -115,7 +115,7 @@ function VideoConferenceComponent(props: {
       publishDefaults: {
         dtx: false,
         videoSimulcastLayers: props.options.hq
-          ? [VideoPresets.h1080, VideoPresets.h720]
+          ? [VideoPresets.h720, VideoPresets.h720]
           : [VideoPresets.h540, VideoPresets.h216],
         red: !e2eeEnabled,
         videoCodec,

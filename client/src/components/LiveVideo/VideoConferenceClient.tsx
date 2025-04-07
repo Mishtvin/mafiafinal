@@ -523,7 +523,7 @@ export function VideoConferenceClient(props: {
           maxBitrate: 1000 * 1000, // Оптимальный 1 Мбит/с
           // Увеличиваем частоту кадров до 45 FPS для более плавного воспроизведения
           // при условии, что камера это поддерживает
-          maxFramerate: 45,
+          maxFramerate: 60,
           // Используем высокий приоритет для видеопотока
           priority: 'high' as RTCPriorityType,
         },
@@ -542,7 +542,7 @@ export function VideoConferenceClient(props: {
       dynacast: false,
       // Добавляем настройки захвата видео с повышенным разрешением
       videoCaptureDefaults: {
-        resolution: VideoPresets.h1080, // Используем разрешение 1080p (Full HD) для максимального качества
+        resolution: VideoPresets.h720, // Используем разрешение 1080p (Full HD) для максимального качества
       },
       // Предотвращаем автоматическое отключение при проблемах
       disconnectOnPageLeave: false,
