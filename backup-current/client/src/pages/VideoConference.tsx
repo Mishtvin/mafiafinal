@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { VideoCodec } from 'livekit-client';
 import { fetchToken } from '../lib/livekit';
+import { getOptimalCodec } from '../lib/codecDetector';
 import { decodePassphrase, encodePassphrase, generateRoomId } from '../lib/utils';
 import { VideoConferenceClient } from '../components/LiveVideo/VideoConferenceClient';
 
@@ -10,6 +11,7 @@ export default function VideoConferencePage() {
   const [username, setUsername] = useState('');
   const [hasJoined, setHasJoined] = useState(false);
   const [isE2EEEnabled, setIsE2EEEnabled] = useState(false);
+  const [selectedCodec, setSelectedCodec] = useState<VideoCodec>('vp8');
   
   // LiveKit server URL и кодек
   const serverUrl = 'wss://livekit.nyavkin.site';

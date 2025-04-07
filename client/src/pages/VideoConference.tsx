@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { VideoCodec } from 'livekit-client';
 import { fetchToken } from '../lib/livekit';
+import { getOptimalCodec } from '../lib/codecDetector';
 import { VideoConferenceClient } from '../components/LiveVideo/VideoConferenceClient';
 import { Loader2 } from 'lucide-react';
 
@@ -15,6 +16,7 @@ export default function VideoConferencePage() {
   const [role, setRole] = useState<Role>('player');
   const [roomStatus, setRoomStatus] = useState<RoomStatus>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+  const [selectedCodec, setSelectedCodec] = useState<VideoCodec>('vp8'); // Начальное значение - самый совместимый кодек
   
   // Загружаем статус комнаты при первой загрузке и периодически обновляем
   useEffect(() => {
@@ -49,9 +51,25 @@ export default function VideoConferencePage() {
     }
   };
   
-  // LiveKit server URL и кодек
-  const serverUrl = 'wss://livekit.nyavkin.site';
-  const codec: VideoCodec = 'av1';
+    // LiveKit server URL
+    const serverUrl = 'wss://livekit.nyavkin.site';
+  
+    // Определяем оптимальный кодек при загрузке компонента
+    useEffect(() => {
+      async function detectCodec() {
+        try {
+          console.log('Определение оптимального кодека...');
+          const optimalCodec = await getOptimalCodec();
+          console.log(`Выбран оптимальный кодек: ${optimalCodec}`);
+          setSelectedCodec(optimalCodec);
+        } catch (error) {
+          console.error('Ошибка при определении кодека:', error);
+          // В случае ошибки оставляем VP8 как наиболее совместимый
+        }
+      }
+      
+      detectCodec();
+    }, []);
 
   // Получаем токен когда пользователь присоединяется
   useEffect(() => {
@@ -202,8 +220,12 @@ export default function VideoConferencePage() {
           <VideoConferenceClient 
             liveKitUrl={serverUrl}
             token={token}
-            codec={codec}
+            codec={selectedCodec}
           />
+          {/* Добавляем информацию о текущем кодеке (опционально) */}
+          <div className="fixed bottom-1 left-1 text-xs bg-slate-800/80 text-gray-400 px-2 py-1 rounded-md z-10">
+            Кодек: {selectedCodec.toUpperCase()}
+          </div>
         </div>
       ) : (
         <div className="flex items-center justify-center min-h-screen px-4 py-8">
