@@ -51,7 +51,7 @@ export default function VideoConferencePage() {
   
   // LiveKit server URL и кодек
   const serverUrl = 'wss://livekit.nyavkin.site';
-  const codec: VideoCodec = 'h264';
+  const codec: VideoCodec = 'vp9';
 
   // Получаем токен когда пользователь присоединяется
   useEffect(() => {
