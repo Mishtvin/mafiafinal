@@ -74,8 +74,23 @@ export class SlotManager {
       return false;
     }
     
+    // Проверяем, является ли пользователь ведущим
+    const isHost = this.isUserHost(userId);
+    
+    // Для ведущего проверяем, что он может занять только слот 12
+    if (isHost && slotNumber !== HOST_SLOT) {
+      console.error(`Ведущий ${userId} может занимать только слот ${HOST_SLOT}`);
+      return false;
+    }
+    
+    // Для обычных игроков проверяем, что они не пытаются занять слот ведущего
+    if (!isHost && slotNumber === HOST_SLOT) {
+      console.error(`Слот ${HOST_SLOT} зарезервирован только для ведущего. Обычные игроки не могут занять этот слот.`);
+      return false;
+    }
+    
     // Особый случай: если это ведущий, просящий слот 12
-    if (slotNumber === HOST_SLOT && this.isUserHost(userId)) {
+    if (slotNumber === HOST_SLOT && isHost) {
       console.log(`Ведущий ${userId} запрашивает слот ${HOST_SLOT}`);
       
       // Если слот 12 занят другим пользователем
@@ -89,11 +104,6 @@ export class SlotManager {
       }
       
       // В этом случае всегда позволяем занять слот
-    } 
-    // Проверяем особые правила для слота ведущего для не-ведущих
-    else if (slotNumber === HOST_SLOT && !this.isUserHost(userId)) {
-      console.error(`Слот ${HOST_SLOT} зарезервирован только для ведущего`);
-      return false;
     }
     
     // Проверяем ограничение: ведущий не может уйти с 12 слота
@@ -182,6 +192,16 @@ export class SlotManager {
       // Ведущему назначаем специальный слот 12
       console.log(`Автоматическое назначение слота для ведущего: ${userId}`);
       
+      // Проверяем, есть ли уже ведущий в комнате (любой пользователь с префиксом Host-)
+      const currentHostExists = Array.from(this.userSlots.keys()).some(id => 
+        this.isUserHost(id) && id !== userId
+      );
+      
+      if (currentHostExists) {
+        console.error(`В комнате уже есть активный ведущий. Только один ведущий может быть в комнате одновременно.`);
+        return undefined;
+      }
+      
       // Если слот 12 занят, принудительно освобождаем его
       const currentHostUser = this.slotAssignments.get(HOST_SLOT);
       if (currentHostUser) {
@@ -201,6 +221,8 @@ export class SlotManager {
       console.log(`Занятые слоты перед назначением для ${userId}: [${Array.from(this.slotAssignments.keys())}]`);
       
       // Ищем свободные слоты для обычных игроков (1-11)
+      // Важно: обычные игроки НЕ МОГУТ занять слот ведущего (12),
+      // даже если он свободен
       for (let i = 1; i < HOST_SLOT; i++) {
         if (!this.slotAssignments.has(i)) {
           console.log(`Автоматически назначен слот ${i} для ${userId}`);
@@ -209,7 +231,7 @@ export class SlotManager {
         }
       }
       
-      // Свободных слотов нет
+      // Свободных слотов нет (кроме возможно слота ведущего, который нельзя занять)
       console.warn(`Не удалось найти свободный слот для ${userId}`);
       return undefined;
     }

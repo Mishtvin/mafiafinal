@@ -1,52 +1,62 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { PlayerStates } from "@shared/schema";
+import { WebSocketMessage } from "./use-resilient-websocket";
 
 /**
  * Хук для управления состояниями игроков (убит/жив)
- * @param wsRef Ссылка на WebSocket соединение
+ * @param sendMessage Функция отправки сообщений через WebSocket
  * @param userId ID текущего пользователя
  */
-export function usePlayerStates(wsRef: React.MutableRefObject<WebSocket | null>, userId: string) {
+export function usePlayerStates(
+  sendMessage: (message: WebSocketMessage) => boolean,
+  userId: string
+) {
   const [playerStates, setPlayerStates] = useState<PlayerStates>({ killedPlayers: {} });
   const [isHost, setIsHost] = useState<boolean>(userId.startsWith('Host-'));
+  const handlerRef = useRef<((data: any) => void) | null>(null);
 
+  // Обработчик сообщений о состоянии игроков
+  const handlePlayerStatesMessage = useCallback((data: any) => {
+    if (data.type === 'player_states_update') {
+      console.log('Получено обновление состояний игроков:', data.playerStates);
+      setPlayerStates(data.playerStates);
+    }
+  }, []);
+
+  // Устанавливаем флаг ведущего при изменении userId
   useEffect(() => {
-    // Устанавливаем флаг ведущего на основе ID пользователя
     setIsHost(userId.startsWith('Host-'));
+  }, [userId]);
 
-    // Проверяем, что websocket существует
-    if (!wsRef.current) {
-      console.log('WebSocket не инициализирован');
-      return;
+  // Регистрация обработчика сообщений о состоянии игроков в глобальном массиве
+  useEffect(() => {
+    // Сохраняем ссылку на обработчик для последующего удаления
+    handlerRef.current = handlePlayerStatesMessage;
+    
+    // Добавляем обработчик в глобальный массив
+    if (window.messageHandlers) {
+      window.messageHandlers.push(handlePlayerStatesMessage);
+      console.log('Зарегистрирован обработчик сообщений о состоянии игроков');
     }
-
-    // Обработчик сообщений для обновления состояний игроков
-    const messageHandler = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'player_states_update') {
-          console.log('Получено обновление состояний игроков:', data.playerStates);
-          setPlayerStates(data.playerStates);
-        }
-      } catch (error) {
-        console.error('Ошибка обработки сообщения WebSocket:', error);
-      }
-    };
-
-    // Добавляем обработчик сообщений
-    wsRef.current.addEventListener('message', messageHandler);
-
-    // При монтировании запрашиваем текущие состояния
-    if (wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'get_player_states' }));
-    }
-
+    
+    // Очистка при размонтировании
     return () => {
-      if (wsRef.current) {
-        wsRef.current.removeEventListener('message', messageHandler);
+      if (window.messageHandlers && handlerRef.current) {
+        const index = window.messageHandlers.indexOf(handlerRef.current);
+        if (index !== -1) {
+          window.messageHandlers.splice(index, 1);
+          console.log('Удален обработчик сообщений о состоянии игроков');
+        }
       }
     };
-  }, [wsRef, userId]);
+  }, [handlePlayerStatesMessage]);
+
+  // Запрашиваем текущие состояния при монтировании
+  useEffect(() => {
+    // При монтировании запрашиваем текущие состояния игроков
+    console.log('Запрашиваем текущие состояния игроков');
+    sendMessage({ type: 'get_player_states' });
+  }, [sendMessage]);
 
   /**
    * Отметить игрока как убитого
@@ -54,19 +64,12 @@ export function usePlayerStates(wsRef: React.MutableRefObject<WebSocket | null>,
    * @returns true если сообщение отправлено успешно
    */
   const killPlayer = useCallback((targetUserId: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket не подключен');
-      return false;
-    }
-
     console.log(`Отправка запроса на пометку игрока ${targetUserId} как убитого`);
-    wsRef.current.send(JSON.stringify({
+    return sendMessage({
       type: 'kill_player',
       targetUserId
-    }));
-
-    return true;
-  }, [wsRef]);
+    });
+  }, [sendMessage]);
 
   /**
    * Отметить игрока как живого
@@ -74,37 +77,23 @@ export function usePlayerStates(wsRef: React.MutableRefObject<WebSocket | null>,
    * @returns true если сообщение отправлено успешно
    */
   const revivePlayer = useCallback((targetUserId: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket не подключен');
-      return false;
-    }
-
     console.log(`Отправка запроса на пометку игрока ${targetUserId} как живого`);
-    wsRef.current.send(JSON.stringify({
+    return sendMessage({
       type: 'revive_player',
       targetUserId
-    }));
-
-    return true;
-  }, [wsRef]);
+    });
+  }, [sendMessage]);
 
   /**
    * Сбросить все отметки "убит"
    * @returns true если сообщение отправлено успешно
    */
   const resetAllPlayerStates = useCallback(() => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket не подключен');
-      return false;
-    }
-
     console.log('Отправка запроса на сброс всех состояний игроков');
-    wsRef.current.send(JSON.stringify({
+    return sendMessage({
       type: 'reset_player_states'
-    }));
-
-    return true;
-  }, [wsRef]);
+    });
+  }, [sendMessage]);
 
   /**
    * Проверить, убит ли игрок
@@ -121,6 +110,7 @@ export function usePlayerStates(wsRef: React.MutableRefObject<WebSocket | null>,
     killPlayer,
     revivePlayer,
     resetAllPlayerStates,
-    isPlayerKilled
+    isPlayerKilled,
+    handlePlayerStatesMessage, // Экспортируем обработчик для использования в других компонентах
   };
 }

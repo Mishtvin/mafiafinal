@@ -1,4 +1,51 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useResilientWebSocket, WebSocketMessage } from './use-resilient-websocket';
+import { debounce, throttle } from '../lib/performance-utils';
+
+/**
+ * Функция для глубокого сравнения двух объектов
+ * @param obj1 Первый объект
+ * @param obj2 Второй объект
+ * @returns true если объекты равны, false в противном случае
+ */
+function isEqual(obj1: any, obj2: any): boolean {
+  if (obj1 === obj2) return true;
+  
+  // Если один из объектов null или undefined, а другой нет
+  if (obj1 == null || obj2 == null) return false;
+  
+  // Если типы разные
+  if (typeof obj1 !== typeof obj2) return false;
+  
+  // Для примитивных типов
+  if (typeof obj1 !== 'object') return obj1 === obj2;
+  
+  // Для массивов
+  if (Array.isArray(obj1) && Array.isArray(obj2)) {
+    if (obj1.length !== obj2.length) return false;
+    
+    for (let i = 0; i < obj1.length; i++) {
+      if (!isEqual(obj1[i], obj2[i])) return false;
+    }
+    
+    return true;
+  }
+  
+  // Для объектов (не массивов)
+  if (Array.isArray(obj1) !== Array.isArray(obj2)) return false;
+  
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+  
+  if (keys1.length !== keys2.length) return false;
+  
+  for (const key of keys1) {
+    if (!obj2.hasOwnProperty(key)) return false;
+    if (!isEqual(obj1[key], obj2[key])) return false;
+  }
+  
+  return true;
+}
 
 export interface SlotInfo {
   userId: string;
@@ -15,8 +62,27 @@ export interface SlotsState {
   displayNames: Record<string, string>; // userId -> displayName
 }
 
+// Расширяем Window интерфейс для глобальных переменных
+declare global {
+  interface Window {
+    currentUserIdentity: string;
+    messageHandlers: Array<(data: any) => void>;
+  }
+}
+
+// Инициализируем глобальный массив для обработчиков сообщений, если он еще не существует
+if (!window.messageHandlers) {
+  window.messageHandlers = [];
+}
+
 export function useSlots(userId: string) {
-  console.log('useSlots hook initialized with userId:', userId);
+  // Используем useRef для отслеживания повторных вызовов
+  const hookInitializedRef = useRef(false);
+  
+  if (!hookInitializedRef.current) {
+    console.log('useSlots hook initialized with userId:', userId);
+    hookInitializedRef.current = true;
+  }
   
   const [state, setState] = useState<SlotsState>({
     slots: {},
@@ -28,17 +94,170 @@ export function useSlots(userId: string) {
     displayNames: {}
   });
 
-  const socketRef = useRef<WebSocket | null>(null);
   const userIdRef = useRef(userId);
-
-  // Функция для отправки сообщения через WebSocket
-  const sendMessage = useCallback((message: any) => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify(message));
-      return true;
-    }
-    return false;
+  
+  // Функция обновления слотов с использованием debounce для предотвращения множественных обновлений
+  // Кэш последних значений для избежания лишних обновлений состояния
+  const lastSlotsRef = useRef<Record<number, string>>({});
+  const lastUserSlotRef = useRef<number | null>(null);
+  
+  // Используем оптимизированный debouncedUpdateSlots с проверкой на реальные изменения
+  const debouncedUpdateSlots = useMemo(() => {
+    return debounce((slots: Record<number, string>, userSlot: number | null) => {
+      // Проверяем, изменились ли данные
+      const slotsChanged = !isEqual(slots, lastSlotsRef.current);
+      const userSlotChanged = userSlot !== lastUserSlotRef.current;
+      
+      // Обновляем только если есть изменения
+      if (slotsChanged || userSlotChanged) {
+        // Отключаем логирование для повышения производительности
+        // console.log('Debounced обновление состояния слотов:', 
+        //            'текущий userSlot =', userSlot, 
+        //            'всего слотов =', Object.keys(slots).length);
+        
+        // Сохраняем текущие значения в ref для будущих сравнений
+        lastSlotsRef.current = {...slots};
+        lastUserSlotRef.current = userSlot;
+        
+        setState(prev => ({
+          ...prev, 
+          slots,
+          userSlot
+        }));
+      }
+    }, 150); // Увеличиваем дебаунс до 150мс для лучшей группировки
   }, []);
+
+  // Функция обновления состояния камер с использованием throttle
+  const throttledUpdateCameraStates = useMemo(() => {
+    return throttle((cameraStates: Record<string, boolean>) => {
+      // Отключаем логирование для повышения производительности
+      // console.log('Throttled обновление состояния камер');
+      setState(prev => ({
+        ...prev,
+        cameraStates
+      }));
+    }, 150); // Троттлинг в 150мс для ограничения частоты обновлений
+  }, []);
+
+  // Обработчик сообщений с оптимизированными обновлениями состояния
+  const handleMessage = useCallback((data: any) => {
+    try {      
+      switch (data.type) {
+        case 'slots_update': {
+          // Обновление информации о слотах
+          const slots: Record<number, string> = {};
+          let userSlot: number | null = null;
+          
+          // Заполняем объект слотов из массива
+          data.slots.forEach((slot: SlotInfo) => {
+            slots[slot.slotNumber] = slot.userId;
+            
+            // Возможно два идентификатора для сравнения - текущий и глобальный
+            const currentId = userIdRef.current;
+            const globalId = window.currentUserIdentity;
+            
+            // Проверяем соответствие либо текущему, либо глобальному идентификатору
+            if (slot.userId === currentId || 
+                (globalId && slot.userId === globalId)) {
+              userSlot = slot.slotNumber;
+              // Отключаем логирование для повышения производительности
+              // console.log(`Найден слот текущего пользователя: ${userSlot}`);
+            }
+          });
+          
+          // Используем дебаунсированную функцию для обновления слотов
+          debouncedUpdateSlots(slots, userSlot);
+          break;
+        }
+        
+        case 'camera_states_update': {
+          // Обновление информации о состоянии камер
+          const cameraStates = data.cameraStates || {};
+          
+          // Используем троттлированную функцию для обновления состояния камер
+          throttledUpdateCameraStates(cameraStates);
+          break;
+        }
+        
+        case 'slot_busy': {
+          // Уведомление, что слот занят
+          console.log(`Слот ${data.slotNumber} уже занят другим пользователем`);
+          break;
+        }
+        
+        case 'display_name_update': {
+          // Обновление отображаемого имени пользователя
+          if (data.userId && data.displayName) {
+            console.log(`Получено обновление отображаемого имени: ${data.userId} -> ${data.displayName}`);
+            setState(prev => {
+              // Клонируем текущие отображаемые имена и добавляем/обновляем новое
+              const displayNames = { ...prev.displayNames, [data.userId]: data.displayName };
+              return { ...prev, displayNames };
+            });
+          }
+          break;
+        }
+        
+        default:
+          // Логируем только неслужебные сообщения, чтобы не захламлять консоль
+          if (!data.type.startsWith('_') && data.type !== 'ping' && data.type !== 'pong') {
+            console.log('Получено сообщение:', data);
+          }
+      }
+    } catch (error) {
+      console.error('Ошибка обработки сообщения:', error);
+    }
+  }, [debouncedUpdateSlots, throttledUpdateCameraStates]);
+
+  // Настраиваем адрес WebSocket сервера
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  
+  // Используем наш устойчивый WebSocket хук
+  const { state: wsState, sendMessage, reconnect } = useResilientWebSocket(
+    {
+      url: wsUrl,
+      initialReconnectDelay: 500,        // Начальная задержка переподключения 500мс
+      maxReconnectDelay: 10000,          // Максимальная задержка 10 секунд
+      reconnectBackoffMultiplier: 1.5,   // Множитель для экспоненциального отступа
+      heartbeatInterval: 13000,          // Проверка здоровья соединения каждые 13 секунд
+      heartbeatTimeout: 5000,            // Таймаут ожидания ответа на heartbeat 5 секунд
+      connectTimeout: 10000,             // Таймаут на установку соединения 10 секунд
+      debug: false                       // Логирование только важных сообщений
+    },
+    handleMessage,
+    [userId] // Перезапускаем соединение при изменении userId
+  );
+
+  // Синхронизируем состояние с состоянием WebSocket
+  useEffect(() => {
+    userIdRef.current = userId;
+    
+    setState(prev => ({
+      ...prev,
+      connected: wsState.connected,
+      loading: wsState.connecting,
+      error: wsState.error
+    }));
+    
+    // Регистрируем пользователя при подключении
+    if (wsState.connected) {
+      // Используем глобальный идентификатор из window, если доступен
+      let effectiveUserId = userIdRef.current;
+      if (window.currentUserIdentity && window.currentUserIdentity !== 'undefined') {
+        effectiveUserId = window.currentUserIdentity;
+        console.log('Использую глобальный идентификатор:', effectiveUserId);
+      }
+
+      // Регистрируем пользователя на сервере
+      console.log('Регистрируем пользователя:', effectiveUserId);
+      sendMessage({
+        type: 'register',
+        userId: effectiveUserId
+      });
+    }
+  }, [wsState.connected, wsState.connecting, wsState.error, userId, sendMessage]);
   
   // Функция для обновления состояния камеры
   const setCameraState = useCallback((enabled: boolean) => {
@@ -62,186 +281,6 @@ export function useSlots(userId: string) {
       type: 'release_slot'
     });
   }, [sendMessage]);
-
-  // Эффект для установки WebSocket соединения
-  useEffect(() => {
-    // Сохраняем актуальный userId в ref
-    userIdRef.current = userId;
-    console.log('ID пользователя обновлен в useSlots:', userId);
-
-    // Функция для установки соединения
-    const connectWebSocket = () => {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-
-      // Определяем адрес WebSocket сервера
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-
-      // Создаем WebSocket соединение
-      const socket = new WebSocket(wsUrl);
-      socketRef.current = socket;
-
-      // Обработчик открытия соединения
-      socket.onopen = () => {
-        console.log('WebSocket соединение установлено');
-        setState(prev => ({ ...prev, connected: true, loading: false }));
-
-        // Используем глобальный идентификатор из window, если доступен
-        let effectiveUserId = userIdRef.current;
-        if (window.currentUserIdentity && window.currentUserIdentity !== 'undefined') {
-          effectiveUserId = window.currentUserIdentity;
-          console.log('Использую глобальный идентификатор:', effectiveUserId);
-        }
-
-        // Регистрируем пользователя на сервере
-        console.log('Регистрируем пользователя:', effectiveUserId);
-        sendMessage({
-          type: 'register',
-          userId: effectiveUserId
-        });
-      };
-
-      // Обработчик ошибок
-      socket.onerror = (error) => {
-        console.error('WebSocket ошибка:', error);
-        setState(prev => ({ 
-          ...prev, 
-          error: 'Ошибка подключения к серверу', 
-          loading: false,
-          connected: false 
-        }));
-      };
-
-      // Обработчик закрытия соединения
-      socket.onclose = () => {
-        console.log('WebSocket соединение закрыто');
-        setState(prev => ({ ...prev, connected: false }));
-        
-        // Переподключение через 5 секунд при разрыве соединения
-        setTimeout(() => {
-          if (socketRef.current === socket) {
-            connectWebSocket();
-          }
-        }, 5000);
-      };
-
-      // Обработчик входящих сообщений
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('WebSocket получено сообщение:', data);
-          
-          switch (data.type) {
-            case 'slots_update': {
-              // Обновление информации о слотах
-              const slots: Record<number, string> = {};
-              let userSlot: number | null = null;
-              
-              // Заполняем объект слотов из массива
-              data.slots.forEach((slot: SlotInfo) => {
-                slots[slot.slotNumber] = slot.userId;
-                console.log(`Слот ${slot.slotNumber} занят пользователем ${slot.userId}`);
-                
-                // Возможно два идентификатора для сравнения - текущий и глобальный
-                const currentId = userIdRef.current;
-                const globalId = window.currentUserIdentity;
-                
-                console.log(`Сравниваем слот ${slot.slotNumber}: ${slot.userId} с ${currentId} и ${globalId}`);
-                
-                // Проверяем соответствие либо текущему, либо глобальному идентификатору
-                if (slot.userId === currentId || 
-                    (globalId && slot.userId === globalId)) {
-                  userSlot = slot.slotNumber;
-                  console.log(`Найден слот текущего пользователя: ${userSlot}`);
-                }
-              });
-              
-              console.log('Обновляем состояние слотов:', 
-                          'текущий userSlot =', userSlot, 
-                          'всего слотов =', Object.keys(slots).length);
-              
-              setState(prev => {
-                const newState = { 
-                  ...prev, 
-                  slots,
-                  userSlot
-                };
-                console.log('Новое состояние:', newState);
-                return newState;
-              });
-              break;
-            }
-            
-            case 'camera_states_update': {
-              // Обновление информации о состоянии камер
-              const cameraStates = data.cameraStates || {};
-              console.log('Получены обновления состояния камер:', cameraStates);
-              
-              setState(prev => ({
-                ...prev,
-                cameraStates
-              }));
-              break;
-            }
-            
-            case 'slot_busy': {
-              // Уведомление, что слот занят
-              console.log(`Слот ${data.slotNumber} уже занят другим пользователем`);
-              break;
-            }
-            
-            case 'ping': {
-              // Ответ на пинг от сервера
-              sendMessage({ type: 'pong' });
-              break;
-            }
-            
-            case 'display_name_update': {
-              // Обновление отображаемого имени пользователя
-              if (data.userId && data.displayName) {
-                console.log(`Получено обновление отображаемого имени: ${data.userId} -> ${data.displayName}`);
-                setState(prev => {
-                  // Клонируем текущие отображаемые имена и добавляем/обновляем новое
-                  const displayNames = { ...prev.displayNames, [data.userId]: data.displayName };
-                  console.log('Обновлен объект displayNames:', displayNames);
-                  return { ...prev, displayNames };
-                });
-                
-                // Выводим текущие имена через таймаут для проверки
-                setTimeout(() => {
-                  // Получаем текущее состояние из хука
-                  setState(currentState => {
-                    console.log('Текущие отображаемые имена после обновления:', 
-                      JSON.stringify(currentState.displayNames || {}, null, 2));
-                    return currentState; // Возвращаем без изменений
-                  });
-                }, 500);
-              }
-              break;
-            }
-            
-            default:
-              console.log('Получено неизвестное сообщение:', data);
-          }
-        } catch (error) {
-          console.error('Ошибка обработки сообщения:', error);
-        }
-      };
-    };
-
-    // Установка соединения
-    connectWebSocket();
-
-    // Очистка при размонтировании
-    return () => {
-      const socket = socketRef.current;
-      if (socket) {
-        socket.onclose = null; // Отключаем автоматическое переподключение
-        socket.close();
-        socketRef.current = null;
-      }
-    };
-  }, [userId, sendMessage]);
 
   // Функция для перемещения пользователя в другой слот (только для ведущего)
   const moveUserToSlot = useCallback((userIdToMove: string, targetSlot: number) => {
@@ -314,6 +353,7 @@ export function useSlots(userId: string) {
     shuffleAllUsers,
     renameUser,
     getDisplayName,
-    wsRef: socketRef // Экспортируем ссылку на WebSocket для использования в других хуках
+    reconnect, // Экспортируем функцию принудительного переподключения
+    sendMessage, // Экспортируем функцию отправки сообщений
   };
 }

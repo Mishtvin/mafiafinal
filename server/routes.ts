@@ -32,6 +32,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
   
+  // Эндпоинт для проверки наличия ведущего в комнате
+  app.get('/api/room-status', (req, res) => {
+    // Проверяем, есть ли уже ведущий в комнате
+    // Проверяем именно слот 12, а не просто префикс пользователей
+    const hostSlot = slotManager.getSlotAssignments().get(12);
+    const currentHostExists = !!hostSlot && slotManager.isUserHost(hostSlot);
+    
+    // Дополнительно проверяем, активно ли соединение пользователя
+    const hostIsConnected = currentHostExists && 
+      connectionManager.getUserCount() > 0 && 
+      connectionManager.isUserConnected(hostSlot || '');
+    
+    res.json({
+      hasHost: hostIsConnected, // Только если ведущий реально подключен
+      userCount: connectionManager.getUserCount(),
+      timestamp: new Date().toISOString()
+    });
+  });
+  
   // Эндпоинты для создания токена LiveKit (поддерживаем GET и POST)
   app.get('/api/token', async (req, res) => {
     try {
@@ -145,12 +164,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log('WebSocket server initialized on path /ws');
 
   // Подписываемся на события обновления от менеджеров
-  globalEvents.on('slot_update', () => {
-    broadcastSlotUpdate();
+  globalEvents.on('slots_updated', (slotsData) => {
+    console.log('Получено событие slots_updated, отправляем обновление всем клиентам');
+    
+    // Используем данные из события вместо повторного запроса
+    const updateMessage: WebSocketMessage = {
+      type: 'slots_update',
+      slots: slotsData
+    };
+    
+    connectionManager.broadcastToAll(updateMessage);
   });
 
-  globalEvents.on('camera_update', () => {
-    broadcastCameraStates();
+  globalEvents.on('cameras_updated', (cameraStates) => {
+    console.log('Получено событие cameras_updated, отправляем обновление всем клиентам');
+    
+    // Используем данные из события вместо повторного запроса
+    const updateMessage: WebSocketMessage = {
+      type: 'camera_states_update',
+      cameraStates: cameraStates
+    };
+    
+    connectionManager.broadcastToAll(updateMessage);
   });
 
   // Периодическая проверка статуса
@@ -164,9 +199,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Активность соединений
     console.log(`Активные соединения: ${connectionManager.getConnectionCount()}, активные слоты: ${slotManager.getOccupiedSlotsCount()}`);
     
-    // Отправка периодических обновлений для синхронизации
-    broadcastSlotUpdate();
-    broadcastCameraStates();
+    // Отправка периодических обновлений только при изменениях
+    // Используем тихие версии без обновления каждые 5 секунд
+    // broadcastSlotUpdate();
+    // broadcastCameraStates();
   }, 5000); // каждые 5 секунд
 
   // Обработчик подключений WebSocket
@@ -204,11 +240,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error('Ошибка: получен пустой userId при регистрации');
             }
             
-            // Отправляем текущее состояние слотов всем клиентам для синхронизации
-            broadcastSlotUpdate();
-            
-            // Отправляем состояние камер всем клиентам для синхронизации
-            broadcastCameraStates();
+            // Отправляем состояние только новому пользователю вместо всех клиентов
+            sendInitialState(userId);
             break;
             
           case 'select_slot':
@@ -220,7 +253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             if (success) {
               console.log(`Пользователь ${userId} выбрал слот ${selectedSlot}`);
-              broadcastSlotUpdate();
+              // broadcastSlotUpdate(); - не нужно, работает через событие slots_updated
             } else {
               // Слот занят или недоступен
               connectionManager.sendToUser(userId, {
@@ -236,7 +269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             if (slotManager.releaseUserSlot(userId)) {
               console.log(`Пользователь ${userId} освободил слот`);
-              broadcastSlotUpdate();
+              // broadcastSlotUpdate(); - не нужно, работает через событие slots_updated
             }
             break;
             
@@ -249,8 +282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             console.log(`Пользователь ${userId} ${isEnabled ? 'включил' : 'выключил'} камеру`);
             
-            // Отправляем обновление состояния камер всем клиентам
-            broadcastCameraStates();
+            // Обновление состояния камер будет отправлено через событие cameras_updated
             break;
             
           case 'move_user':
@@ -304,9 +336,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             break;
             
           case 'pong':
+          case '_pong':
             // Клиент отвечает на ping - отмечаем активность
             if (userId) {
               connectionManager.markUserActivity(userId);
+            }
+            break;
+            
+          case '_heartbeat':
+            // Клиент отправляет проверку соединения - отвечаем и отмечаем активность
+            if (userId) {
+              connectionManager.markUserActivity(userId);
+              ws.send(JSON.stringify({ type: '_heartbeat_response' }));
             }
             break;
         }
@@ -342,6 +383,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
     
     connectionManager.broadcastToAll(updateMessage);
+  }
+  
+  // Функция для отправки первоначального состояния слотов конкретному пользователю
+  function sendInitialState(userId: string) {
+    const currentSlots = slotManager.getAllSlotAssignments();
+    const currentCameraStates = cameraManager.getAllCameraStates();
+    
+    const slotsMessage: WebSocketMessage = {
+      type: 'slots_update',
+      slots: currentSlots
+    };
+    
+    const cameraMessage: WebSocketMessage = {
+      type: 'camera_states_update',
+      cameraStates: currentCameraStates
+    };
+    
+    // Отправляем только этому пользователю
+    console.log(`Отправлено первоначальное состояние клиенту ${userId}: ${currentSlots.length} слотов`);
+    connectionManager.sendToUser(userId, slotsMessage);
+    connectionManager.sendToUser(userId, cameraMessage);
   }
   
   // Функция для отправки обновления состояния камер всем клиентам

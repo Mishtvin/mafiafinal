@@ -30,23 +30,72 @@ export class ConnectionManager {
   // Время последней активности для каждого пользователя
   private lastActivityTime = new Map<string, number>();
   
-  // Интервал отправки пингов (5 секунд)
-  private readonly pingInterval = 5000;
+  // Интервал отправки пингов (3 секунды - уменьшен для более быстрого обнаружения проблем)
+  private readonly pingInterval = 3000;
   
-  // Таймаут неактивности (15 секунд)
-  private readonly inactivityTimeout = 15000;
+  // Таймаут неактивности (10 секунд - уменьшен для более быстрого отключения неактивных соединений)
+  private readonly inactivityTimeout = 10000;
+  
+  // Флаг для отслеживания повышенной частоты пульсации при проблемах с подключением
+  private enhancedPulseModeActive = false;
+  
+  // Счетчик проблем для активации режима повышенной пульсации
+  private connectionIssuesCount = 0;
+  
+  // Таймер для сброса режима повышенной пульсации
+  private enhancedPulseModeTimer: NodeJS.Timeout | null = null;
   
   constructor() {
     console.log('ConnectionManager: Инициализирован');
     
-    // Настраиваем периодическую отправку пингов
-    setInterval(() => {
+    // Настраиваем периодическую отправку пингов с адаптивным интервалом
+    const startPulseMonitoring = () => {
+      const interval = this.enhancedPulseModeActive ? 1500 : this.pingInterval;
       this.pingAllConnections();
-    }, this.pingInterval);
+      
+      // Используем рекурсивный setTimeout вместо setInterval для адаптивного изменения интервала
+      setTimeout(startPulseMonitoring, interval);
+    };
+    
+    // Запускаем мониторинг пульса
+    startPulseMonitoring();
     
     // Настраиваем периодические проверки целостности
     setInterval(() => {
-      console.log(`Активные пользователи: ${this.getUserCount()}, соединения: ${this.getConnectionCount()}, активные слоты: ${slotManager.getOccupiedSlotsCount()}`);
+      const userCount = this.getUserCount();
+      const connectionCount = this.getConnectionCount();
+      const slotCount = slotManager.getOccupiedSlotsCount();
+      
+      // Если количество соединений значительно больше количества пользователей, это может указывать на проблемы
+      if (connectionCount > userCount * 3) {
+        this.connectionIssuesCount++;
+        console.log(`Обнаружено подозрительное соотношение соединений (${connectionCount}) к пользователям (${userCount}). Счетчик проблем: ${this.connectionIssuesCount}`);
+        
+        // Если проблемы продолжаются, активируем режим повышенной пульсации
+        if (this.connectionIssuesCount >= 3 && !this.enhancedPulseModeActive) {
+          console.log(`Активирован режим повышенной пульсации для устранения проблем с соединениями`);
+          this.enhancedPulseModeActive = true;
+          
+          // Автоматически отключаем режим повышенной пульсации через 2 минуты
+          if (this.enhancedPulseModeTimer) {
+            clearTimeout(this.enhancedPulseModeTimer);
+          }
+          
+          this.enhancedPulseModeTimer = setTimeout(() => {
+            console.log(`Режим повышенной пульсации отключен автоматически`);
+            this.enhancedPulseModeActive = false;
+            this.connectionIssuesCount = 0;
+            this.enhancedPulseModeTimer = null;
+          }, 120000); // 2 минуты
+        }
+      } else {
+        // Если соотношение нормализовалось, уменьшаем счетчик проблем
+        if (this.connectionIssuesCount > 0) {
+          this.connectionIssuesCount--;
+        }
+      }
+      
+      console.log(`Активные пользователи: ${userCount}, соединения: ${connectionCount}, активные слоты: ${slotCount}`);
     }, 10000);
   }
   
@@ -298,6 +347,13 @@ export class ConnectionManager {
   handleMessage(userId: string, data: WebSocketMessage): void {
     // Отмечаем активность пользователя при любом сообщении
     this.markUserActivity(userId);
+    
+    // Обрабатываем служебные сообщения для проверки соединения
+    if (data.type === '_heartbeat') {
+      // Отправляем ответ на heartbeat без логирования
+      this.sendToUser(userId, { type: '_heartbeat_response' });
+      return;
+    }
     
     // Обработка различных типов сообщений
     switch (data.type) {
@@ -638,11 +694,97 @@ export class ConnectionManager {
     this.activityCheckers.set(userId, checker);
   }
   
+
   /**
    * Отправить ping всем подключенным клиентам
+   * Использует специальный тип '_ping', который клиенты обрабатывают
+   * без вызова обновления интерфейса
+   * 
+   * В режиме повышенной пульсации проверяет состояние каждого соединения
+   * и закрывает неактивные
    */
   private pingAllConnections(): void {
-    this.broadcastToAll({ type: 'ping' });
+    // В обычном режиме просто отправляем всем пинг
+    if (!this.enhancedPulseModeActive) {
+      this.broadcastToAll({ type: '_ping' });
+      return;
+    }
+    
+    // В режиме повышенной пульсации проверяем каждое соединение индивидуально
+    // и закрываем проблемные сразу
+    console.log('[Пульс] Активирована глубокая проверка соединений');
+    let closedConnections = 0;
+    
+    this.connections.forEach((connections, userId) => {
+      // Проверим соединения этого пользователя
+      const activeConnections: WebSocket[] = [];
+      
+      for (const ws of connections) {
+        // Проверяем состояние сокета
+        if (ws.readyState === WebSocket.OPEN) {
+          try {
+            // Отправляем ping с пометкой времени для отслеживания задержки
+            const timestamp = Date.now();
+            ws.send(JSON.stringify({ 
+              type: '_ping', 
+              timestamp,
+              enhancedMode: true 
+            }));
+            activeConnections.push(ws);
+          } catch (error) {
+            // Если не удалось отправить, закрываем соединение
+            console.log(`[Пульс] Ошибка отправки ping пользователю ${userId}, закрываем соединение`);
+            try {
+              ws.close();
+            } catch (closeError) {
+              // Игнорируем ошибки закрытия
+            }
+            closedConnections++;
+          }
+        } else if (ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
+          // Подсчитываем уже закрытые соединения
+          closedConnections++;
+        } else {
+          // CONNECTING - добавляем для сохранения
+          activeConnections.push(ws);
+        }
+      }
+      
+      // Обновляем список соединений, если были изменения
+      if (activeConnections.length !== connections.length) {
+        if (activeConnections.length > 0) {
+          this.connections.set(userId, activeConnections);
+        } else {
+          this.connections.delete(userId);
+          
+          // Если соединений нет, очищаем все ресурсы пользователя
+          // Удаляем таймер проверки активности
+          const checker = this.activityCheckers.get(userId);
+          if (checker) {
+            clearInterval(checker);
+            this.activityCheckers.delete(userId);
+          }
+          
+          // Удаляем информацию об активности
+          this.lastActivityTime.delete(userId);
+          
+          // Удаляем информацию о состоянии камеры
+          cameraManager.removeCameraState(userId);
+          
+          // Очищаем информацию о состоянии игрока (убит/жив)
+          playerStateManager.clearPlayerState(userId);
+          
+          // Освобождаем слот
+          slotManager.releaseUserSlot(userId);
+          
+          console.log(`[Пульс] Полностью отключен пользователь ${userId}`);
+        }
+      }
+    });
+    
+    if (closedConnections > 0) {
+      console.log(`[Пульс] Закрыто ${closedConnections} неактивных соединений`);
+    }
   }
   
   /**
@@ -661,6 +803,23 @@ export class ConnectionManager {
    */
   getUserCount(): number {
     return this.connections.size;
+  }
+  
+  /**
+   * Проверить, подключен ли пользователь (имеет ли активные соединения)
+   * @param userId Идентификатор пользователя
+   * @returns true, если пользователь имеет хотя бы одно активное соединение
+   */
+  isUserConnected(userId: string): boolean {
+    const connections = this.connections.get(userId);
+    
+    // Если нет соединений или массив пуст - пользователь не подключен
+    if (!connections || connections.length === 0) {
+      return false;
+    }
+    
+    // Проверяем, есть ли хотя бы одно активное (открытое) соединение
+    return connections.some(ws => ws.readyState === WebSocket.OPEN);
   }
 }
 

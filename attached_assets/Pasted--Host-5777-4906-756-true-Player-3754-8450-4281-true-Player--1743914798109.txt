@@ -1,0 +1,117 @@
+Получены обновления состояния камер: {Host-5777-4906-756: true, Player-3754-8450-4281: true, Player-2829-4091-8807: true}
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'ping'}
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'ping'}
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'slots_update', slots: Array(3)}
+index-Bb1ndhg6.js:117 Слот 12 занят пользователем Host-5777-4906-756
+index-Bb1ndhg6.js:117 Сравниваем слот 12: Host-5777-4906-756 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 1 занят пользователем Player-3754-8450-4281
+index-Bb1ndhg6.js:117 Сравниваем слот 1: Player-3754-8450-4281 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 2 занят пользователем Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Сравниваем слот 2: Player-2829-4091-8807 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден слот текущего пользователя: 2
+index-Bb1ndhg6.js:117 Обновляем состояние слотов: текущий userSlot = 2 всего слотов = 3
+index-Bb1ndhg6.js:117 Новое состояние: {slots: {…}, userSlot: 2, loading: false, connected: true, error: null, …}
+index-Bb1ndhg6.js:117 Local participant identity: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден участник: Player-2829-4091-8807, isLocal: true
+index-Bb1ndhg6.js:117 Найден участник: Host-5777-4906-756, isLocal: false
+index-Bb1ndhg6.js:117 Найден участник: Player-3754-8450-4281, isLocal: false
+index-Bb1ndhg6.js:117 Принудительно добавляем локального участника в слот 2: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Сработал эффект принудительного обновления 3
+index-Bb1ndhg6.js:117 Slots state: (3) [Array(2), Array(2), Array(2)]
+index-Bb1ndhg6.js:117 User slot: 2
+index-Bb1ndhg6.js:117 Local participant identity: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден участник: Player-2829-4091-8807, isLocal: true
+index-Bb1ndhg6.js:117 Найден участник: Host-5777-4906-756, isLocal: false
+index-Bb1ndhg6.js:117 Найден участник: Player-3754-8450-4281, isLocal: false
+index-Bb1ndhg6.js:117 Принудительно добавляем локального участника в слот 2: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'camera_states_update', cameraStates: {…}}
+index-Bb1ndhg6.js:117 Получены обновления состояния камер: {Host-5777-4906-756: true, Player-3754-8450-4281: true, Player-2829-4091-8807: true}
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'slots_update', slots: Array(3)}slots: Array(3)0: {userId: 'Host-5777-4906-756', slotNumber: 12}1: {userId: 'Player-3754-8450-4281', slotNumber: 1}2: {userId: 'Player-2829-4091-8807', slotNumber: 2}length: 3[[Prototype]]: Array(0)type: "slots_update"[[Prototype]]: Object
+index-Bb1ndhg6.js:117 Слот 12 занят пользователем Host-5777-4906-756
+index-Bb1ndhg6.js:117 Сравниваем слот 12: Host-5777-4906-756 с Player-2829-4091-8807 и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 1 занят пользователем Player-3754-8450-4281
+index-Bb1ndhg6.js:117 Сравниваем слот 1: Player-3754-8450-4281 с Player-2829-4091-8807 и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 2 занят пользователем Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Сравниваем слот 2: Player-2829-4091-8807 с Player-2829-4091-8807 и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден слот текущего пользователя: 2
+index-Bb1ndhg6.js:117 Обновляем состояние слотов: текущий userSlot = 2 всего слотов = 3
+index-Bb1ndhg6.js:117 Новое состояние: {slots: {…}, userSlot: 2, loading: false, connected: true, error: null, …}
+index-Bb1ndhg6.js:117 Local participant identity: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден участник: Player-2829-4091-8807, isLocal: true
+index-Bb1ndhg6.js:117 Найден участник: Host-5777-4906-756, isLocal: false
+index-Bb1ndhg6.js:117 Найден участник: Player-3754-8450-4281, isLocal: false
+index-Bb1ndhg6.js:117 Принудительно добавляем локального участника в слот 2: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'camera_states_update', cameraStates: {…}}
+index-Bb1ndhg6.js:117 Получены обновления состояния камер: {Host-5777-4906-756: true, Player-3754-8450-4281: true, Player-2829-4091-8807: true}
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'ping'}
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'ping'}
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'slots_update', slots: Array(3)}
+index-Bb1ndhg6.js:117 Слот 12 занят пользователем Host-5777-4906-756
+index-Bb1ndhg6.js:117 Сравниваем слот 12: Host-5777-4906-756 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 1 занят пользователем Player-3754-8450-4281
+index-Bb1ndhg6.js:117 Сравниваем слот 1: Player-3754-8450-4281 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 2 занят пользователем Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Сравниваем слот 2: Player-2829-4091-8807 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден слот текущего пользователя: 2
+index-Bb1ndhg6.js:117 Обновляем состояние слотов: текущий userSlot = 2 всего слотов = 3
+index-Bb1ndhg6.js:117 Новое состояние: {slots: {…}, userSlot: 2, loading: false, connected: true, error: null, …}
+index-Bb1ndhg6.js:117 Local participant identity: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден участник: Player-2829-4091-8807, isLocal: true
+index-Bb1ndhg6.js:117 Найден участник: Host-5777-4906-756, isLocal: false
+index-Bb1ndhg6.js:117 Найден участник: Player-3754-8450-4281, isLocal: false
+index-Bb1ndhg6.js:117 Принудительно добавляем локального участника в слот 2: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Сработал эффект принудительного обновления 3
+index-Bb1ndhg6.js:117 Slots state: (3) [Array(2), Array(2), Array(2)]
+index-Bb1ndhg6.js:117 User slot: 2
+index-Bb1ndhg6.js:117 Local participant identity: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден участник: Player-2829-4091-8807, isLocal: true
+index-Bb1ndhg6.js:117 Найден участник: Host-5777-4906-756, isLocal: false
+index-Bb1ndhg6.js:117 Найден участник: Player-3754-8450-4281, isLocal: false
+index-Bb1ndhg6.js:117 Принудительно добавляем локального участника в слот 2: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'slots_update', slots: Array(3)}
+index-Bb1ndhg6.js:117 Слот 12 занят пользователем Host-5777-4906-756
+index-Bb1ndhg6.js:117 Сравниваем слот 12: Host-5777-4906-756 с Player-2829-4091-8807 и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 1 занят пользователем Player-3754-8450-4281
+index-Bb1ndhg6.js:117 Сравниваем слот 1: Player-3754-8450-4281 с Player-2829-4091-8807 и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 2 занят пользователем Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Сравниваем слот 2: Player-2829-4091-8807 с Player-2829-4091-8807 и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден слот текущего пользователя: 2
+index-Bb1ndhg6.js:117 Обновляем состояние слотов: текущий userSlot = 2 всего слотов = 3
+index-Bb1ndhg6.js:117 Новое состояние: {slots: {…}, userSlot: 2, loading: false, connected: true, error: null, …}
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'camera_states_update', cameraStates: {…}}
+index-Bb1ndhg6.js:117 Получены обновления состояния камер: {Host-5777-4906-756: true, Player-3754-8450-4281: true, Player-2829-4091-8807: true}
+index-Bb1ndhg6.js:117 Local participant identity: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден участник: Player-2829-4091-8807, isLocal: true
+index-Bb1ndhg6.js:117 Найден участник: Host-5777-4906-756, isLocal: false
+index-Bb1ndhg6.js:117 Найден участник: Player-3754-8450-4281, isLocal: false
+index-Bb1ndhg6.js:117 Принудительно добавляем локального участника в слот 2: Player-2829-4091-8807
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'camera_states_update', cameraStates: {…}}
+index-Bb1ndhg6.js:117 Получены обновления состояния камер: {Host-5777-4906-756: true, Player-3754-8450-4281: true, Player-2829-4091-8807: true}
+index-Bb1ndhg6.js:117 useSlots hook initialized with userId: Player-2829-4091-8807
+index-Bb1ndhg6.js:115 setting publishing codecs {room: 'mafialive-room', roomID: 'RM_mUToKRzLVLt4', participant: 'Player-2829-4091-8807', pID: 'PA_iQ85N7TjBTxC', trackID: 'TR_VC9LR2Er4BWTem', …}
+index-Bb1ndhg6.js:115 setting publishing layers {room: 'mafialive-room', roomID: 'RM_mUToKRzLVLt4', participant: 'Player-2829-4091-8807', pID: 'PA_iQ85N7TjBTxC', trackID: 'TR_VC9LR2Er4BWTem', …}
+index-Bb1ndhg6.js:115 setPublishingLayersForSender {room: 'mafialive-room', roomID: 'RM_mUToKRzLVLt4', participant: 'Player-2829-4091-8807', pID: 'PA_iQ85N7TjBTxC', trackID: 'TR_VC9LR2Er4BWTem', …}
+index-Bb1ndhg6.js:115 setting layer 1 to disabled {room: 'mafialive-room', roomID: 'RM_mUToKRzLVLt4', participant: 'Player-2829-4091-8807', pID: 'PA_iQ85N7TjBTxC', trackID: 'TR_VC9LR2Er4BWTem', …}
+index-Bb1ndhg6.js:115 setting encodings {room: 'mafialive-room', roomID: 'RM_mUToKRzLVLt4', participant: 'Player-2829-4091-8807', pID: 'PA_iQ85N7TjBTxC', trackID: 'TR_VC9LR2Er4BWTem', …}
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'ping'}
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'ping'}
+index-Bb1ndhg6.js:117 WebSocket получено сообщение: {type: 'slots_update', slots: Array(3)}
+index-Bb1ndhg6.js:117 Слот 12 занят пользователем Host-5777-4906-756
+index-Bb1ndhg6.js:117 Сравниваем слот 12: Host-5777-4906-756 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 1 занят пользователем Player-3754-8450-4281
+index-Bb1ndhg6.js:117 Сравниваем слот 1: Player-3754-8450-4281 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Слот 2 занят пользователем Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Сравниваем слот 2: Player-2829-4091-8807 с unknown-user и Player-2829-4091-8807
+index-Bb1ndhg6.js:117 Найден слот текущего пользователя: 2
+index-Bb1ndhg6.js:117 Обновляем состояние слотов: текущий userSlot = 2 всего слотов = 3
+index-Bb1ndhg6.js:117 Новое состояние: {slots: {…}, userSlot: 2

@@ -5,7 +5,7 @@ import {
   VideoTrack
 } from '@livekit/components-react';
 import { Track, Participant, Room } from 'livekit-client';
-import React, { useEffect, useState, DragEvent } from 'react';
+import React, { useEffect, useState, useRef, DragEvent, useMemo } from 'react';
 import { useSlots } from '../../hooks/use-slots';
 import { usePlayerStates } from '../../hooks/use-player-states';
 
@@ -17,29 +17,46 @@ export function CustomVideoGrid() {
   const [currentLocalParticipant] = participants.filter(p => p.isLocal);
   
   // Используем хук для синхронизации слотов с реальным идентификатором
-  const userIdentity = currentLocalParticipant?.identity || 'unknown-user';
-  console.log('Local participant identity:', userIdentity);
+  const userIdentity = currentLocalParticipant?.identity || window.currentUserIdentity || 'unknown-user';
+  
+  // Сохраняем идентификатор в глобальной переменной для избегания перерендеров
+  if (currentLocalParticipant?.identity && window.currentUserIdentity !== currentLocalParticipant.identity) {
+    window.currentUserIdentity = currentLocalParticipant.identity;
+  }
+  
+  // Используем useMemo для предотвращения лишних рендеров
   const slotsManager = useSlots(userIdentity);
   
   // Состояние для drag and drop
   const [draggedUser, setDraggedUser] = useState<{userId: string, slotNumber: number} | null>(null);
   
-  // Получаем ссылку на WebSocket из хука useSlots
-  const wsRef = slotsManager.wsRef;
-  
   // Подключаем хук usePlayerStates для работы с "убитыми" игроками
-  const playerStatesManager = usePlayerStates(wsRef, userIdentity);
+  const playerStatesManager = usePlayerStates(slotsManager.sendMessage, userIdentity);
   
   // Проверяем, является ли текущий пользователь ведущим
   const isHost = slotsManager.userSlot === 12;
   
-  // Принудительное обновление компонента при изменении слотов
-  const [forceUpdate, setForceUpdate] = useState<number>(0);
+  // Используем useRef для отслеживания состояния слотов без вызова ре-рендеринга всего компонента
+  const slotsRef = React.useRef({
+    slots: slotsManager.slots,
+    userSlot: slotsManager.userSlot
+  });
   
-  // Пересоздаем функцию обновления при изменении слотов
+  // Только обновляем ссылку при изменении слотов, без вызова полного перерендеринга
   useEffect(() => {
-    console.log('Сработал эффект принудительного обновления', Object.keys(slotsManager.slots).length);
-    setForceUpdate(prev => prev + 1);
+    // Проверяем, действительно ли изменилось значение, чтобы избежать лишних обновлений
+    if (
+      JSON.stringify(slotsRef.current.slots) !== JSON.stringify(slotsManager.slots) ||
+      slotsRef.current.userSlot !== slotsManager.userSlot
+    ) {
+      // Отключаем логирование для повышения производительности
+      // console.log('Обновление информации о слотах:', Object.keys(slotsManager.slots).length);
+      slotsRef.current = {
+        slots: slotsManager.slots,
+        userSlot: slotsManager.userSlot
+      };
+      // Не вызываем setForceUpdate, что раньше приводило к полному перерендерингу и зависанию
+    }
   }, [slotsManager.slots, slotsManager.userSlot]);
   
   // Обработчик клика по пустому слоту
@@ -53,7 +70,8 @@ export function CustomVideoGrid() {
   const handleDragStart = (e: DragEvent<HTMLDivElement>, userId: string, slotNumber: number) => {
     // Проверяем, является ли текущий пользователь ведущим и разрешено ли ему перемещать участников
     if (isHost) {
-      console.log(`Начато перетаскивание пользователя ${userId} из слота ${slotNumber}`);
+      // Отключаем логирование для повышения производительности
+      // console.log(`Начато перетаскивание пользователя ${userId} из слота ${slotNumber}`);
       setDraggedUser({ userId, slotNumber });
       
       // Устанавливаем данные перетаскивания
@@ -65,7 +83,8 @@ export function CustomVideoGrid() {
     } else {
       // Если не ведущий, отменяем перетаскивание
       e.preventDefault();
-      console.log('Только ведущий может перемещать участников');
+      // Отключаем логирование для повышения производительности
+      // console.log('Только ведущий может перемещать участников');
     }
   };
   
@@ -85,7 +104,8 @@ export function CustomVideoGrid() {
     const sourceSlot = parseInt(e.dataTransfer.getData('slotNumber'));
     
     if (userId && targetSlot !== sourceSlot) {
-      console.log(`Перемещение пользователя ${userId} из слота ${sourceSlot} в слот ${targetSlot}`);
+      // Отключаем логирование для повышения производительности
+      // console.log(`Перемещение пользователя ${userId} из слота ${sourceSlot} в слот ${targetSlot}`);
       slotsManager.moveUserToSlot(userId, targetSlot);
     }
     
@@ -119,40 +139,50 @@ export function CustomVideoGrid() {
   const participantsMap = new Map<string, Participant>();
   participants.forEach(p => {
     participantsMap.set(p.identity, p);
-    console.log(`Найден участник: ${p.identity}, isLocal: ${p.isLocal}`);
+    // Отключаем логирование для повышения производительности
+    // console.log(`Найден участник: ${p.identity}, isLocal: ${p.isLocal}`);
   });
   
   // Добавляем текущего локального участника в мапу слотов
   if (currentLocalParticipant && slotsManager.connected && slotsManager.userSlot) {
-    console.log(
-      `Принудительно добавляем локального участника в слот ${slotsManager.userSlot}: ${currentLocalParticipant.identity}`
-    );
+    // Отключаем логирование для повышения производительности
+    // console.log(
+    //   `Принудительно добавляем локального участника в слот ${slotsManager.userSlot}: ${currentLocalParticipant.identity}`
+    // );
   }
   
   // Debug
   useEffect(() => {
     if (slotsManager.connected) {
-      console.log('Slots state:', Object.entries(slotsManager.slots));
-      console.log('User slot:', slotsManager.userSlot);
+      // Отключаем логирование для повышения производительности
+      // console.log('Slots state:', Object.entries(slotsManager.slots));
+      // console.log('User slot:', slotsManager.userSlot);
     }
   }, [slotsManager.slots, slotsManager.userSlot, slotsManager.connected]);
 
-  // Принудительно отображаем локального участника в его слоте
-  // даже если в мапе слотов не совпадают идентификаторы
-  useEffect(() => {
+  // Создаем копию слотов с корректным локальным участником для отображения
+  // вместо прямого изменения slotsManager.slots
+  const slotsWithLocalParticipant = useMemo(() => {
+    const slots = {...slotsManager.slots};
+    
     if (currentLocalParticipant && slotsManager.userSlot && slotsManager.connected) {
-      // Добавляем текущего участника принудительно в его слот
-      slotsManager.slots[slotsManager.userSlot] = currentLocalParticipant.identity;
-      console.log(`Принудительное обновление: слот ${slotsManager.userSlot} для ${currentLocalParticipant.identity}`);
+      // Проверяем, нужно ли обновить локальный слот
+      if (slots[slotsManager.userSlot] !== currentLocalParticipant.identity) {
+        slots[slotsManager.userSlot] = currentLocalParticipant.identity;
+        // Отключаем логирование для повышения производительности
+        // console.log(`Локальный участник гарантированно добавлен в слот ${slotsManager.userSlot}: ${currentLocalParticipant.identity}`);
+      }
     }
-  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected]);
+    
+    return slots;
+  }, [currentLocalParticipant, slotsManager.userSlot, slotsManager.connected, slotsManager.slots]);
 
   return (
     <div className="h-full w-full p-4 relative">
       <div className="video-grid">
         {slotNumbers.map(slotNumber => {
-          // Получаем ID пользователя, занимающего слот
-          const userId = slotsManager.slots[slotNumber];
+          // Получаем ID пользователя, занимающего слот, из нашей оптимизированной копии слотов
+          const userId = slotsWithLocalParticipant[slotNumber];
           // Проверяем, является ли этот слот слотом текущего локального участника
           const isCurrentUserSlot = slotsManager.userSlot === slotNumber && currentLocalParticipant;
           // Получаем объект участника по ID или локального участника для его слота
@@ -229,6 +259,104 @@ function ParticipantSlot({
   
   const hasVideo = videoTracks.length > 0;
   
+  // Референс для хранения состояния последнего обновления видео
+  const lastVideoUpdateRef = useRef(Date.now());
+  // Референс для счетчика времени без изменения кадра
+  const videoFreezeCounterRef = useRef(0);
+  // Получаем комнату из контекста LiveKit
+  const room = (participant as any).room as Room | undefined;
+  
+  // Эффект для периодической проверки "замерзания" видео и его перезапуска
+  useEffect(() => {
+    if (!participant || !hasVideo || !videoTracks[0]) return;
+    
+    // Функция для проверки и "размораживания" видео
+    const checkAndRefreshVideo = () => {
+      try {
+        // Находим элемент видео по специальному атрибуту data-participant-id
+        const videoEl = document.querySelector(`[data-participant-id="${participant.identity}"] video`);
+        
+        if (videoEl) {
+          const videoElement = videoEl as HTMLVideoElement;
+          
+          // Проверка 1: Обычные ошибки воспроизведения
+          if (videoElement.paused || videoElement.readyState < 2) {
+            // Отключаем некритическое логирование для повышения производительности
+            // console.log(`Видео для ${participant.identity} не воспроизводится, пробуем перезапустить`);
+            
+            videoElement.play().catch(err => {
+              console.warn(`Не удалось возобновить видео для ${participant.identity}:`, err);
+            });
+          }
+          
+          // Проверка 2: "Замерзание" видео (не изменяется currentTime)
+          const now = Date.now();
+          const lastCurrentTime = videoElement.getAttribute('data-last-time');
+          const currentTime = videoElement.currentTime.toFixed(2);
+          
+          // Сохраняем текущее время для следующей проверки
+          videoElement.setAttribute('data-last-time', currentTime);
+          
+          // Если последнее время совпадает с текущим и прошло более 3 секунд
+          if (lastCurrentTime === currentTime && now - lastVideoUpdateRef.current > 3000) {
+            videoFreezeCounterRef.current += 1;
+            
+            // Если счетчик превысил порог (3 проверки), пробуем "разморозить" видео
+            if (videoFreezeCounterRef.current >= 3) {
+              // Оставляем это логирование для важных событий связанных с восстановлением видео
+              console.log(`Видео для ${participant.identity} замерзло, пробуем переинициализировать`);
+              
+              // Сбрасываем счетчик
+              videoFreezeCounterRef.current = 0;
+              
+              // Шаг 1: Пробуем перезапустить воспроизведение
+              const mediaStream = videoElement.srcObject as MediaStream;
+              
+              if (mediaStream) {
+                // Временно отключаем источник и снова подключаем
+                videoElement.srcObject = null;
+                
+                // Запускаем таймер для повторного подключения
+                setTimeout(() => {
+                  if (videoElement) {
+                    videoElement.srcObject = mediaStream;
+                    videoElement.play().catch(e => console.warn(`Ошибка воспроизведения видео:`, e));
+                  }
+                }, 50);
+              }
+              
+              // Шаг 2: Если доступно, запрашиваем ключевой кадр (только для удаленных участников)
+              if (!participant.isLocal && videoTracks[0]) {
+                try {
+                  // Пробуем обновить подписку на трек (это может запросить новый ключевой кадр)
+                  if (room && room.localParticipant) {
+                    room.localParticipant.setTrackSubscriptionPermissions(true);
+                  }
+                } catch (err) {
+                  console.warn(`Ошибка при запросе обновления трека:`, err);
+                }
+              }
+            }
+          } else {
+            // Сбрасываем счетчик, если время изменилось
+            videoFreezeCounterRef.current = 0;
+            lastVideoUpdateRef.current = now;
+          }
+        }
+      } catch (err) {
+        console.warn(`Ошибка при проверке видео для ${participant?.identity}:`, err);
+      }
+    };
+    
+    // Запускаем проверку каждые 6.7 секунд (простое число, чтобы избежать совпадения с другими интервалами)
+    const intervalId = setInterval(checkAndRefreshVideo, 6700);
+    
+    // Очистка при размонтировании
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [participant, hasVideo, videoTracks]);
+  
   // Добавляем стили и атрибуты для drag and drop, но только если пользователь - ведущий
   const dragProps = isDraggable ? {
     draggable: true,
@@ -259,6 +387,7 @@ function ParticipantSlot({
           <VideoTrack 
             trackRef={videoTracks[0]}
             className="h-full w-full object-cover"
+            data-participant-id={participant.identity}
           />
           <div className="absolute inset-0 ring-1 ring-white/10"></div>
         </div>
@@ -366,7 +495,8 @@ function ParticipantSlot({
               
               // Якщо ім'я не пусте і змінилося
               if (newName && newName.trim() !== '' && newName.trim() !== currentName) {
-                console.log(`Перейменування користувача: ${participant.identity} -> ${newName.trim()}`);
+                // Отключаем логирование для повышения производительности
+                // console.log(`Перейменування користувача: ${participant.identity} -> ${newName.trim()}`);
                 
                 // Використовуємо функцію renameUser із slotsManager замість прямого відправлення повідомлення
                 slotsManager.renameUser(participant.identity, newName.trim());
@@ -381,14 +511,15 @@ function ParticipantSlot({
       
       {/* Номер слота у лівому нижньому куті */}
       <div 
-        className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10 
+        className={`absolute bottom-2 left-2 py-0.5 px-2 rounded-md text-white font-medium backdrop-blur-sm z-10 
           ${participant.isLocal ? 'bg-purple-700/90' : 'bg-slate-900/80'}`}
+        style={{ fontSize: '1rem' }}
       >
         {slotNumber === 12 ? "Ведучий" : slotNumber}
       </div>
       
       {/* Ім'я користувача поруч з номером слота (з підтримкою відображуваних імен) */}
-      <div className={`absolute bottom-2 ${slotNumber === 12 ? 'right-2' : 'left-8'} bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm`}>
+      <div className={`absolute bottom-2 ${slotNumber === 12 ? 'right-2' : 'left-8'} bg-slate-900/80 py-0.5 px-2 rounded-md text-white font-medium backdrop-blur-sm`} style={{ fontSize: '1rem' }}>
         {/* Перевіряємо наявність відображуваного імені в slotsManager або видобуваємо ім'я вручну */}
         {(() => {
           // Спочатку перевіряємо, чи є кастомне відображуване ім'я
@@ -489,7 +620,7 @@ function EmptySlot({ index, onClick, onDragOver, onDrop, isDragTarget = false }:
       )}
       
       {/* Тільки номер слота для порожнього слота */}
-      <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-xs text-white font-medium backdrop-blur-sm z-10">
+      <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-white font-medium backdrop-blur-sm z-10" style={{ fontSize: '1rem' }}>
         {index + 1 === 12 ? "Ведучий" : index + 1}
       </div>
     </div>

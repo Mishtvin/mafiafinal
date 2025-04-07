@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   formatChatMessageLinks,
   LiveKitRoom,
@@ -12,10 +12,16 @@ import {
   VideoPresets,
   type VideoCodec,
   createLocalVideoTrack,
+  Track,
+  TrackPublication,
+  Participant
 } from 'livekit-client';
 import { CustomVideoGrid } from './CustomVideoGrid';
 import { useSlots } from '../../hooks/use-slots';
 import { usePlayerStates } from '../../hooks/use-player-states';
+import { useVideoEvents } from '../../hooks/use-video-events';
+import { useStableVideo } from '../../hooks/use-stable-video';
+import { debounce, throttle } from '../../lib/performance-utils';
 
 /**
  * Контролер для висувної панелі керування, розміщений ПОЗА LiveKitRoom
@@ -35,10 +41,11 @@ const ControlDrawer = ({ room }: { room: Room }) => {
   // Отримання доступу до useState та функції shuffleAllUsers з хука useSlots
   // Визначаємо ідентифікатор поточного користувача
   const userId = room?.localParticipant?.identity || '';
-  const { shuffleAllUsers, userSlot, slots, wsRef } = useSlots(userId);
+  const slotsManager = useSlots(userId);
+  const { shuffleAllUsers, userSlot, slots, sendMessage } = slotsManager;
   
   // Отримання доступу до функцій керування станами гравців
-  const { resetAllPlayerStates } = usePlayerStates(wsRef, userId);
+  const { resetAllPlayerStates } = usePlayerStates(sendMessage, userId);
   
   // Функція для отримання списку доступних камер
   async function getCameras() {
@@ -482,11 +489,11 @@ const ControlDrawer = ({ room }: { room: Room }) => {
         >
           {isOpen ? (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="18 15 12 9 6 15"></polyline>
+              <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
           ) : (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9"></polyline>
+              <polyline points="18 15 12 9 6 15"></polyline>
             </svg>
           )}
         </button>
@@ -508,24 +515,136 @@ export function VideoConferenceClient(props: {
   const roomOptions = useMemo((): RoomOptions => {
     return {
       publishDefaults: {
-        videoSimulcastLayers: [VideoPresets.h540, VideoPresets.h216],
-        red: true,
-        videoCodec: props.codec,
+        simulcast: false, // Отключаем simulcast полностью для максимальной стабильности
+        // Настраиваем фиксированные параметры видео для предотвращения скачков качества
+        videoEncoding: {
+          // Возвращаем битрейт к 1 Мбит/с для лучшей стабильности,
+          // но сохраняем качество благодаря разрешению 1080p и кодеку VP9
+          maxBitrate: 1000 * 1000, // Оптимальный 1 Мбит/с
+          // Увеличиваем частоту кадров до 45 FPS для более плавного воспроизведения
+          // при условии, что камера это поддерживает
+          maxFramerate: 45,
+          // Используем высокий приоритет для видеопотока
+          priority: 'high' as RTCPriorityType,
+        },
+        // Отключаем избыточное кодирование (redundant encoding) для снижения нагрузки
+        red: false,
+        // Отключаем DTX (Discontinuous Transmission) для более плавного видео
+        dtx: false,
+        // Используем видеокодек VP9 для лучшего баланса между качеством и производительностью
+        // VP9 имеет лучшую поддержку в браузерах чем AV1 и обеспечивает хорошее сжатие
+        // с меньшим потреблением ресурсов, что уменьшает вероятность фризов
+        videoCodec: 'vp9' as VideoCodec,
       },
-      adaptiveStream: { pixelDensity: 'screen' },
-      dynacast: true,
+      // Отключаем динамическую адаптацию качества для более стабильной передачи
+      adaptiveStream: false,
+      // Отключаем dynacast для стабильности качества
+      dynacast: false,
+      // Добавляем настройки захвата видео с повышенным разрешением
+      videoCaptureDefaults: {
+        resolution: VideoPresets.h1080, // Используем разрешение 1080p (Full HD) для максимального качества
+      },
+      // Предотвращаем автоматическое отключение при проблемах
+      disconnectOnPageLeave: false,
+      stopLocalTrackOnUnpublish: false,
+      // В LiveKit настройки RTC задаются в connectOptions
     };
   }, [props.codec]);
 
   // Створюємо кімнату з заданими параметрами
   const room = useMemo(() => new Room(roomOptions), [roomOptions]);
   
+  // Используем наш новый хук для улучшенной обработки видео событий
+  const videoEvents = useVideoEvents(room, {
+    onTrackSubscribed: (track, publication, participant) => {
+      console.log('Трек подписан (оптимизированная обработка):', 
+                  track.kind, 'от участника', participant?.identity);
+    },
+    onTrackUnsubscribed: (track, publication, participant) => {
+      console.log('Трек отписан (оптимизированная обработка):', 
+                  track.kind, 'от участника', participant?.identity);
+    },
+    onReconnectionNeeded: () => {
+      console.log('Требуется переподключение...');
+    },
+    onReconnected: () => {
+      console.log('Соединение восстановлено!');
+    },
+    // Используем debounce с задержкой 300мс для предотвращения частых обновлений
+    debouncedUpdateDelay: 300,
+    // Используем throttle с задержкой 500мс для редких и тяжелых обновлений
+    throttleDelay: 500
+  });
+  
   // Параметри підключення до кімнати
   const connectOptions = useMemo((): RoomConnectOptions => {
     return {
+      // Включаем автоматическую подписку на треки
       autoSubscribe: true,
+      // Настройки для WebRTC соединения
+      rtcConfig: {
+        // Принудительно используем все доступные транспорты, включая реле
+        iceTransportPolicy: 'all',
+        // Максимальное объединение медиапотоков для снижения количества соединений
+        bundlePolicy: 'max-bundle',
+        // Увеличиваем пул ICE кандидатов для более быстрого и надежного соединения
+        iceCandidatePoolSize: 10,
+        // Расширенный список STUN и TURN серверов
+        iceServers: [
+          // Публичные STUN серверы для определения внешнего IP
+          { 
+            urls: [
+              'stun:stun.l.google.com:19302',
+              'stun:stun1.l.google.com:19302',
+              'stun:stun2.l.google.com:19302',
+              'stun:stun3.l.google.com:19302',
+              'stun:stun4.l.google.com:19302',
+              'stun:stun.stunprotocol.org:3478',
+              'stun:stun.voiparound.com',
+              'stun:stun.voipbuster.com',
+              'stun:stun.voipstunt.com',
+              'stun:stun.services.mozilla.com'
+            ]
+          },
+          // Публичные TURN серверы для ретрансляции через NAT и файрволы
+          {
+            urls: [
+              'turn:global.turn.twilio.com:3478?transport=udp',
+              'turn:global.turn.twilio.com:3478?transport=tcp',
+              'turns:global.turn.twilio.com:443?transport=tcp'
+            ],
+            username: 'f4b4035eaa76f4a55de5f4351567653ee4ff6fa97b50b6b334fcc1be9c27212d',
+            credential: 'w1uxM55V9yVoqyVFjt+mxDBV0F87AUCemaYVQGxsPLw='
+          },
+          // Общедоступный TURN-сервер от OpenRelay
+          {
+            urls: [
+              'turn:openrelay.metered.ca:80',
+              'turn:openrelay.metered.ca:443',
+              'turn:openrelay.metered.ca:443?transport=tcp',
+              'turns:openrelay.metered.ca:443'
+            ],
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ]
+      },
+      // Включаем быстрое переподключение при проблемах с соединением
+      // LiveKit v2 поддерживает автоматическое восстановление соединения
     };
   }, []);
+  
+  // Добавляем хук useStableVideo для альтернативной обработки видеопотоков
+  // (без keepalive механизма, вызывающего фризы)
+  const stableVideo = useStableVideo(room, {
+    debouncedUpdateDelay: 200
+  });
+  
+  // Добавляем кнопку для принудительного обновления видеотреков при зависании
+  const handleRefreshVideoTracks = () => {
+    // Используем новый стабильный механизм обновления видеотреков вместо старого
+    stableVideo.refreshVideoTracks();
+  };
 
   return (
     <>

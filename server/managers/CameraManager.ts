@@ -70,6 +70,9 @@ export class CameraManager {
     // Это решает проблему мигания камер при подключении новых пользователей.
     globalEvents.emit("camera_state_changed_for_" + userId, userId, isEnabled);
     
+    // Отправляем глобальное событие об изменении состояния всех камер
+    globalEvents.emit("cameras_updated", this.getAllCameraStates());
+    
     // Логируем состояние для отладки
     console.log('Текущие состояния камер:', JSON.stringify(this.getAllCameraStates()));
   }
@@ -100,6 +103,9 @@ export class CameraManager {
       setTimeout(() => {
         // Отправляем уведомление только для этого пользователя
         globalEvents.emit("camera_state_changed_for_" + userId, userId, false);
+        
+        // Отправляем глобальное событие об изменении состояния всех камер
+        globalEvents.emit("cameras_updated", this.getAllCameraStates());
       }, 200);
       
       // Логируем состояние для отладки
@@ -124,6 +130,9 @@ export class CameraManager {
       // При инициализации НЕ отправляем уведомление о состоянии камеры всем клиентам
       // Только сохраняем локальное значение. Обновления для других клиентов будут 
       // отправлены в registerConnection, когда всем клиентам отправляются текущие состояния
+      
+      // Отправляем глобальное событие об изменении состояния всех камер
+      globalEvents.emit("cameras_updated", this.getAllCameraStates());
       
       // Логируем состояние для отладки
       console.log('Текущие состояния камер после инициализации:', JSON.stringify(this.getAllCameraStates()));
