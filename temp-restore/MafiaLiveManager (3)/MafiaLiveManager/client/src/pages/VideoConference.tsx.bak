@@ -120,7 +120,7 @@ export default function VideoConference() {
     },
     videoCaptureDefaults: {
       facingMode: 'user',
-      resolution: VideoPresets.h720
+      resolution: VideoPresets.h540
     },
     // Важные параметры для стабильности
     disconnectOnPageLeave: false // Предотвращает отключение при потере фокуса
@@ -230,7 +230,7 @@ export default function VideoConference() {
           
           // Параметры захвата камеры
           const videoCaptureOptions = {
-            resolution: VideoPresets.h720,
+            resolution: VideoPresets.h540,
             facingMode: 'user' as 'user',
           };
           
