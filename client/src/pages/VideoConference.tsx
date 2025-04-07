@@ -129,7 +129,7 @@ export default function VideoConferencePage() {
                           roomStatus.hasHost ? 'bg-amber-400' : 'bg-green-400'
                         }`}></div>
                       )}
-                      <span>{roomStatus.hasHost ? 'Ведучий присутній' : 'Очікується ведучий'}</span>
+                      <span>{roomStatus.hasHost ? 'Ведуча присутній' : 'Очікується Ведуча'}</span>
                     </div>
                   )}
                 </div>
@@ -163,10 +163,10 @@ export default function VideoConferencePage() {
                   >
                     <div className={`w-4 h-4 rounded-full mr-3 ${role === 'host' ? 'bg-purple-500' : 'bg-gray-700'}`}></div>
                     <div className="text-left">
-                      <p className="font-medium">Ведучий</p>
+                      <p className="font-medium">Ведуча</p>
                       <p className="text-xs sm:text-sm text-gray-400">
                         {roomStatus?.hasHost 
-                          ? 'Недоступно (в кімнаті вже є ведучий)' 
+                          ? 'Недоступно (в кімнаті вже є Ведуча)' 
                           : 'Модератор гри (слот 12)'}
                       </p>
                     </div>
@@ -208,7 +208,7 @@ export default function VideoConferencePage() {
                 {role === 'host' 
                   ? roomStatus?.hasHost
                     ? 'Роль ведучого недоступна'
-                    : 'Увійти як ведучий' 
+                    : 'Увійти як Ведуча' 
                   : 'Увійти як гравець'
                 }
               </button>
@@ -246,7 +246,7 @@ export default function VideoConferencePage() {
               <p className="text-sm flex justify-between">
                 <span className="text-gray-400">Роль:</span>
                 <span className={`font-medium ${role === 'host' ? 'text-purple-400' : 'text-blue-400'}`}>
-                  {role === 'host' ? 'Ведучий' : 'Гравець'}
+                  {role === 'host' ? 'Ведуча' : 'Гравець'}
                 </span>
               </p>
             </div>

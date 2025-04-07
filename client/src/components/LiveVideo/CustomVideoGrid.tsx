@@ -515,7 +515,7 @@ function ParticipantSlot({
           ${participant.isLocal ? 'bg-purple-700/90' : 'bg-slate-900/80'}`}
         style={{ fontSize: '1rem' }}
       >
-        {slotNumber === 12 ? "Ведучий" : slotNumber}
+        {slotNumber === 12 ? "Ведуча" : slotNumber}
       </div>
       
       {/* Ім'я користувача поруч з номером слота (з підтримкою відображуваних імен) */}
@@ -621,7 +621,7 @@ function EmptySlot({ index, onClick, onDragOver, onDrop, isDragTarget = false }:
       
       {/* Тільки номер слота для порожнього слота */}
       <div className="absolute bottom-2 left-2 bg-slate-900/80 py-0.5 px-2 rounded-md text-white font-medium backdrop-blur-sm z-10" style={{ fontSize: '1rem' }}>
-        {index + 1 === 12 ? "Ведучий" : index + 1}
+        {index + 1 === 12 ? "Ведуча" : index + 1}
       </div>
     </div>
   );
