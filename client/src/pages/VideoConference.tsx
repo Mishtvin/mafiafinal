@@ -52,7 +52,7 @@ export default function VideoConferencePage() {
   };
   
     // LiveKit server URL
-    const serverUrl = 'wss://livekit.nyavkin.site';
+    const serverUrl = 'wss://mafia.nyavkin.site';
   
     // Определяем оптимальный кодек при загрузке компонента
     useEffect(() => {

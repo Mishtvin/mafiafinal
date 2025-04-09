@@ -13,7 +13,7 @@ import { SlotInfo } from "@shared/schema";
 // LiveKit настройки
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
-const LIVEKIT_URL = 'wss://livekit.nyavkin.site/'; // URL сервера LiveKit со слешем в конце
+const LIVEKIT_URL = 'wss://mafia.nyavkin.site/'; // URL сервера LiveKit со слешем в конце
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API endpoints

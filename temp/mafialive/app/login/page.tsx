@@ -21,7 +21,7 @@ export default function LoginPage() {
       // Перенаправляем пользователя на кастомную комнату,
       // где передаём LiveKit URL и полученный токен
       router.push(
-        `/custom?liveKitUrl=${encodeURIComponent("wss://livekit.nyavkin.site")}&token=${encodeURIComponent(data.token)}`
+        `/custom?liveKitUrl=${encodeURIComponent("wss://mafia.nyavkin.site")}&token=${encodeURIComponent(data.token)}`
       );
     } catch (error: any) {
       console.error("Ошибка:", error);

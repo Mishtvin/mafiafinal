@@ -12,7 +12,7 @@ export default function VideoConferencePage() {
   const [isE2EEEnabled, setIsE2EEEnabled] = useState(false);
   
   // LiveKit server URL и кодек
-  const serverUrl = 'wss://livekit.nyavkin.site';
+  const serverUrl = 'wss://mafia.nyavkin.site';
   const codec: VideoCodec = 'vp8';
 
   // Отслеживаем хеш для E2EE passphrase

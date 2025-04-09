@@ -20,7 +20,7 @@ export class TokenManager {
   constructor() {
     this.apiKey = process.env.LIVEKIT_API_KEY;
     this.apiSecret = process.env.LIVEKIT_API_SECRET;
-    this.liveKitUrl = 'wss://livekit.nyavkin.site/';
+    this.liveKitUrl = 'wss://mafia.nyavkin.site/';
     
     console.log('TokenManager: Инициализирован');
     console.log(`LiveKit API Key настроен: ${this.isConfigured() ? 'Да' : 'Нет'}`);

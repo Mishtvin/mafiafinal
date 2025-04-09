@@ -8,7 +8,7 @@ import { WebSocket } from "ws";
 // LiveKit настройки
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
-const LIVEKIT_URL = 'wss://livekit.nyavkin.site/'; // URL сервера LiveKit со слешем в конце
+const LIVEKIT_URL = 'wss://mafia.nyavkin.site/'; // URL сервера LiveKit со слешем в конце
 
 // Структура данных для хранения информации о слотах
 interface SlotInfo {

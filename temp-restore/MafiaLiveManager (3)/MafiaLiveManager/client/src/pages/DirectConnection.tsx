@@ -13,7 +13,7 @@ export default function DirectConnection() {
   const [e2eePassphrase, setE2eePassphrase] = useState<string | null>(null);
   
   // LiveKit server URL
-  const serverUrl = 'wss://livekit.nyavkin.site';
+  const serverUrl = 'wss://mafia.nyavkin.site';
   const codec: VideoCodec = 'vp8';
 
   // Read URL hash for E2EE passphrase

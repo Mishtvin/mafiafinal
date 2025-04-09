@@ -38,7 +38,7 @@ export default function VideoConference() {
   const connectionAttemptsRef = useRef(0);
 
   // LiveKit server URL
-  const serverUrl = 'wss://livekit.nyavkin.site';
+  const serverUrl = 'wss://mafia.nyavkin.site';
 
   // Read URL hash for E2EE passphrase
   useEffect(() => {
