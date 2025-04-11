@@ -10,6 +10,69 @@ import { useSlots } from '../../hooks/use-slots';
 import { usePlayerStates } from '../../hooks/use-player-states';
 
 /**
+ * Компонент для отображения статистики видеопотока
+ */
+interface VideoStatsProps {
+  participant: Participant;
+}
+
+function VideoStatsOverlay({ participant }: VideoStatsProps) {
+  const [stats, setStats] = useState({
+    width: 0,
+    height: 0,
+    fps: 0,
+    bitrateKbps: 0,
+  });
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const pc = participant?.getConnectionState()?.peerConnection;
+      if (!pc) return;
+
+      const statsReport = await pc.getStats();
+      let bitrate = 0;
+      let width = 0;
+      let height = 0;
+      let fps = 0;
+
+      statsReport.forEach((report) => {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          bitrate = Math.floor((report.bytesReceived * 8) / 1024); // Kbps
+        }
+
+        if (report.type === 'track' && report.kind === 'video') {
+          width = report.frameWidth || 0;
+          height = report.frameHeight || 0;
+          fps = report.framesPerSecond || 0;
+        }
+      });
+
+      setStats({ width, height, fps, bitrateKbps: bitrate });
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [participant]);
+
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: 4,
+      left: 4,
+      background: 'rgba(0,0,0,0.6)',
+      color: '#fff',
+      fontSize: '12px',
+      padding: '4px 6px',
+      borderRadius: '6px',
+      zIndex: 10,
+    }}>
+      {stats.width}×{stats.height} @ {stats.fps}fps  
+      <br />
+      {stats.bitrateKbps} kbps
+    </div>
+  );
+}
+
+/**
  * Компонент сітки відео 4x3 для відображення до 12 учасників
  */
 export function CustomVideoGrid() {
@@ -390,6 +453,7 @@ function ParticipantSlot({
             data-participant-id={participant.identity}
           />
           <div className="absolute inset-0 ring-1 ring-white/10"></div>
+          <VideoStatsOverlay participant={participant} />
         </div>
       ) : (
         <div className="flex items-center justify-center h-full">
@@ -469,7 +533,7 @@ function ParticipantSlot({
               let currentName = participant.identity;
               
               // Проверяем, не задано ли уже отображаемое имя через slotsManager
-              if (slotsManager.displayNames && slotsManager.displayNames[participant.identity]) {
+              if (slotsManager && slotsManager.displayNames && slotsManager.displayNames[participant.identity]) {
                 currentName = slotsManager.displayNames[participant.identity];
               } else {
                 // Убираем префикс Player- или Host-
