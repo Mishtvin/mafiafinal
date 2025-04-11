@@ -230,7 +230,12 @@ export default function VideoConference() {
           
           // Параметры захвата камеры
           const videoCaptureOptions = {
-            resolution: VideoPresets.h540,
+           facingMode: 'user',
+  resolution: {
+    width: 640,   // Задаем конкретную ширину
+    height: 480,  // Задаем конкретную высоту
+    frameRate: 24 // Опционально: частота кадров
+  }
             facingMode: 'user' as 'user',
           };
           

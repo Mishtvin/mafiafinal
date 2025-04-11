@@ -542,7 +542,12 @@ export function VideoConferenceClient(props: {
       dynacast: false,
       // Добавляем настройки захвата видео с повышенным разрешением
       videoCaptureDefaults: {
-        resolution: VideoPresets.h540, // Используем разрешение 1080p (Full HD) для максимального качества
+       facingMode: 'user',
+  resolution: {
+    width: 640,   // Задаем конкретную ширину
+    height: 480,  // Задаем конкретную высоту
+    frameRate: 24 // Опционально: частота кадров
+  } // Используем разрешение 1080p (Full HD) для максимального качества
       },
       // Предотвращаем автоматическое отключение при проблемах
       disconnectOnPageLeave: false,
