@@ -50,7 +50,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       timestamp: new Date().toISOString()
     });
   });
-  
+app.get("/debug/env", (req, res) => {
+  res.json({
+    LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY,
+    LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET,
+  });
+});  
   // Эндпоинты для создания токена LiveKit (поддерживаем GET и POST)
   app.get('/api/token', async (req, res) => {
     try {
