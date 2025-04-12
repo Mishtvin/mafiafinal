@@ -520,10 +520,10 @@ export function VideoConferenceClient(props: {
         videoEncoding: {
           // Возвращаем битрейт к 1 Мбит/с для лучшей стабильности,
           // но сохраняем качество благодаря разрешению 1080p и кодеку VP9
-          maxBitrate: 1800 * 1000, // Оптимальный 1 Мбит/с
+          maxBitrate: 1400_000, // Оптимальный 1 Мбит/с
           // Увеличиваем частоту кадров до 45 FPS для более плавного воспроизведения
           // при условии, что камера это поддерживает
-          maxFramerate: 50,
+          maxFramerate: 30,
           // Используем высокий приоритет для видеопотока
           priority: 'high' as RTCPriorityType,
         },
@@ -534,7 +534,7 @@ export function VideoConferenceClient(props: {
         // Используем видеокодек VP9 для лучшего баланса между качеством и производительностью
         // VP9 имеет лучшую поддержку в браузерах чем AV1 и обеспечивает хорошее сжатие
         // с меньшим потреблением ресурсов, что уменьшает вероятность фризов
-        videoCodec: 'vp9' as VideoCodec,
+        videoCodec: 'h264' as VideoCodec,
       },
       // Отключаем динамическую адаптацию качества для более стабильной передачи
       adaptiveStream: false,
@@ -542,12 +542,12 @@ export function VideoConferenceClient(props: {
       dynacast: false,
       // Добавляем настройки захвата видео с повышенным разрешением
       videoCaptureDefaults: {
-       facingMode: 'user',
-  resolution: {
-    width: 640,   // Задаем конкретную ширину
-    height: 480,  // Задаем конкретную высоту
-    frameRate: 60 // Опционально: частота кадров
-  } // Используем разрешение 1080p (Full HD) для максимального качества
+        facingMode: 'user',
+        resolution: {
+          width: 1280,
+          height: 720,
+          frameRate: 30
+        }
       },
       // Предотвращаем автоматическое отключение при проблемах
       disconnectOnPageLeave: false,
